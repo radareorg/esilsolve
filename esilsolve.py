@@ -55,8 +55,8 @@ class ESILWord:
 class ESILRegisters:
     def __init__(self, reg_dict):
         self.registers = {}
-        for reg in reg_dict:
-            self
+
+
 class ESILSolver:
     def __init__(self, r2api=None):
         self.solver = solver.Solver()
