@@ -4,6 +4,7 @@ import esilops
 import json
 import arch
 from esilclasses import * 
+from esilregister import ESILRegisters
 
 class ESILWord:
     def __init__(self, word=None, context=None):
@@ -27,7 +28,7 @@ class ESILWord:
 
     def getRegister(self):
         register = self.registers[self.word]
-        return register["bv"]
+        return register
 
     def getLiteralValue(self):
         if(self.word.isdigit()):
@@ -38,8 +39,6 @@ class ESILWord:
     def getPushValue(self):
         if(self.isLiteral()):
             val = self.getLiteralValue()
-
-            #return solver.BitVecVal(val, self.bits)
             return val
 
         elif(self.isRegister()):
@@ -51,11 +50,6 @@ class ESILWord:
     def doOp(self, stack):
         op = esilops.opcodes[self.word]
         op(self.word, stack, self.context)
-
-class ESILRegisters:
-    def __init__(self, reg_dict):
-        self.registers = {}
-
 
 class ESILSolver:
     def __init__(self, r2api=None):
@@ -83,24 +77,19 @@ class ESILSolver:
         registers = self.register_info["reg_info"]
         register_values = self.r2api.getAllRegisters()
 
-        reg_dict = {}
-
         for register in registers:
-            reg_val = register_values[register["name"]]
-            register["bv"] = newRegister(register["name"], register["size"], reg_val)   
-            reg_dict[register["name"]] = register
+            register["value"] = register_values[register["name"]]
 
-        #print(self.registers)
-        self.registers = reg_dict
+        self.registers = ESILRegisters(registers) #reg_dict
         self.context["registers"] = self.registers
 
     def setSymbolicRegister(self, name):
-        reg = self.registers[name]
-        reg["bv"] = newRegister(reg["name"], reg["size"])
+        size = self.registers[name].size()
+        self.registers[name] = newRegister(name, size)
 
     def constrainRegister(self, name, val):
         reg = self.registers[name]
-        self.solver.add(reg["bv"] == val)
+        self.solver.add(reg == val)
 
     def initMemory(self):
         raise esilops.ESILUnimplementedException

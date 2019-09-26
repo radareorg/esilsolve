@@ -38,19 +38,18 @@ def getRegisterName(bv):
     return bv.__dict__["register"]
 
 def setRegisterValue(reg_val, val, context):
-    reg_name = getRegisterName(reg_val)
+    name = getRegisterName(reg_val)
+    reg_name = context["registers"].getParentName(name)
     register = context["registers"][reg_name]
 
-    #reg_val = solver.BitVec(reg_name, reg_val.size)
     if type(val) == int:
-        new_reg = solver.BitVecVal(val, register["size"])
+        new_reg = newRegister(reg_name, register.size(), val)
     elif type(val) in [solver.BitVecNumRef, solver.BitVecRef]:
         new_reg = deepcopy(val) 
     else:
         raise ESILArgumentException
 
-    setRegisterName(new_reg, reg_name)
-    register["bv"] = new_reg
+    context["registers"][reg_name] = new_reg
 
 def newRegister(name, size, val=None):
     if val != None:
