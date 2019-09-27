@@ -166,7 +166,7 @@ if __name__ == "__main__":
     esilsolver = ESILSolver()
     esilsolver.setSymbolicRegister("rax")
     esilsolver.parseExpression("1,rax,+,rbx,=,1,?{1,rbx,+=},2,bx,+,rbx,=")
-    esilsolver.constrainRegister("rbx", 6)
+    esilsolver.constrainRegister("rbx", 277)
 
     #print(esilsolver.stack)
-    print(esilsolver.evaluateRegister("ax")) # solves for rax, gives 2
+    print(esilsolver.evaluateRegister("ah")) # solves for ax, gives 2

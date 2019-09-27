@@ -2,8 +2,11 @@ import r2pipe
 
 class R2API:
 
-    def __init__(self, filename="-", flags=[]):
-        self.r2p = r2pipe.open(filename, flags=flags)
+    def __init__(self, r2p=None, filename="-", flags=[]):
+        self.r2p = r2p
+        if r2p == None:
+            self.r2p = r2pipe.open(filename, flags=flags)
+
         self.register_info = self.r2p.cmdj("aerpj")
         self.all_regs = [r["name"] for r in self.register_info["reg_info"]]
 
