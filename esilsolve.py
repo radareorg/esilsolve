@@ -115,7 +115,11 @@ class ESILSolver:
 
         if self.model == None:
             sat = self.solver.check()
-            self.model = self.solver.model()
+            
+            if sat:
+                self.model = self.solver.model()
+            else:
+                raise ESILUnsatException
 
         return self.model.eval(val)
 
@@ -167,7 +171,7 @@ class ESILSolver:
             if sat:
                 self.model = self.solver.model()
             else:
-                print("Error: unsat")
+                raise ESILUnsatException
 
         return self.model.eval(val)
 

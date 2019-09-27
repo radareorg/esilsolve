@@ -28,3 +28,7 @@ class ESILArgumentException(Exception):
 
 class ESILUnimplementedException(Exception):
     pass
+
+class ESILUnsatException(Exception):
+    pass
+
