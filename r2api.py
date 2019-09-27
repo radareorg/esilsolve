@@ -21,6 +21,12 @@ class R2API:
     def getGPRValues(self):
         return self.r2p.cmdj("aerj")
 
+    def seek(self, addr):
+        self.r2p.cmd("s %d" % addr)
+
+    def disass(self, instrs=1):
+        return self.r2p.cmdj("pdj %d" % instrs)
+
     # theres no arj all function to get all the regs as json so i made this
     # i should just make a pull request for r2
     def getAllRegisters(self):

@@ -4,7 +4,8 @@ import esilops
 import json
 import arch
 from esilclasses import * 
-from esilregister import ESILRegisters
+from esilregister import *
+import re
 
 class ESILWord:
     def __init__(self, word=None, context=None):
@@ -17,6 +18,9 @@ class ESILWord:
             self.registers = self.context["registers"]
             self.memory = self.context["memory"]
     
+    def isConditional(self):
+        return (self.word[0] == "?")
+
     def isOperator(self):
         return (self.word in esilops.opcodes)
 
@@ -57,12 +61,15 @@ class ESILSolver:
         self.stack = []
         self.model = None
 
+        self.conditionals = {}
+        self.cond_count = 0
+
         if r2api == None:
             r2api = R2API()
 
         self.r2api = r2api
         self.info = self.r2api.getInfo()
-        self.context = {"registers": {}, "memory": {}, "info": self.info["info"]}
+        self.context = {"registers": {}, "aliases": {}, "memory": {}, "info": self.info["info"]}
 
         if "info" in self.info:
             self.bits = self.info["info"]["bits"]
@@ -74,14 +81,19 @@ class ESILSolver:
     
     def initRegisters(self):
         self.register_info = self.r2api.getRegisterInfo()
+        self.aliases = {}
         registers = self.register_info["reg_info"]
         register_values = self.r2api.getAllRegisters()
+
+        for alias in self.register_info["alias_info"]:
+            self.aliases[alias["role_str"]] = alias
 
         for register in registers:
             register["value"] = register_values[register["name"]]
 
         self.registers = ESILRegisters(registers) #reg_dict
         self.context["registers"] = self.registers
+        self.context["aliases"] = self.aliases
 
     def setSymbolicRegister(self, name):
         size = self.registers[name].size()
@@ -91,20 +103,51 @@ class ESILSolver:
         reg = self.registers[name]
         self.solver.add(reg == val)
 
+    def evaluateRegister(self, name):
+        val = self.registers[name]
+
+        if self.model == None:
+            sat = self.solver.check()
+            self.model = self.solver.model()
+
+        return self.model.eval(val)
+
     def initMemory(self):
         raise esilops.ESILUnimplementedException
 
     def parseExpression(self, expression):
+        if "?" in expression:
+            expression = self.parseConditionals(expression)
+            
         words = expression.split(",")
 
         for word_str in words:
             word = ESILWord(word_str, self.context)
 
-            if word.isOperator():
+            if word.isConditional():
+                self.doConditional(word)
+
+            elif word.isOperator():
                 word.doOp(self.stack)
 
             else:
                 self.stack.append(word.getPushValue())
+
+    def parseConditionals(self, expression):
+        conditionals = re.findall("\?\{(.*?)\}", expression)
+
+        for cond in conditionals:
+            ident = "?[%d]" % self.cond_count
+            self.conditionals[ident] = cond
+            self.cond_count += 1
+
+            expression = expression.replace("?{%s}" % cond, ident, 1)
+
+        return expression
+        
+    def doConditional(self, word):
+        if self.popAndEval():
+            self.parseExpression(self.conditionals[word.word])
 
     def popAndEval(self):
         val = self.stack.pop()
@@ -122,8 +165,8 @@ if __name__ == "__main__":
 
     esilsolver = ESILSolver()
     esilsolver.setSymbolicRegister("rax")
-    esilsolver.parseExpression("1,rax,+,rbx,=,rax")
-    esilsolver.constrainRegister("rbx", 3)
+    esilsolver.parseExpression("1,rax,+,rbx,=,1,?{1,rbx,+=},2,bx,+,rbx,=")
+    esilsolver.constrainRegister("rbx", 6)
 
-    print(esilsolver.stack)
-    print(esilsolver.popAndEval()) # solves for rax, gives 2
+    #print(esilsolver.stack)
+    print(esilsolver.evaluateRegister("ax")) # solves for rax, gives 2

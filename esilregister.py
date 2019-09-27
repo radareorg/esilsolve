@@ -23,7 +23,7 @@ class ESILRegisters(dict):
 
         else:
             reg["parent"] = parentRegister["name"]
-            reg["low"] = reg["offset"]-parentRegister["offset"]
+            reg["low"] = reg["offset"] - parentRegister["offset"]
             reg["high"] = reg["low"] + reg["size"]
 
         self.registers[reg["name"]] = reg
@@ -37,7 +37,7 @@ class ESILRegisters(dict):
             reg_end = reg_start + size
 
             if reg["type"] == register["type"] and size > register["size"]:
-                if register["offset"] >= reg_start and register["offset"] < reg_end:
+                if register["offset"] >= reg_start and (register["offset"] + register["size"]) <= reg_end:
                     parents[size] = reg
                     if size > high_size:
                         high_size = size
@@ -75,3 +75,35 @@ class ESILRegisters(dict):
 
     def __contains__(self, key):
         return self.registers.__contains__(key)
+
+# this is gross but i dont want to have to wrap
+# every single bv operation so...
+def setRegisterName(bv, name):
+    bv.__dict__["register"] = name
+
+def getRegisterName(bv):
+    return bv.__dict__["register"]
+
+def setRegisterValue(reg_val, val, context):
+    name = getRegisterName(reg_val)
+    reg_name = context["registers"].getParentName(name)
+    register = context["registers"][reg_name]
+
+    if type(val) == int:
+        new_reg = newRegister(reg_name, register.size(), val)
+    elif type(val) in [solver.BitVecNumRef, solver.BitVecRef]:
+        new_reg = deepcopy(val) 
+        setRegisterName(new_reg, name)
+    else:
+        raise ESILArgumentException
+
+    context["registers"][reg_name] = new_reg
+
+def newRegister(name, size, val=None):
+    if val != None:
+        new_reg = solver.BitVecVal(val, size)
+    else:
+        new_reg = solver.BitVec(name, size)
+
+    setRegisterName(new_reg, name)
+    return new_reg

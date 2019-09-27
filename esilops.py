@@ -1,4 +1,5 @@
 from esilclasses import *
+from esilregister import *
 import solver
 
 def do_TRAP(op, stack, context):
@@ -14,29 +15,44 @@ def do_SYS(op, stack, context):
     raise ESILUnimplementedException
 
 def do_PCADDR(op, stack, context):
-    raise ESILUnimplementedException
+    pc = context["aliases"]["PC"]
+    stack.append(context["registers"][pc])
 
 def do_CMP(op, stack, context):
-    raise ESILUnimplementedException
+    arg1 = stack.pop()
+    arg2 = stack.pop()
+
+    stack.append(arg1==arg2)
 
 def do_LT(op, stack, context):
-    raise ESILUnimplementedException
+    arg1 = stack.pop()
+    arg2 = stack.pop()
+
+    stack.append(arg1<arg2)
 
 def do_LTE(op, stack, context):
-    raise ESILUnimplementedException
+    arg1 = stack.pop()
+    arg2 = stack.pop()
+
+    stack.append(arg1<=arg2)
 
 def do_GT(op, stack, context):
-    raise ESILUnimplementedException
+    arg1 = stack.pop()
+    arg2 = stack.pop()
+
+    stack.append(arg1>arg2)
 
 def do_GTE(op, stack, context):
-    raise ESILUnimplementedException
+    arg1 = stack.pop()
+    arg2 = stack.pop()
+
+    stack.append(arg1>=arg2)
 
 def do_LS(op, stack, context):
     arg1 = stack.pop()
     arg2 = stack.pop()
 
-    arg1.value<<arg2.value
-    stack.append()
+    stack.append(arg1<<arg2)
 
 def do_RS(op, stack, context):
     arg1 = stack.pop()
@@ -123,43 +139,80 @@ def do_EQU(op, stack, context):
     setRegisterValue(reg, val, context)
 
 def do_ADDEQ(op, stack, context):
-    raise ESILUnimplementedException
+    reg = stack.pop()
+    val = stack.pop()
+
+    setRegisterValue(reg, reg+val, context)
 
 def do_SUBEQ(op, stack, context):
-    raise ESILUnimplementedException
+    reg = stack.pop()
+    val = stack.pop()
+
+    setRegisterValue(reg, reg-val, context)
 
 def do_MULEQ(op, stack, context):
-    raise ESILUnimplementedException
+    reg = stack.pop()
+    val = stack.pop()
+
+    setRegisterValue(reg, reg*val, context)
 
 def do_DIVEQ(op, stack, context):
-    raise ESILUnimplementedException
+    reg = stack.pop()
+    val = stack.pop()
+
+    setRegisterValue(reg, reg/val, context)
 
 def do_MODEQ(op, stack, context):
-    raise ESILUnimplementedException
+    reg = stack.pop()
+    val = stack.pop()
+
+    setRegisterValue(reg, reg%val, context)
 
 def do_LSEQ(op, stack, context):
-    raise ESILUnimplementedException
+    reg = stack.pop()
+    val = stack.pop()
+
+    setRegisterValue(reg, reg<<val, context)
 
 def do_RSEQ(op, stack, context):
-    raise ESILUnimplementedException
+    reg = stack.pop()
+    val = stack.pop()
+
+    setRegisterValue(reg, reg>>val, context)
 
 def do_ANDEQ(op, stack, context):
-    raise ESILUnimplementedException
+    reg = stack.pop()
+    val = stack.pop()
+
+    setRegisterValue(reg, reg&val, context)
 
 def do_OREQ(op, stack, context):
-    raise ESILUnimplementedException
+    reg = stack.pop()
+    val = stack.pop()
+
+    setRegisterValue(reg, reg|val, context)
 
 def do_XOREQ(op, stack, context):
-    raise ESILUnimplementedException
+    reg = stack.pop()
+    val = stack.pop()
+
+    setRegisterValue(reg, reg^val, context)
 
 def do_INCEQ(op, stack, context):
-    raise ESILUnimplementedException
+    reg = stack.pop()
+
+    setRegisterValue(reg, reg+1, context)
 
 def do_DECEQ(op, stack, context):
-    raise ESILUnimplementedException
+    reg = stack.pop()
+
+    setRegisterValue(reg, reg-1, context)
 
 def do_NOTEQ(op, stack, context):
-    raise ESILUnimplementedException
+    reg = stack.pop()
+    val = stack.pop()
+
+    setRegisterValue(reg, solver.Not(reg), context)
 
 def do_SWAP(op, stack, context):
     raise ESILUnimplementedException
@@ -197,6 +250,34 @@ def do_NOMBRE(op, stack, context):
 def do_NOP(op, stack, context):
     pass
 
+# flag op functions
+def do_ZF(op, stack, context):
+    return (stack[-1] == solver.Bool(0)) # 
+    
+def do_CF(op, stack, context):
+    return 0 
+
+def do_B(op, stack, context):
+    return 0 
+
+def do_P(op, stack, context):
+    return 0 
+
+def do_O(op, stack, context):
+    return 0 
+
+def do_DS(op, stack, context):
+    return 0 
+
+def do_JT(op, stack, context):
+    return 0 
+
+def do_JS(op, stack, context):
+    return 0 
+
+def do_R(op, stack, context):
+    return 0 
+
 opcodes = {
     "TRAP": do_TRAP,
     "$": do_SYS,
@@ -222,6 +303,7 @@ opcodes = {
     "++": do_INC,
     "--": do_DEC,
     "=": do_EQU,
+    ":=": do_EQU,
     "+=": do_ADDEQ,
     "-=": do_SUBEQ,
     "*=": do_MULEQ,
@@ -244,7 +326,18 @@ opcodes = {
     "BREAK": do_BREAK,
     "GOTO": do_GOTO,
     "TODO": do_TODO,
-    "": do_NOP
+    "": do_NOP,
+
+    # flag ops
+    "$z": do_ZF,
+    "$c": do_CF,
+    "$b": do_B,
+    "$p": do_P,
+    "$o": do_O,
+    "$ds": do_DS,
+    "$jt": do_JT,
+    "$js": do_JS,
+    "$r": do_R,
 }
 
 byte_vals = ["", "*", "1", "2", "4", "8"]
