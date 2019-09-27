@@ -15,8 +15,7 @@ def do_SYS(op, stack, context):
     raise ESILUnimplementedException
 
 def do_PCADDR(op, stack, context):
-    pc = context["aliases"]["PC"]
-    stack.append(context["registers"][pc])
+    stack.append(context["registers"]["PC"])
 
 def do_CMP(op, stack, context):
     arg1 = stack.pop()
@@ -252,7 +251,7 @@ def do_NOP(op, stack, context):
 
 # flag op functions
 def do_ZF(op, stack, context):
-    return (stack[-1] == solver.Bool(0)) # 
+    return (stack[-1] == 0) # 
     
 def do_CF(op, stack, context):
     return 0 

@@ -3,9 +3,11 @@ from esilclasses import *
 import solver
 
 class ESILRegisters(dict):
-    def __init__(self, reg_array):
+    def __init__(self, reg_array, aliases={}):
         self.reg_info = reg_array
         self.registers = {}
+        self.aliases = aliases
+
         self.parent_dict = {}
 
         for reg in reg_array:
@@ -26,7 +28,7 @@ class ESILRegisters(dict):
             reg["low"] = reg["offset"] - parentRegister["offset"]
             reg["high"] = reg["low"] + reg["size"]
 
-        self.registers[reg["name"]] = reg
+        self.registers[reg["name"]] = reg        
 
     def getParentRegister(self, register):
         parents = {}
@@ -55,6 +57,9 @@ class ESILRegisters(dict):
             return name
 
     def __getitem__(self, key):
+        if key in self.aliases:
+            key = self.aliases[key]["reg"]
+
         register = self.registers[key]
 
         if register["parent"] == None:
@@ -65,6 +70,9 @@ class ESILRegisters(dict):
             return solver.Extract(register["high"], register["low"], parent["bv"])
 
     def __setitem__(self, key, value):
+        if key in self.aliases:
+            key = self.aliases[key]["reg"]
+
         register = self.registers[key]
 
         if register["parent"] == None:

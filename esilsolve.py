@@ -2,10 +2,11 @@ from r2api import R2API
 import solver
 import esilops
 import json
-import arch
 from esilclasses import * 
 from esilregister import *
 import re
+
+import logging
 
 class ESILWord:
     def __init__(self, word=None, context=None):
@@ -69,7 +70,12 @@ class ESILSolver:
 
         self.r2api = r2api
         self.info = self.r2api.getInfo()
-        self.context = {"registers": {}, "aliases": {}, "memory": {}, "info": self.info["info"]}
+        self.context = {
+            "registers": {}, 
+            "aliases": {}, 
+            "memory": {}, 
+            "info": self.info["info"]
+        }
 
         if "info" in self.info:
             self.bits = self.info["info"]["bits"]
@@ -83,15 +89,16 @@ class ESILSolver:
         self.register_info = self.r2api.getRegisterInfo()
         self.aliases = {}
         registers = self.register_info["reg_info"]
+        aliases = self.register_info["alias_info"]
         register_values = self.r2api.getAllRegisters()
 
-        for alias in self.register_info["alias_info"]:
+        for alias in aliases:
             self.aliases[alias["role_str"]] = alias
 
         for register in registers:
             register["value"] = register_values[register["name"]]
 
-        self.registers = ESILRegisters(registers) #reg_dict
+        self.registers = ESILRegisters(registers, self.aliases) #reg_dict
         self.context["registers"] = self.registers
         self.context["aliases"] = self.aliases
 
@@ -134,7 +141,7 @@ class ESILSolver:
                 self.stack.append(word.getPushValue())
 
     def parseConditionals(self, expression):
-        conditionals = re.findall("\?\{(.*?)\}", expression)
+        conditionals = re.findall(r"\?\{(.*?)\}", expression)
 
         for cond in conditionals:
             ident = "?[%d]" % self.cond_count
@@ -157,7 +164,10 @@ class ESILSolver:
             
         if self.model == None:
             sat = self.solver.check()
-            self.model = self.solver.model()
+            if sat:
+                self.model = self.solver.model()
+            else:
+                print("Error: unsat")
 
         return self.model.eval(val)
 
@@ -165,8 +175,9 @@ if __name__ == "__main__":
 
     esilsolver = ESILSolver()
     esilsolver.setSymbolicRegister("rax")
-    esilsolver.parseExpression("1,rax,+,rbx,=,1,?{1,rbx,+=},2,bx,+,rbx,=")
+    esilsolver.parseExpression("1,rax,+,rbx,=,1,?{1,rbx,+=},2,bx,+,rbx,=,$$")
     esilsolver.constrainRegister("rbx", 277)
 
-    #print(esilsolver.stack)
-    print(esilsolver.evaluateRegister("ah")) # solves for ax, gives 2
+    print(esilsolver.stack)
+    print(esilsolver.evaluateRegister("ah"))
+    print(esilsolver.evaluateRegister("rax")) 
