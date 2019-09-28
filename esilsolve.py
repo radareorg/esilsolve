@@ -58,7 +58,7 @@ class ESILWord:
 
 class ESILSolver:
     def __init__(self, r2api=None):
-        self.solver = solver.Solver()
+        self.solver = solver.Optimize()
         self.stack = []
         self.model = None
 
@@ -110,8 +110,13 @@ class ESILSolver:
         reg = self.registers[name]
         self.solver.add(reg == val)
 
-    def evaluateRegister(self, name):
+    def evaluateRegister(self, name, eval_type="eval"):
         val = self.registers[name]
+
+        if eval_type == "max":
+            self.solver.maximize(val)
+        elif eval_type == "min":
+            self.solver.minimize(val)
 
         if self.model == None:
             sat = self.solver.check()
@@ -121,7 +126,9 @@ class ESILSolver:
             else:
                 raise ESILUnsatException
 
-        return self.model.eval(val)
+        value = self.model.eval(val)
+
+        return value
 
     def initMemory(self):
         raise esilops.ESILUnimplementedException
@@ -179,9 +186,11 @@ if __name__ == "__main__":
 
     esilsolver = ESILSolver()
     esilsolver.setSymbolicRegister("rax")
-    esilsolver.parseExpression("1,rax,+,rbx,=,1,?{1,rbx,+=},2,bx,+,rbx,=,$$")
-    esilsolver.constrainRegister("rbx", 277)
+    esilsolver.parseExpression("1,rax,+,rbx,=,1,?{1,rbx,+=},2,bx,<<,rbx,=")
+    #esilsolver.constrainRegister("rbx", 277)
+    esilsolver.solver.add(esilsolver.registers["rbx"] > 277)
+    esilsolver.solver.add(esilsolver.registers["bh"] % 2 == 0)
 
-    print(esilsolver.stack)
-    print(esilsolver.evaluateRegister("ah"))
-    print(esilsolver.evaluateRegister("rax")) 
+    #print(esilsolver.stack)
+    #print(esilsolver.evaluateRegister("ah"))
+    print(esilsolver.evaluateRegister("rax", "min")) 
