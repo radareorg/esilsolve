@@ -17,8 +17,8 @@ def test_mem():
     #esilsolver.context["memory"].write(0, [0xbe, 0xba, 0xfe, 0xca])
     #esilsolver.r2api.write(0, 0xcafebabe)
     esilsolver.setSymbolicRegister("rbx")
-    esilsolver.parseExpression("0xcafebabe,rax,=,rax,0,=[8],0,[8],rbx,+,rcx,=")
-    esilsolver.constrainRegister("rcx", 0xcafed00d)
+    esilsolver.parseExpression("rbx,0,=[8],0,[8],rbx,+,rcx,=")
+    esilsolver.solver.add(esilsolver.registers["rcx"] > 0xcafed00d)
 
     print(esilsolver.stack)
     print(esilsolver.evaluateRegister("rbx")) 
