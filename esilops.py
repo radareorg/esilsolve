@@ -214,7 +214,12 @@ def do_NOTEQ(op, stack, context):
     setRegisterValue(reg, solver.Not(reg), context)
 
 def do_SWAP(op, stack, context):
-    raise ESILUnimplementedException
+    reg1 = stack.pop()
+    reg2 = stack.pop()
+
+    # this looks wrong but its not (i think)
+    setRegisterValue(reg1, reg2, context)
+    setRegisterValue(reg2, reg1, context)
 
 def do_PICK(op, stack, context):
     raise ESILUnimplementedException
@@ -237,11 +242,24 @@ def do_BREAK(op, stack, context):
 def do_GOTO(op, stack, context):
     raise ESILUnimplementedException
 
+def memlen(op):
+    b1 = op.index("[")
+    b2 = op.index("]")
+    return int(op[b1+1:b2])
+
 def do_POKE(op, stack, context):
-    raise ESILUnimplementedException
+    length = memlen(op)
+    addr = stack.pop()
+    data = stack.pop()
+
+    context["memory"].writeBV(addr, data, length)
 
 def do_PEEK(op, stack, context):
-    raise ESILUnimplementedException
+    length = memlen(op)
+    addr = stack.pop()
+
+    data = context["memory"].readBV(addr, length)
+    stack.append(data)
 
 def do_NOMBRE(op, stack, context):
     raise ESILUnimplementedException

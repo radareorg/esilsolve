@@ -4,6 +4,7 @@ import esilops
 import json
 from esilclasses import * 
 from esilregister import *
+from esilmemory import *
 import re
 
 import logging
@@ -56,6 +57,7 @@ class ESILWord:
         op = esilops.opcodes[self.word]
         op(self.word, stack, self.context)
 
+
 class ESILSolver:
     def __init__(self, r2api=None):
         self.solver = solver.Optimize()
@@ -84,6 +86,8 @@ class ESILSolver:
 
         # get information about the registers
         self.initRegisters()
+
+        self.initMemory()
     
     def initRegisters(self):
         self.register_info = self.r2api.getRegisterInfo()
@@ -131,7 +135,7 @@ class ESILSolver:
         return value
 
     def initMemory(self):
-        raise esilops.ESILUnimplementedException
+        self.context["memory"] = ESILMemory(self.r2api, self.info)
 
     def parseExpression(self, expression):
         if "?" in expression:
@@ -181,16 +185,3 @@ class ESILSolver:
                 raise ESILUnsatException
 
         return self.model.eval(val)
-
-if __name__ == "__main__": 
-
-    esilsolver = ESILSolver()
-    esilsolver.setSymbolicRegister("rax")
-    esilsolver.parseExpression("1,rax,+,rbx,=,1,?{1,rbx,+=},2,bx,<<,rbx,=")
-    #esilsolver.constrainRegister("rbx", 277)
-    esilsolver.solver.add(esilsolver.registers["rbx"] > 277)
-    esilsolver.solver.add(esilsolver.registers["bh"] % 2 == 0)
-
-    #print(esilsolver.stack)
-    #print(esilsolver.evaluateRegister("ah"))
-    print(esilsolver.evaluateRegister("rax", "min")) 

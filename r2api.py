@@ -37,7 +37,7 @@ class R2API:
     def write(self, addr, value, length=None, fill="0"):
         val = value
         if type(value) == int:
-            val = "%x" % value
+            return self.r2p.cmd("wv %d @ %d" % (value, addr))
 
         elif type(value) == bytes:
             val = binascii.hexlify(value).decode()
@@ -45,7 +45,7 @@ class R2API:
         if length != None:
             val = val.rjust(length, str(fill))
 
-        return self.r2p.cmd("wx %s @ %d" % (value, addr))
+        return self.r2p.cmd("wx %s @ %d" % (val, addr))
 
     # theres no arj all function to get all the regs as json so i made this
     # i should just make a pull request for r2

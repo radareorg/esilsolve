@@ -5,7 +5,7 @@ import solver
 class ESILRegisters(dict):
     def __init__(self, reg_array, aliases={}):
         self.reg_info = reg_array
-        self.registers = {}
+        self._registers = {}
         self.aliases = aliases
 
         self.parent_dict = {}
@@ -28,7 +28,7 @@ class ESILRegisters(dict):
             reg["low"] = reg["offset"] - parentRegister["offset"]
             reg["high"] = reg["low"] + reg["size"]
 
-        self.registers[reg["name"]] = reg        
+        self._registers[reg["name"]] = reg        
 
     def getParentRegister(self, register):
         parents = {}
@@ -60,37 +60,37 @@ class ESILRegisters(dict):
         if key in self.aliases:
             key = self.aliases[key]["reg"]
 
-        register = self.registers[key]
+        register = self._registers[key]
 
         if register["parent"] == None:
             return register["bv"]
         
         else:
-            parent = self.registers[register["parent"]]
+            parent = self._registers[register["parent"]]
             return solver.Extract(register["high"], register["low"], parent["bv"])
 
     def __setitem__(self, key, value):
         if key in self.aliases:
             key = self.aliases[key]["reg"]
 
-        register = self.registers[key]
+        register = self._registers[key]
 
         if register["parent"] == None:
-            self.registers[key]["bv"] = value
+            self._registers[key]["bv"] = value
 
         else:
             raise ESILArgumentException
 
     def __contains__(self, key):
-        return self.registers.__contains__(key)
+        return self._registers.__contains__(key)
 
 # this is gross but i dont want to have to wrap
 # every single bv operation so...
 def setRegisterName(bv, name):
-    bv.__dict__["register"] = name
+    BVD(bv)["register"] = name
 
 def getRegisterName(bv):
-    return bv.__dict__["register"]
+    return BVD(bv)["register"]
 
 def setRegisterValue(reg_val, val, context):
     name = getRegisterName(reg_val)

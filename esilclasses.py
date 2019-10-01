@@ -32,3 +32,6 @@ class ESILUnimplementedException(Exception):
 class ESILUnsatException(Exception):
     pass
 
+def BVD(x):
+    return getattr(x, "__dict__")
+
