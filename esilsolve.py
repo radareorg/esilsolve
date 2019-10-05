@@ -3,22 +3,23 @@ import solver
 import esilops
 import json
 from esilclasses import * 
-from esilregister import *
+from esilregisters import *
 from esilmemory import *
+from esilstate import *
 import re
 
 import logging
 
 class ESILWord:
-    def __init__(self, word=None, context=None):
+    def __init__(self, word=None, state=None):
         self.word = word
 
-        if context != None:
-            self.context = context
-            self.bits = context["info"]["bits"]
+        if state != None:
+            self.state = state
+            self.bits = state.info["info"]["bits"]
 
-            self.registers = self.context["registers"]
-            self.memory = self.context["memory"]
+            self.registers = state.registers
+            self.memory = state.memory
     
     def isConditional(self):
         return (self.word[0] == "?")
@@ -55,105 +56,55 @@ class ESILWord:
 
     def doOp(self, stack):
         op = esilops.opcodes[self.word]
-        op(self.word, stack, self.context)
+        op(self.word, stack, self.state)
 
 
 class ESILSolver:
-    def __init__(self, r2api=None):
-        self.solver = solver.Optimize()
-        self.stack = []
-        self.model = None
+    def __init__(self, r2p=None, init=True):
+
+        self.states = []
 
         self.conditionals = {}
         self.cond_count = 0
 
-        if r2api == None:
+        if r2p == None:
             r2api = R2API()
+        else:
+            r2api = R2API(r2p)
 
         self.r2api = r2api
         self.info = self.r2api.getInfo()
-        self.context = {
-            "registers": {}, 
-            "aliases": {}, 
-            "memory": {}, 
-            "info": self.info["info"]
-        }
 
-        if "info" in self.info:
-            self.bits = self.info["info"]["bits"]
-        else:
-            self.bits = 64
-
-        # get information about the registers
-        self.initRegisters()
-
-        self.initMemory()
+        if init:
+            self.initState()
     
-    def initRegisters(self):
-        self.register_info = self.r2api.getRegisterInfo()
-        self.aliases = {}
-        registers = self.register_info["reg_info"]
-        aliases = self.register_info["alias_info"]
-        register_values = self.r2api.getAllRegisters()
+    def initState(self):
+        if len(self.states) > 0:
+            return self.states[0]
 
-        for alias in aliases:
-            self.aliases[alias["role_str"]] = alias
+        state = ESILState(self.r2api)
+        self.states.append(state)
+        return state
 
-        for register in registers:
-            register["value"] = register_values[register["name"]]
+    def parseExpression(self, expression, state):
+        stack = state.stack
 
-        self.registers = ESILRegisters(registers, self.aliases) #reg_dict
-        self.context["registers"] = self.registers
-        self.context["aliases"] = self.aliases
-
-    def setSymbolicRegister(self, name):
-        size = self.registers[name].size()
-        self.registers[name] = newRegister(name, size)
-
-    def constrainRegister(self, name, val):
-        reg = self.registers[name]
-        self.solver.add(reg == val)
-
-    def evaluateRegister(self, name, eval_type="eval"):
-        val = self.registers[name]
-
-        if eval_type == "max":
-            self.solver.maximize(val)
-        elif eval_type == "min":
-            self.solver.minimize(val)
-
-        if self.model == None:
-            sat = self.solver.check()
-            
-            if sat:
-                self.model = self.solver.model()
-            else:
-                raise ESILUnsatException
-
-        value = self.model.eval(val)
-
-        return value
-
-    def initMemory(self):
-        self.context["memory"] = ESILMemory(self.r2api, self.info)
-
-    def parseExpression(self, expression):
         if "?" in expression:
             expression = self.parseConditionals(expression)
             
         words = expression.split(",")
 
         for word_str in words:
-            word = ESILWord(word_str, self.context)
+            word = ESILWord(word_str, state)
 
             if word.isConditional():
                 self.doConditional(word)
 
             elif word.isOperator():
-                word.doOp(self.stack)
+                word.doOp(stack)
 
             else:
-                self.stack.append(word.getPushValue())
+                stack.append(word.getPushValue())
 
     def parseConditionals(self, expression):
         conditionals = re.findall(r"\?\{(.*?)\}", expression)
@@ -167,21 +118,9 @@ class ESILSolver:
 
         return expression
         
+    # TODO: change this logic
     def doConditional(self, word):
-        if self.popAndEval():
-            self.parseExpression(self.conditionals[word.word])
+        return
 
-    def popAndEval(self):
-        val = self.stack.pop()
-
-        if type(val) == int:
-            return val
-            
-        if self.model == None:
-            sat = self.solver.check()
-            if sat:
-                self.model = self.solver.model()
-            else:
-                raise ESILUnsatException
-
-        return self.model.eval(val)
+        #if self.popAndEval():
+        #    self.parseExpression(self.conditionals[word.word])

@@ -31,6 +31,9 @@ class ESILRegisters(dict):
         self._registers[reg["name"]] = reg        
 
     def getParentRegister(self, register):
+        if register["type_str"] == "flg":
+            return 
+            
         parents = {}
         high_size = 0
         for reg in self.reg_info:
@@ -92,10 +95,10 @@ def setRegisterName(bv, name):
 def getRegisterName(bv):
     return BVD(bv)["register"]
 
-def setRegisterValue(reg_val, val, context):
+def setRegisterValue(reg_val, val, state):
     name = getRegisterName(reg_val)
-    reg_name = context["registers"].getParentName(name)
-    register = context["registers"][reg_name]
+    reg_name = state.registers.getParentName(name)
+    register = state.registers[reg_name]
 
     if type(val) == int:
         new_reg = newRegister(reg_name, register.size(), val)
@@ -105,7 +108,7 @@ def setRegisterValue(reg_val, val, context):
     else:
         raise ESILArgumentException
 
-    context["registers"][reg_name] = new_reg
+    state.registers[reg_name] = new_reg
 
 def newRegister(name, size, val=None):
     if val != None:
