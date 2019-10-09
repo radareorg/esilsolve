@@ -416,7 +416,13 @@ def do_O(op, stack, state):
 
 def do_DS(op, stack, state):
     ds = ((state.esil["cur"] >> (lastsz(state) - 1)) & 1) == 1
-    return stack.append(solver.If(ds, solver.BitVecVal(1, 1), solver.BitVecVal(0, 1)))
+    stack.append(solver.If(ds, solver.BitVecVal(1, 1), solver.BitVecVal(0, 1)))
+
+def do_S(op, stack, state):
+    stack.append(0)
+    size = stack.pop()
+    s = ((state.esil["cur"] >> size) & 1) == 1
+    stack.append(solver.If(s, solver.BitVecVal(1, 1), solver.BitVecVal(0, 1)))
 
 # jump target??
 def do_JT(op, stack, state):
@@ -485,6 +491,7 @@ opcodes = {
     "$b": do_B,
     "$p": do_P,
     "$o": do_O,
+    "$s": do_S,
     "$ds": do_DS,
     "$jt": do_JT,
     "$js": do_JS,

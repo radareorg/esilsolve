@@ -60,8 +60,8 @@ class ESILWord:
 
 
 class ESILSolver:
-    def __init__(self, r2p=None, init=True):
-
+    def __init__(self, r2p=None, init=True, debug=False):
+        self.debug = debug
         self.states = []
 
         self.conditionals = {}
@@ -73,10 +73,33 @@ class ESILSolver:
             r2api = R2API(r2p)
 
         self.r2api = r2api
+        self.didInitVM = False
         self.info = self.r2api.getInfo()
 
         if init:
             self.initState()
+
+    # initialize the ESIL VM
+    def initVM(self):
+        self.r2api.initVM()
+        self.didInitVM = True
+
+    def run(self, state, target=None):
+        # if target is None exec until ret
+        if target == None:
+            find = lambda x, s: x["opcode"] == "ret"
+        elif type(target) == int:
+            find = lambda x, s: x["offset"] == target
+
+        found = False
+
+        while not found:
+            instr = self.r2api.disass()[0]
+            found = find(instr, state)
+
+            if not found:
+                self.parseExpression(instr["esil"], state)
+                self.r2api.step(instr["size"])
     
     def initState(self):
         if len(self.states) > 0:
@@ -87,6 +110,10 @@ class ESILSolver:
         return state
 
     def parseExpression(self, expression, state):
+
+        if self.debug:
+            print("expr: %s" % expression)
+
         stack = state.stack
 
         if "?" in expression:
@@ -121,6 +148,8 @@ class ESILSolver:
     # TODO: change this logic
     def doConditional(self, word):
         return
+
+        raise ESILUnimplementedException
 
         #if self.popAndEval():
         #    self.parseExpression(self.conditionals[word.word])

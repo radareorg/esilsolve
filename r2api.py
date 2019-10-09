@@ -28,6 +28,9 @@ class R2API:
     def seek(self, addr):
         self.r2p.cmd("s %d" % addr)
 
+    def step(self, sz):
+        self.r2p.cmd("s+ %d" % sz)
+
     def disass(self, instrs=1):
         return self.r2p.cmdj("pdj %d" % instrs)
 
@@ -60,4 +63,7 @@ class R2API:
             reg_dict[self.all_regs[i]] = all_vals[i]
 
         return reg_dict
+
+    def initVM(self):
+        self.r2p.cmd("aei; aeim")
 

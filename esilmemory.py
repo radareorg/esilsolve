@@ -18,6 +18,12 @@ class ESILMemory(dict):
     def mask(self, addr):
         return int(addr - (addr % self.chunklen))
 
+    # attempt to concretize addr bv
+    # empty model for now
+    def bvToInt(self, bv):
+        m = solver.Model()
+        return m.eval(bv).as_long()
+
     def read(self, addr, length):
         maddr = self.mask(addr)
 
@@ -56,6 +62,9 @@ class ESILMemory(dict):
             self._memory[caddr] = data[o:self.chunklen]
 
     def readBV(self, addr, length):
+        if type(addr) != int:
+            addr = self.bvToInt(addr)
+
         data = self.read(addr, length)
 
         bve = []
@@ -76,6 +85,8 @@ class ESILMemory(dict):
         return bv
 
     def writeBV(self, addr, val, length):
+        if type(addr) != int:
+            addr = self.bvToInt(addr)
 
         data = self.unpackBV(val, length)
         self.write(addr, data)

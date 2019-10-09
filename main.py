@@ -1,4 +1,5 @@
 from esilsolve import ESILSolver
+import r2pipe
 
 def test_sym():
     esilsolver = ESILSolver()
@@ -26,14 +27,33 @@ def test_mem():
     print(state.evaluateRegister("rbx")) 
 
 def test_flg():
-    esilsolver = ESILSolver()
+    esilsolver = ESILSolver(debug=True)
     state = esilsolver.states[0]
-    esilsolver.parseExpression("1,1,==,$z,zf,:=,zf", state)
-
+    #esilsolver.parseExpression("1,1,==,$z,zf,:=,zf", state)
+    esilsolver.parseExpression("2,0x4,rbp,-,[4],==,$z,zf,:=,32,$b,cf,:=,$p,pf,:=,$s,sf,:=,$o,of,:=", state)
     print(state.stack)
     print(state.popAndEval())
 
+def test_run():
+    r2p = r2pipe.open("tests/simplish")
+    r2p.cmd("aaa; s sym.check; aei; aeim")
+
+    esilsolver = ESILSolver(r2p, debug=True)
+    #esilsolver.initVM()
+
+    state = esilsolver.states[0]
+    state.setSymbolicRegister("rdi")
+    rdi = state.registers["rdi"]
+    esilsolver.run(state, target=0x00000668)
+    print(state.registers["zf"])
+    state.solver.add(state.registers["zf"] == 1)
+    sat = state.solver.check()
+    print(sat)
+    m = state.solver.model()
+    print(m.eval(rdi))
+
 if __name__ == "__main__":
-    test_sym()
-    test_mem()
-    test_flg()
+    #test_sym()
+    #test_mem()
+    #test_flg()
+    test_run()

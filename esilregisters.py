@@ -70,7 +70,9 @@ class ESILRegisters(dict):
         
         else:
             parent = self._registers[register["parent"]]
-            return solver.Extract(register["high"], register["low"], parent["bv"])
+            reg = solver.Extract(register["high"], register["low"], parent["bv"])
+            setRegisterName(reg, key)
+            return reg
 
     def __setitem__(self, key, value):
         if key in self.aliases:
@@ -103,7 +105,12 @@ def setRegisterValue(reg_val, val, state):
     if type(val) == int:
         new_reg = newRegister(reg_name, register.size(), val)
     elif type(val) in [solver.BitVecNumRef, solver.BitVecRef]:
-        new_reg = deepcopy(val) 
+        szdiff = register.size() - val.size()
+        if szdiff > 0:
+            new_reg = solver.Concat(solver.BitVecVal(0, szdiff), deepcopy(val))
+        else:
+            new_reg = deepcopy(val)
+
         setRegisterName(new_reg, name)
     else:
         raise ESILArgumentException
