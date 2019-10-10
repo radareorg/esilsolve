@@ -2,6 +2,17 @@ from esilclasses import *
 from esilregisters import *
 import solver
 
+def popValue(stack, state):
+    val = stack.pop()
+    return getValue(val, state)
+
+def getValue(val, state):
+    if type(val) == str:
+        register = state.registers[val]
+        return register
+    else:
+        return val
+
 def do_TRAP(op, stack, state):
     raise ESILTrapException
 
@@ -18,24 +29,24 @@ def do_PCADDR(op, stack, state):
     stack.append(state.registers["PC"])
 
 def do_CMP(op, stack, state):
-    arg1 = stack.pop()
-    arg2 = stack.pop()
+    arg1 = popValue(stack, state)
+    arg2 = popValue(stack, state)
 
     stack.append(arg1-arg2)
     state.esil["old"] = arg1
     state.esil["cur"] = stack[-1]
 
 def do_LT(op, stack, state):
-    arg1 = stack.pop()
-    arg2 = stack.pop()
+    arg1 = popValue(stack, state)
+    arg2 = popValue(stack, state)
 
     stack.append(arg1<arg2)
     state.esil["old"] = arg1
     state.esil["cur"] = stack[-1]
 
 def do_LTE(op, stack, state):
-    arg1 = stack.pop()
-    arg2 = stack.pop()
+    arg1 = popValue(stack, state)
+    arg2 = popValue(stack, state)
 
     state
 
@@ -44,243 +55,256 @@ def do_LTE(op, stack, state):
     state.esil["cur"] = stack[-1]
 
 def do_GT(op, stack, state):
-    arg1 = stack.pop()
-    arg2 = stack.pop()
+    arg1 = popValue(stack, state)
+    arg2 = popValue(stack, state)
 
     stack.append(arg1>arg2)
     state.esil["old"] = arg1
     state.esil["cur"] = stack[-1]
 
 def do_GTE(op, stack, state):
-    arg1 = stack.pop()
-    arg2 = stack.pop()
+    arg1 = popValue(stack, state)
+    arg2 = popValue(stack, state)
 
     stack.append(arg1>=arg2)
     state.esil["old"] = arg1
     state.esil["cur"] = stack[-1]
 
 def do_LS(op, stack, state):
-    arg1 = stack.pop()
-    arg2 = stack.pop()
+    arg1 = popValue(stack, state)
+    arg2 = popValue(stack, state)
 
     stack.append(arg1<<arg2)
     state.esil["old"] = arg1
     state.esil["cur"] = stack[-1]
 
 def do_RS(op, stack, state):
-    arg1 = stack.pop()
-    arg2 = stack.pop()
+    arg1 = popValue(stack, state)
+    arg2 = popValue(stack, state)
 
     stack.append(arg1>>arg2)
     state.esil["old"] = arg1
     state.esil["cur"] = stack[-1]
 
 def do_LR(op, stack, state):
-    arg1 = stack.pop()
-    arg2 = stack.pop()
+    arg1 = popValue(stack, state)
+    arg2 = popValue(stack, state)
 
     stack.append(solver.RotateLeft(arg1, arg2))
     state.esil["old"] = arg1
     state.esil["cur"] = stack[-1]
 
 def do_RR(op, stack, state):
-    arg1 = stack.pop()
-    arg2 = stack.pop()
+    arg1 = popValue(stack, state)
+    arg2 = popValue(stack, state)
 
     stack.append(solver.RotateRight(arg1, arg2))
     state.esil["old"] = arg1
     state.esil["cur"] = stack[-1]
 
 def do_AND(op, stack, state):
-    arg1 = stack.pop()
-    arg2 = stack.pop()
+    arg1 = popValue(stack, state)
+    arg2 = popValue(stack, state)
 
     stack.append(arg1&arg2)
     state.esil["old"] = arg1
     state.esil["cur"] = stack[-1]
 
 def do_OR(op, stack, state):
-    arg1 = stack.pop()
-    arg2 = stack.pop()
+    arg1 = popValue(stack, state)
+    arg2 = popValue(stack, state)
 
     stack.append(arg1|arg2)
     state.esil["old"] = arg1
     state.esil["cur"] = stack[-1]
 
 def do_XOR(op, stack, state):
-    arg1 = stack.pop()
-    arg2 = stack.pop()
+    arg1 = popValue(stack, state)
+    arg2 = popValue(stack, state)
 
     stack.append(arg1^arg2)
     state.esil["old"] = arg1
     state.esil["cur"] = stack[-1]
 
 def do_ADD(op, stack, state):
-    arg1 = stack.pop()
-    arg2 = stack.pop()
+    arg1 = popValue(stack, state)
+    arg2 = popValue(stack, state)
 
     stack.append(arg1+arg2)
     state.esil["old"] = arg1
     state.esil["cur"] = stack[-1]
 
 def do_SUB(op, stack, state):
-    arg1 = stack.pop()
-    arg2 = stack.pop()
+    arg1 = popValue(stack, state)
+    arg2 = popValue(stack, state)
 
     stack.append(arg1-arg2)
     state.esil["old"] = arg1
     state.esil["cur"] = stack[-1]
 
 def do_MUL(op, stack, state):
-    arg1 = stack.pop()
-    arg2 = stack.pop()
+    arg1 = popValue(stack, state)
+    arg2 = popValue(stack, state)
 
     stack.append(arg1*arg2)
     state.esil["old"] = arg1
     state.esil["cur"] = stack[-1]
 
 def do_DIV(op, stack, state):
-    arg1 = stack.pop()
-    arg2 = stack.pop()
+    arg1 = popValue(stack, state)
+    arg2 = popValue(stack, state)
 
     stack.append(arg1/arg2)
     state.esil["old"] = arg1
     state.esil["cur"] = stack[-1]
 
 def do_MOD(op, stack, state):
-    arg1 = stack.pop()
-    arg2 = stack.pop()
+    arg1 = popValue(stack, state)
+    arg2 = popValue(stack, state)
 
     stack.append(arg1%arg2)
     state.esil["old"] = arg1
     state.esil["cur"] = stack[-1]
 
 def do_NOT(op, stack, state):
-    arg1 = stack.pop()
+    arg1 = popValue(stack, state)
     stack.append(~arg1)
     state.esil["old"] = arg1
     state.esil["cur"] = stack[-1]
 
 def do_INC(op, stack, state):
-    arg1 = stack.pop()
+    arg1 = popValue(stack, state)
     stack.append(arg1+1)
     state.esil["old"] = arg1
     state.esil["cur"] = stack[-1]
 
 def do_DEC(op, stack, state):
-    arg1 = stack.pop()
+    arg1 = popValue(stack, state)
     stack.append(arg1-1)
     state.esil["old"] = arg1
     state.esil["cur"] = stack[-1]
 
 def do_EQU(op, stack, state):
     reg = stack.pop()
-    val = stack.pop()
+    val = popValue(stack, state)
 
-    setRegisterValue(reg, val, state)
-    state.esil["old"] = reg
+    #setRegisterValue(reg, val, state)
+    state.registers[reg] = val
+    state.esil["old"] = state.registers[reg]
     state.esil["cur"] = val
 
 def do_ADDEQ(op, stack, state):
     reg = stack.pop()
-    val = stack.pop()
+    val = popValue(stack, state)
 
-    stack.append(reg+val)
+    newval = state.registers[reg]+val
+    stack.append(newval)
     stack.append(reg)
     do_EQU(op, stack, state)
 
 def do_SUBEQ(op, stack, state):
     reg = stack.pop()
-    val = stack.pop()
+    val = popValue(stack, state)
 
-    stack.append(reg-val)
+    newval = state.registers[reg]-val
+    stack.append(newval)
     stack.append(reg)
     do_EQU(op, stack, state)
 
 def do_MULEQ(op, stack, state):
     reg = stack.pop()
-    val = stack.pop()
+    val = popValue(stack, state)
 
-    stack.append(reg*val)
+    newval = state.registers[reg]*val
+    stack.append(newval)
     stack.append(reg)
     do_EQU(op, stack, state)
 
 def do_DIVEQ(op, stack, state):
     reg = stack.pop()
-    val = stack.pop()
+    val = popValue(stack, state)
 
-    stack.append(reg/val)
+    newval = state.registers[reg]/val
+    stack.append(newval)
     stack.append(reg)
     do_EQU(op, stack, state)
 
 def do_MODEQ(op, stack, state):
     reg = stack.pop()
-    val = stack.pop()
+    val = popValue(stack, state)
 
-    stack.append(reg%val)
+    newval = state.registers[reg]%val
+    stack.append(newval)
     stack.append(reg)
     do_EQU(op, stack, state)
 
 def do_LSEQ(op, stack, state):
     reg = stack.pop()
-    val = stack.pop()
+    val = popValue(stack, state)
 
-    stack.append(reg<<val)
+    newval = state.registers[reg]<<val
+    stack.append(newval)
     stack.append(reg)
     do_EQU(op, stack, state)
 
 def do_RSEQ(op, stack, state):
     reg = stack.pop()
-    val = stack.pop()
+    val = popValue(stack, state)
 
-    stack.append(reg>>val)
+    newval = state.registers[reg]>>val
+    stack.append(newval)
     stack.append(reg)
     do_EQU(op, stack, state)
 
 def do_ANDEQ(op, stack, state):
     reg = stack.pop()
-    val = stack.pop()
+    val = popValue(stack, state)
 
-    stack.append(reg&val)
+    newval = state.registers[reg]&val
+    stack.append(newval)
     stack.append(reg)
-
     do_EQU(op, stack, state)
 
 def do_OREQ(op, stack, state):
     reg = stack.pop()
-    val = stack.pop()
+    val = popValue(stack, state)
 
-    stack.append(reg|val)
+    newval = state.registers[reg]|val
+    stack.append(newval)
     stack.append(reg)
     do_EQU(op, stack, state)
 
 def do_XOREQ(op, stack, state):
     reg = stack.pop()
-    val = stack.pop()
+    val = popValue(stack, state)
 
-    stack.append(reg^val)
+    newval = state.registers[reg]^val
+    stack.append(newval)
     stack.append(reg)
     do_EQU(op, stack, state)
 
 def do_INCEQ(op, stack, state):
     reg = stack.pop()
 
-    stack.append(reg+1)
+    newval = state.registers[reg]+1
+    stack.append(newval)
     stack.append(reg)
     do_EQU(op, stack, state)
 
 def do_DECEQ(op, stack, state):
     reg = stack.pop()
 
-    stack.append(reg-1)
+    newval = state.registers[reg]-1
+    stack.append(newval)
     stack.append(reg)
     do_EQU(op, stack, state)
 
 def do_NOTEQ(op, stack, state):
     reg = stack.pop()
-    val = stack.pop()
+    val = popValue(stack, state)
 
-    stack.append(~reg, state)
+    newval = ~state.registers[reg]
+    stack.append(newval)
     stack.append(reg)
     do_EQU(op, stack, state)
 
@@ -288,9 +312,9 @@ def do_SWAP(op, stack, state):
     reg1 = stack.pop()
     reg2 = stack.pop()
 
-    # this looks wrong but its not (i think)
-    setRegisterValue(reg1, reg2, state)
-    setRegisterValue(reg2, reg1, state)
+    tmp = state.registers[reg1]
+    state.registers[reg1] = state.registers[reg2]
+    state.registers[reg2] = tmp
 
 def do_PICK(op, stack, state):
     raise ESILUnimplementedException
@@ -319,15 +343,15 @@ def memlen(op):
 
 def do_POKE(op, stack, state):
     length = memlen(op)
-    addr = stack.pop()
-    data = stack.pop()
+    addr = popValue(stack, state)
+    data = popValue(stack, state)
 
     state.memory.writeBV(addr, data, length)
     state.esil["old"] = addr
 
 def do_PEEK(op, stack, state):
     length = memlen(op)
-    addr = stack.pop()
+    addr = popValue(stack, state)
 
     data = state.memory.readBV(addr, length)
     stack.append(data)
@@ -339,7 +363,6 @@ def do_NOMBRE(op, stack, state):
 
 def do_NOP(op, stack, state):
     pass
-
 
 def genmask(bits):
     m = (2 << 63) - 1
@@ -372,13 +395,13 @@ def do_ZF(op, stack, state):
     stack.append(solver.If(eq, solver.BitVecVal(1, 1), solver.BitVecVal(0, 1)))
     
 def do_CF(op, stack, state):
-    bits = stack.pop()
+    bits = popValue(stack, state)
     mask = genmask(bits & 0x3f)
     cf = (state.esil["cur"] & mask) < (state.esil["old"] & mask)
     stack.append(solver.If(cf, solver.BitVecVal(1, 1), solver.BitVecVal(0, 1)))
 
 def do_B(op, stack, state):
-    bits = stack.pop()
+    bits = popValue(stack, state)
     mask = genmask((bits + 0x3f) & 0x3f)
     bf = (state.esil["old"] & mask) < (state.esil["cur"] & mask)
     stack.append(solver.If(bf, solver.BitVecVal(1, 1), solver.BitVecVal(0, 1)))
@@ -420,7 +443,7 @@ def do_DS(op, stack, state):
 
 def do_S(op, stack, state):
     stack.append(0)
-    size = stack.pop()
+    size = popValue(stack, state)
     s = ((state.esil["cur"] >> size) & 1) == 1
     stack.append(solver.If(s, solver.BitVecVal(1, 1), solver.BitVecVal(0, 1)))
 

@@ -46,7 +46,7 @@ class ESILState:
 
     def setSymbolicRegister(self, name):
         size = self.registers[name].size()
-        self.registers[name] = newRegister(name, size)
+        self.registers._registers[name]["bv"] = solver.BitVec(name, size)
 
     def constrainRegister(self, name, val):
         reg = self.registers[name]

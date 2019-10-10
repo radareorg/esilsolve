@@ -21,7 +21,7 @@ class ESILRegisters(dict):
             reg["parent"] = None
 
             if "value" in reg:
-                reg["bv"] = newRegister(reg["name"], reg["size"], reg.pop("value"))
+                reg["bv"] = solver.BitVecVal(reg.pop("value"), reg["size"])
 
         else:
             reg["parent"] = parentRegister["name"]
@@ -71,57 +71,29 @@ class ESILRegisters(dict):
         else:
             parent = self._registers[register["parent"]]
             reg = solver.Extract(register["high"], register["low"], parent["bv"])
-            setRegisterName(reg, key)
+            #setRegisterName(reg, key)
             return reg
 
-    def __setitem__(self, key, value):
+    def __setitem__(self, key, val):
         if key in self.aliases:
             key = self.aliases[key]["reg"]
 
-        register = self._registers[key]
+        reg_name = self.getParentName(key)
+        register = self._registers[reg_name]["bv"]
 
-        if register["parent"] == None:
-            self._registers[key]["bv"] = value
+        if type(val) == int:
+            new_reg = solver.BitVecVal(val, register.size())
+        elif type(val) in [solver.BitVecNumRef, solver.BitVecRef]:
+            szdiff = register.size() - val.size()
+            if szdiff > 0:
+                new_reg = solver.Concat(solver.BitVecVal(0, szdiff), deepcopy(val))
+            else:
+                new_reg = deepcopy(val)
 
         else:
             raise ESILArgumentException
 
+        self._registers[key]["bv"] = new_reg
+
     def __contains__(self, key):
         return self._registers.__contains__(key)
-
-# this is gross but i dont want to have to wrap
-# every single bv operation so...
-def setRegisterName(bv, name):
-    BVD(bv)["register"] = name
-
-def getRegisterName(bv):
-    return BVD(bv)["register"]
-
-def setRegisterValue(reg_val, val, state):
-    name = getRegisterName(reg_val)
-    reg_name = state.registers.getParentName(name)
-    register = state.registers[reg_name]
-
-    if type(val) == int:
-        new_reg = newRegister(reg_name, register.size(), val)
-    elif type(val) in [solver.BitVecNumRef, solver.BitVecRef]:
-        szdiff = register.size() - val.size()
-        if szdiff > 0:
-            new_reg = solver.Concat(solver.BitVecVal(0, szdiff), deepcopy(val))
-        else:
-            new_reg = deepcopy(val)
-
-        setRegisterName(new_reg, name)
-    else:
-        raise ESILArgumentException
-
-    state.registers[reg_name] = new_reg
-
-def newRegister(name, size, val=None):
-    if val != None:
-        new_reg = solver.BitVecVal(val, size)
-    else:
-        new_reg = solver.BitVec(name, size)
-
-    setRegisterName(new_reg, name)
-    return new_reg

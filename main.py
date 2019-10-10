@@ -2,7 +2,7 @@ from esilsolve import ESILSolver
 import r2pipe
 
 def test_sym():
-    esilsolver = ESILSolver()
+    esilsolver = ESILSolver(debug=True)
     state = esilsolver.states[0]
     state.setSymbolicRegister("rax")
     esilsolver.parseExpression("1,rax,+,rbx,=,2,bx,<<,rbx,=", state)
@@ -52,8 +52,15 @@ def test_run():
     m = state.solver.model()
     print(m.eval(rdi))
 
+def test_newreg():
+    esilsolver = ESILSolver()
+    state = esilsolver.states[0]
+    esilsolver.parseExpression("1,rax,=,rax,1,+", state)
+    print(state.stack)
+
 if __name__ == "__main__":
     #test_sym()
     #test_mem()
     #test_flg()
     test_run()
+    #test_newreg()

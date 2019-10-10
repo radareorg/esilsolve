@@ -11,7 +11,7 @@ class ESILBitVec(solver.BitVecRef):
     def setName(self, name):
         self.name = name
 
-class ESILInt(int):
+class ESILRegister(str):
     pass
     
 class ESILTrapException(Exception):

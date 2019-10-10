@@ -34,8 +34,8 @@ class ESILWord:
         return (self.word in self.registers)
 
     def getRegister(self):
-        register = self.registers[self.word]
-        return register
+        #register = self.registers[self.word]
+        return self.word
 
     def getLiteralValue(self):
         if(self.word.isdigit()):
@@ -98,9 +98,20 @@ class ESILSolver:
             found = find(instr, state)
 
             if not found:
-                self.parseExpression(instr["esil"], state)
-                self.r2api.step(instr["size"])
+                self.executeInstruction(state, instr)
     
+    def executeInstruction(self, state, instr):
+        # pc should never be anything other than a BitVecVal
+        old_pc = state.registers["PC"].as_long() 
+        self.parseExpression(instr["esil"], state)
+        new_pc = state.registers["PC"].as_long()
+
+        if new_pc == old_pc:
+            self.r2api.step(instr["size"])
+            state.registers["PC"] = old_pc + instr["size"]
+        else:
+            self.r2api.seek(new_pc)
+
     def initState(self):
         if len(self.states) > 0:
             return self.states[0]
