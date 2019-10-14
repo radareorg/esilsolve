@@ -9,6 +9,7 @@ class ESILRegisters(dict):
         self.aliases = aliases
 
         self.parent_dict = {}
+        self.super = None
 
         for reg in reg_array:
             self.processRegister(reg)
@@ -93,7 +94,11 @@ class ESILRegisters(dict):
         else:
             raise ESILArgumentException
 
-        self._registers[key]["bv"] = new_reg
+        # added the simplify here... 
+        # idk if this actually will create any performance improvements
+        # but it will be better for debugging output maybe?
+        # or it will be worse?
+        self._registers[reg_name]["bv"] = solver.simplify(new_reg)
 
     def __contains__(self, key):
         return self._registers.__contains__(key)

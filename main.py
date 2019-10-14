@@ -1,5 +1,6 @@
 from esilsolve import ESILSolver
 import r2pipe
+import solver
 
 def test_sym():
     esilsolver = ESILSolver(debug=True)
@@ -58,9 +59,39 @@ def test_newreg():
     esilsolver.parseExpression("1,rax,=,rax,1,+", state)
     print(state.stack)
 
+def test_multi():
+    r2p = r2pipe.open("tests/multibranch")
+    r2p.cmd("aaa; s sym.check; aei; aeim; aer rdi=0xdead")
+
+    esilsolver = ESILSolver(r2p, debug=True, trace=True)
+    #esilsolver.initVM()
+
+    state = esilsolver.states[0]
+    #state.setSymbolicRegister("rdi")
+    state.registers["rdi"] = solver.BitVecVal(0xdead, 64)
+    rdi = state.registers["rdi"]
+
+    esilsolver.run(state, target=0x0000066f)
+    print(state.registers["zf"])
+    state.solver.add(state.registers["zf"] == 1)
+    #sat = state.solver.check()
+    #m = state.solver.model()
+    #print(m.eval(rdi))
+
+    esilsolver.run(state, target=0x0000069f)
+    print(state.registers["zf"])
+    state.solver.add(state.registers["zf"] == 1)
+    print(state.solver)
+    sat = state.solver.check()
+    print(sat)
+
+    m = state.solver.model()
+    print(m.eval(rdi))
+
 if __name__ == "__main__":
     #test_sym()
     #test_mem()
     #test_flg()
-    test_run()
+    #test_run()
     #test_newreg()
+    test_multi()

@@ -67,3 +67,8 @@ class R2API:
     def initVM(self):
         self.r2p.cmd("aei; aeim")
 
+    def emu(self, instr):
+        self.r2p.cmd("ae %s" % instr["esil"])
+
+    def emustep(self):
+        self.r2p.cmd("aes")

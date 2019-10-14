@@ -7,7 +7,8 @@ class ESILState:
     
     def __init__(self, r2api):
         self.r2api = r2api
-        self.solver = solver.Optimize()
+        #self.solver = solver.Optimize()
+        self.solver = solver.Solver()
         self.model = None
 
         self.esil = {"cur":0, "old":0, "stack":[]}

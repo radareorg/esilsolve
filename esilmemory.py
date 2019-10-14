@@ -80,8 +80,10 @@ class ESILMemory(dict):
             else:
                 bve.append(datum)
 
-        bve.reverse()
-        bv = solver.Concat(bve)
+        if self.endian == "little":
+            bve.reverse()
+
+        bv = solver.simplify(solver.Concat(bve))
         return bv
 
     def writeBV(self, addr, val, length):
@@ -105,6 +107,7 @@ class ESILMemory(dict):
                 data.append((val >> i*BYTE) & 0xff)
 
         else:
+            val = solver.simplify(val) # useless?
             for i in range(length):
                 data.append(solver.Extract((i+1)*BYTE-1, i*BYTE, val))
 

@@ -48,8 +48,6 @@ def do_LTE(op, stack, state):
     arg1 = popValue(stack, state)
     arg2 = popValue(stack, state)
 
-    state
-
     stack.append(arg1<=arg2)
     state.esil["old"] = arg1
     state.esil["cur"] = stack[-1]
@@ -83,6 +81,14 @@ def do_RS(op, stack, state):
     arg2 = popValue(stack, state)
 
     stack.append(arg1>>arg2)
+    state.esil["old"] = arg1
+    state.esil["cur"] = stack[-1]
+
+def do_LRS(op, stack, state):
+    arg1 = popValue(stack, state)
+    arg2 = popValue(stack, state)
+
+    stack.append(solver.LShR(arg1, arg2))
     state.esil["old"] = arg1
     state.esil["cur"] = stack[-1]
 
@@ -190,8 +196,16 @@ def do_EQU(op, stack, state):
 
     #setRegisterValue(reg, val, state)
     state.registers[reg] = val
+    print(reg, val)
     state.esil["old"] = state.registers[reg]
     state.esil["cur"] = val
+
+def do_WEQ(op, stack, state):
+    reg = stack.pop()
+    val = popValue(stack, state)
+
+    #setRegisterValue(reg, val, state)
+    state.registers[reg] = val
 
 def do_ADDEQ(op, stack, state):
     reg = stack.pop()
@@ -468,7 +482,8 @@ opcodes = {
     ">": do_GT,
     ">=": do_GTE,
     "<<": do_LS,
-    ">>": do_RS,
+    ">>": do_LRS,
+    ">>>>": do_RS,
     "<<<": do_LR,
     ">>>": do_RR,
     "&": do_AND,
@@ -483,7 +498,7 @@ opcodes = {
     "++": do_INC,
     "--": do_DEC,
     "=": do_EQU,
-    ":=": do_EQU,
+    ":=": do_WEQ,
     "+=": do_ADDEQ,
     "-=": do_SUBEQ,
     "*=": do_MULEQ,

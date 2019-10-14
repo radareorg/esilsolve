@@ -60,8 +60,9 @@ class ESILWord:
 
 
 class ESILSolver:
-    def __init__(self, r2p=None, init=True, debug=False):
+    def __init__(self, r2p=None, init=True, debug=False, trace=True):
         self.debug = debug
+        self.trace = trace
         self.states = []
 
         self.conditionals = {}
@@ -101,6 +102,10 @@ class ESILSolver:
                 self.executeInstruction(state, instr)
     
     def executeInstruction(self, state, instr):
+        if self.debug:
+            print("expr: %s" % instr["esil"])
+            print("opcode: %s" % instr["opcode"])
+
         # pc should never be anything other than a BitVecVal
         old_pc = state.registers["PC"].as_long() 
         self.parseExpression(instr["esil"], state)
@@ -112,6 +117,12 @@ class ESILSolver:
         else:
             self.r2api.seek(new_pc)
 
+        if self.trace:
+            #print(state.registers.getValues())
+            self.r2api.emustep()
+            #print(self.r2api.getAllRegisters())
+            self.traceRegisters(state)
+
     def initState(self):
         if len(self.states) > 0:
             return self.states[0]
@@ -122,9 +133,6 @@ class ESILSolver:
 
     def parseExpression(self, expression, state):
 
-        if self.debug:
-            print("expr: %s" % expression)
-
         stack = state.stack
 
         if "?" in expression:
@@ -133,10 +141,12 @@ class ESILSolver:
         words = expression.split(",")
 
         for word_str in words:
+            if word_str == "": continue
+
             word = ESILWord(word_str, state)
 
             if word.isConditional():
-                self.doConditional(word)
+                self.doConditional(word, state)
 
             elif word.isOperator():
                 word.doOp(stack)
@@ -145,22 +155,46 @@ class ESILSolver:
                 stack.append(word.getPushValue())
 
     def parseConditionals(self, expression):
-        conditionals = re.findall(r"\?\{(.*?)\}", expression)
+        conditionals = re.findall(r"\?\{,(.*?),\}", expression)
 
         for cond in conditionals:
             ident = "?[%d]" % self.cond_count
             self.conditionals[ident] = cond
             self.cond_count += 1
 
-            expression = expression.replace("?{%s}" % cond, ident, 1)
+            expression = expression.replace("?{,%s,}" % cond, ident, 1)
 
         return expression
         
     # TODO: change this logic
-    def doConditional(self, word):
+    def doConditional(self, word, state):
+        val = state.stack.pop()
         return
 
-        raise ESILUnimplementedException
+        expr = self.conditionals.pop(word.word)
 
-        #if self.popAndEval():
-        #    self.parseExpression(self.conditionals[word.word])
+        # uhhh this sucks
+        if expr == "1,cf,:=":
+            return
+
+        for option in [0, 1]:
+            state.solver.push()
+            cond = val == option
+            state.solver.add(cond)
+            sat = state.solver.check()
+            print(sat)
+            if str(sat) == "sat" and option == 1:
+                #print("Using conditional: %s" % str(cond))
+                self.parseExpression(expr, state)
+                break
+            elif str(sat) == "sat":
+                break
+
+            state.solver.pop()
+
+    def traceRegisters(self, state):
+        for regname in state.registers._registers:
+            register = state.registers._registers[regname]
+            if register["parent"] == None and register["type_str"] in ["gpr", "flg"]:
+                emureg = self.r2api.getRegValue(register["name"])
+                print("%s: %s , %s" % (register["name"], register["bv"], emureg))
