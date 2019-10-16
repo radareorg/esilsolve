@@ -13,6 +13,23 @@ def getValue(val, state):
     else:
         return val
 
+def popIntValue(stack, state):
+    val = getValue(stack.pop(), state)
+    
+    if type(val) in [int, solver.ArithRef, solver.IntNumRef]:
+        return val
+    elif type(val) in [solver.BitVecNumRef, solver.BitVecRef]:
+        return solver.BV2Int(val)
+
+def popExtValue(stack, state):
+    val = getValue(stack.pop(), state)
+    
+    if type(val) in [int, solver.ArithRef, solver.IntNumRef]:
+        return val
+    elif type(val) in [solver.BitVecNumRef, solver.BitVecRef]:
+        tmp = solver.Concat(solver.BitVecVal(0, val.size()), val)
+        return tmp
+
 def do_TRAP(op, stack, state):
     raise ESILTrapException
 
@@ -149,8 +166,8 @@ def do_SUB(op, stack, state):
     state.esil["cur"] = stack[-1]
 
 def do_MUL(op, stack, state):
-    arg1 = popValue(stack, state)
-    arg2 = popValue(stack, state)
+    arg1 = popExtValue(stack, state)
+    arg2 = popExtValue(stack, state)
 
     stack.append(arg1*arg2)
     state.esil["old"] = arg1
@@ -196,7 +213,7 @@ def do_EQU(op, stack, state):
 
     #setRegisterValue(reg, val, state)
     state.registers[reg] = val
-    print(reg, val)
+    #print(reg, val)
     state.esil["old"] = state.registers[reg]
     state.esil["cur"] = val
 
@@ -207,118 +224,15 @@ def do_WEQ(op, stack, state):
     #setRegisterValue(reg, val, state)
     state.registers[reg] = val
 
-def do_ADDEQ(op, stack, state):
+def do_OPEQ(op, stack, state):
     reg = stack.pop()
-    val = popValue(stack, state)
+    regval = state.registers[reg]
+    newop = op.split("=")[0]
+    #val = popValue(stack, state)
 
-    newval = state.registers[reg]+val
-    stack.append(newval)
-    stack.append(reg)
-    do_EQU(op, stack, state)
+    stack.append(regval)
+    opcodes[newop](newop, stack, state)
 
-def do_SUBEQ(op, stack, state):
-    reg = stack.pop()
-    val = popValue(stack, state)
-
-    newval = state.registers[reg]-val
-    stack.append(newval)
-    stack.append(reg)
-    do_EQU(op, stack, state)
-
-def do_MULEQ(op, stack, state):
-    reg = stack.pop()
-    val = popValue(stack, state)
-
-    newval = state.registers[reg]*val
-    stack.append(newval)
-    stack.append(reg)
-    do_EQU(op, stack, state)
-
-def do_DIVEQ(op, stack, state):
-    reg = stack.pop()
-    val = popValue(stack, state)
-
-    newval = state.registers[reg]/val
-    stack.append(newval)
-    stack.append(reg)
-    do_EQU(op, stack, state)
-
-def do_MODEQ(op, stack, state):
-    reg = stack.pop()
-    val = popValue(stack, state)
-
-    newval = state.registers[reg]%val
-    stack.append(newval)
-    stack.append(reg)
-    do_EQU(op, stack, state)
-
-def do_LSEQ(op, stack, state):
-    reg = stack.pop()
-    val = popValue(stack, state)
-
-    newval = state.registers[reg]<<val
-    stack.append(newval)
-    stack.append(reg)
-    do_EQU(op, stack, state)
-
-def do_RSEQ(op, stack, state):
-    reg = stack.pop()
-    val = popValue(stack, state)
-
-    newval = state.registers[reg]>>val
-    stack.append(newval)
-    stack.append(reg)
-    do_EQU(op, stack, state)
-
-def do_ANDEQ(op, stack, state):
-    reg = stack.pop()
-    val = popValue(stack, state)
-
-    newval = state.registers[reg]&val
-    stack.append(newval)
-    stack.append(reg)
-    do_EQU(op, stack, state)
-
-def do_OREQ(op, stack, state):
-    reg = stack.pop()
-    val = popValue(stack, state)
-
-    newval = state.registers[reg]|val
-    stack.append(newval)
-    stack.append(reg)
-    do_EQU(op, stack, state)
-
-def do_XOREQ(op, stack, state):
-    reg = stack.pop()
-    val = popValue(stack, state)
-
-    newval = state.registers[reg]^val
-    stack.append(newval)
-    stack.append(reg)
-    do_EQU(op, stack, state)
-
-def do_INCEQ(op, stack, state):
-    reg = stack.pop()
-
-    newval = state.registers[reg]+1
-    stack.append(newval)
-    stack.append(reg)
-    do_EQU(op, stack, state)
-
-def do_DECEQ(op, stack, state):
-    reg = stack.pop()
-
-    newval = state.registers[reg]-1
-    stack.append(newval)
-    stack.append(reg)
-    do_EQU(op, stack, state)
-
-def do_NOTEQ(op, stack, state):
-    reg = stack.pop()
-    val = popValue(stack, state)
-
-    newval = ~state.registers[reg]
-    stack.append(newval)
     stack.append(reg)
     do_EQU(op, stack, state)
 
@@ -372,6 +286,19 @@ def do_PEEK(op, stack, state):
     state.esil["old"] = addr
     state.esil["cur"] = stack[-1]
 
+def do_OPPOKE(op, stack, state):
+    length = memlen(op)
+    addr = popValue(stack, state)
+    stack.append(addr)
+
+    do_PEEK(op, stack, state)
+    newop = op.split("=")[0]
+    opcodes[newop](newop, stack, state)
+    data = popValue(stack, state)
+
+    state.memory.writeBV(addr, data, length)
+    state.esil["old"] = addr
+
 def do_NOMBRE(op, stack, state):
     raise ESILUnimplementedException
 
@@ -406,19 +333,19 @@ def lastsz(state):
 def do_ZF(op, stack, state):
     eq = (state.esil["cur"] == 0) # 
     #stack.append(eq)
-    stack.append(solver.If(eq, solver.BitVecVal(1, 1), solver.BitVecVal(0, 1)))
+    stack.append(solver.If(eq, 1, 0))
     
 def do_CF(op, stack, state):
     bits = popValue(stack, state)
     mask = genmask(bits & 0x3f)
     cf = (state.esil["cur"] & mask) < (state.esil["old"] & mask)
-    stack.append(solver.If(cf, solver.BitVecVal(1, 1), solver.BitVecVal(0, 1)))
+    stack.append(solver.If(cf, 1, solver.BitVecVal(0, 1)))
 
 def do_B(op, stack, state):
     bits = popValue(stack, state)
     mask = genmask((bits + 0x3f) & 0x3f)
     bf = (state.esil["old"] & mask) < (state.esil["cur"] & mask)
-    stack.append(solver.If(bf, solver.BitVecVal(1, 1), solver.BitVecVal(0, 1)))
+    stack.append(solver.If(bf, 1, solver.BitVecVal(0, 1)))
 
 '''
 	// Set if the number of set bits in the least significant _byte_ is a multiple of 2.
@@ -435,9 +362,18 @@ def do_P(op, stack, state):
     c2 = 0x8040201008040201
     c3 = 0x1FF
 
-    lsb = state.esil["cur"] & 0xff
-    pf = (~((((lsb * c1) & c2) % c3) & 1) == 1)
-    stack.append(solver.If(pf, solver.BitVecVal(1, 1), solver.BitVecVal(0, 1)))
+    cur = state.esil["cur"]
+
+    if type(cur) == int:
+        cur = solver.BitVecVal(cur, 64)
+    else:
+        sz = cur.size()
+        if sz < 64:
+            cur = solver.Concat(solver.BitVecVal(0, 64-sz), cur)
+
+    lsb = cur & 0xff
+    pf = (((((lsb * c1) & c2) % c3) & 1) != 1)
+    stack.append(solver.If(pf, 1, 0))
 
 def do_O(op, stack, state):
     try:
@@ -447,19 +383,21 @@ def do_O(op, stack, state):
         m = [sz-1, sz-2]
         of = (((cur & m[0]) < (old & m[0])) ^ ((cur & m[1]) < (old & m[1])) == 1)
 
-        stack.append(solver.If(of, solver.BitVecVal(1, 1), solver.BitVecVal(0, 1)))
+        stack.append(solver.If(of, 1, 0))
     except:
         stack.append(solver.BitVecVal(0, 1))
 
 def do_DS(op, stack, state):
     ds = ((state.esil["cur"] >> (lastsz(state) - 1)) & 1) == 1
-    stack.append(solver.If(ds, solver.BitVecVal(1, 1), solver.BitVecVal(0, 1)))
+    stack.append(solver.If(ds, 1, 0))
 
 def do_S(op, stack, state):
-    stack.append(0)
-    size = popValue(stack, state)
-    s = ((state.esil["cur"] >> size) & 1) == 1
-    stack.append(solver.If(s, solver.BitVecVal(1, 1), solver.BitVecVal(0, 1)))
+    try:
+        size = popValue(stack, state)
+        s = ((state.esil["cur"] >> size) & 1) == 1
+        stack.append(solver.If(s, 1, 0))
+    except:
+        stack.append(0)
 
 # jump target??
 def do_JT(op, stack, state):
@@ -499,19 +437,6 @@ opcodes = {
     "--": do_DEC,
     "=": do_EQU,
     ":=": do_WEQ,
-    "+=": do_ADDEQ,
-    "-=": do_SUBEQ,
-    "*=": do_MULEQ,
-    "/=": do_DIVEQ,
-    "%=": do_MODEQ,
-    "<<=": do_LSEQ,
-    ">>=": do_RSEQ,
-    "&=": do_ANDEQ,
-    "|=": do_OREQ,
-    "^=": do_XOREQ,
-    "++=": do_INCEQ,
-    "--=": do_DECEQ,
-    "!=": do_NOTEQ,
     "SWAP": do_SWAP,
     "PICK": do_PICK,
     "RPICK": do_RPICK,
@@ -537,9 +462,16 @@ opcodes = {
 }
 
 byte_vals = ["", "*", "1", "2", "4", "8"]
+op_vals = ["+", "-", "++", "--", "*", "/", "<<", ">>", "|", "&", "^", "%", "!"]
+
+for op_val in op_vals:
+    opcodes["%s=" % op_val] = do_OPEQ
 
 for byte_val in byte_vals:
     opcodes["=[%s]" % byte_val] = do_POKE
+
+    for op_val in op_vals:
+        opcodes["%s=[%s]" % (op_val, byte_val)] = do_OPPOKE
 
 for byte_val in byte_vals:
     opcodes["[%s]" % byte_val] = do_PEEK

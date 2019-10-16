@@ -21,6 +21,7 @@ class ESILMemory(dict):
     # attempt to concretize addr bv
     # empty model for now
     def bvToInt(self, bv):
+        #print(bv)
         m = solver.Model()
         return m.eval(bv).as_long()
 

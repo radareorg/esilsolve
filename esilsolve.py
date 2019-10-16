@@ -60,7 +60,7 @@ class ESILWord:
 
 
 class ESILSolver:
-    def __init__(self, r2p=None, init=True, debug=False, trace=True):
+    def __init__(self, r2p=None, init=True, debug=False, trace=False):
         self.debug = debug
         self.trace = trace
         self.states = []

@@ -84,10 +84,17 @@ class ESILRegisters(dict):
 
         if type(val) == int:
             new_reg = solver.BitVecVal(val, register.size())
+
+        elif type(val) in [solver.IntNumRef, solver.ArithRef]:
+            new_reg = solver.Int2BV(val, register.size())
+            
         elif type(val) in [solver.BitVecNumRef, solver.BitVecRef]:
             szdiff = register.size() - val.size()
             if szdiff > 0:
                 new_reg = solver.Concat(solver.BitVecVal(0, szdiff), deepcopy(val))
+
+            elif szdiff < 0:
+                new_reg = solver.Extract(register.size()-1, 0, deepcopy(val))
             else:
                 new_reg = deepcopy(val)
 
