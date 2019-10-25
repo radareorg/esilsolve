@@ -118,9 +118,7 @@ class ESILSolver:
             self.r2api.seek(new_pc)
 
         if self.trace:
-            #print(state.registers.getValues())
             self.r2api.emustep()
-            #print(self.r2api.getAllRegisters())
             self.traceRegisters(state)
 
     def initState(self):
