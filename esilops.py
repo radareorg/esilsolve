@@ -318,12 +318,12 @@ def lastsz(state):
     cur = state.esil["cur"]
 
     try:
-        return old.size()
+        return cur.size()
     except:
         pass
     
     try:
-        return cur.size()
+        return old.size()
     except:
         pass
     
