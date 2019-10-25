@@ -150,8 +150,8 @@ def do_XOR(op, stack, state):
     state.esil["cur"] = stack[-1]
 
 def do_ADD(op, stack, state):
-    arg1 = popValue(stack, state)
-    arg2 = popValue(stack, state)
+    arg1 = popExtValue(stack, state)
+    arg2 = popExtValue(stack, state)
 
     stack.append(arg1+arg2)
     state.esil["old"] = arg1
@@ -267,7 +267,8 @@ def do_GOTO(op, stack, state):
 def memlen(op):
     b1 = op.index("[")
     b2 = op.index("]")
-    return int(op[b1+1:b2])
+    if op[b1+1:b2].isdigit():
+        return int(op[b1+1:b2])
 
 def do_POKE(op, stack, state):
     length = memlen(op)

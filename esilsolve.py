@@ -113,6 +113,7 @@ class ESILSolver:
 
         if new_pc == old_pc:
             self.r2api.step(instr["size"])
+            # this may be wrong for arm
             state.registers["PC"] = old_pc + instr["size"]
         else:
             self.r2api.seek(new_pc)
