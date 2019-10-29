@@ -190,7 +190,7 @@ class ESILSolver:
             if str(sat) == "sat" and option == 1:
                 #print("Using conditional: %s" % str(cond))
                 self.parseExpression(expr, state)
-                self.addState(state, cond)
+                #self.addState(state, cond)
                 break
 
             elif str(sat) == "sat":

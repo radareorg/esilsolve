@@ -476,5 +476,3 @@ for byte_val in byte_vals:
 for byte_val in byte_vals:
     opcodes["[%s]" % byte_val] = do_PEEK
 
-#for byte_val in byte_vals:
-#    opcodes["|=[%s]" % byte_val] = do_NOMBRE # idk what this is
