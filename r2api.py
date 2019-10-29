@@ -31,8 +31,17 @@ class R2API:
     def step(self, sz):
         self.r2p.cmd("s+ %d" % sz)
 
-    def disass(self, instrs=1):
-        return self.r2p.cmdj("pdj %d" % instrs)
+    def disass(self, addr=None, instrs=1):
+        cmd = "pdj %d" % instrs
+        if addr != None:
+            cmd += " @ %d" % addr
+
+        result = self.r2p.cmdj(cmd)
+
+        if instrs == 1:
+            return result[0]
+
+        return result
 
     def read(self, addr, length):
         return self.r2p.cmdj("xj %d @ %d" % (length, addr))

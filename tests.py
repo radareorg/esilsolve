@@ -62,7 +62,7 @@ def test_newreg():
 
 def test_multi():
     r2p = r2pipe.open("tests/multibranch")
-    r2p.cmd("aaa; s sym.check; aei; aeim; aer rdi=0xdead")
+    r2p.cmd("aaa; s sym.check; aei; aeim;")
 
     esilsolver = ESILSolver(r2p, debug=False, trace=False)
     #esilsolver.initVM()

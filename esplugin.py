@@ -53,12 +53,17 @@ class ESILSolvePlugin:
         s = 0
         if len(args) > 3:
             s = int(args[3])
+        state = self.esinstance.states[s]
 
         reg = args[1]
-        val = toInt(args[2])
 
-        state = self.esinstance.states[s]
-        state.constrainRegister(reg, val)
+        if args[2] == "min": 
+            state.solver.minimize(state.registers[reg])
+        elif args[2] == "max":
+            state.solver.maximize(state.registers[reg])
+        else:
+            val = toInt(args[2])
+            state.constrainRegister(reg, val)
 
     def handleRun(self, args):
         if not self.initialized:
@@ -106,6 +111,12 @@ class ESILSolvePlugin:
 
         state = self.esinstance.states[s]
 
+        if len(args) > 2:
+            regname = args[2]
+            reg = state.registers._registers[regname]
+            print("%s: %s" % (reg["name"], reg["bv"]))
+            return
+
         for regname in state.registers._registers:
             reg = state.registers._registers[regname]
             if reg["parent"] == None:
@@ -138,5 +149,5 @@ def esplugin(a):
         "call": _call,
     }
 es = ESILSolvePlugin()
-print("Registering ESILSolve plugin...")
+#print("Registering ESILSolve plugin...")
 r2lang.plugin("core", esplugin)

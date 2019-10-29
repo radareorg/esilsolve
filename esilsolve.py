@@ -85,7 +85,7 @@ class ESILSolver:
         self.r2api.initVM()
         self.didInitVM = True
 
-    def run(self, state, target=None):
+    def run(self, state=None, target=None):
         # if target is None exec until ret
         if target == None:
             find = lambda x, s: x["opcode"] == "ret"
@@ -94,12 +94,18 @@ class ESILSolver:
 
         found = False
 
-        while not found:
-            instr = self.r2api.disass()[0]
-            found = find(instr, state)
+        states = self.states
+        if state != None:
+            states = [state]
 
-            if not found:
-                self.executeInstruction(state, instr)
+        while not found:
+            for state in states:
+                pc = state.registers["PC"].as_long() 
+                instr = self.r2api.disass(pc)
+                found = find(instr, state)
+
+                if not found:
+                    self.executeInstruction(state, instr)
     
     def executeInstruction(self, state, instr):
         if self.debug:
@@ -112,10 +118,7 @@ class ESILSolver:
         new_pc = state.registers["PC"].as_long()
 
         if new_pc == old_pc:
-            self.r2api.step(instr["size"])
             state.registers["PC"] = old_pc + instr["size"]
-        else:
-            self.r2api.seek(new_pc)
 
         if self.trace:
             self.r2api.emustep()
@@ -128,6 +131,14 @@ class ESILSolver:
         state = ESILState(self.r2api)
         self.states.append(state)
         return state
+
+    def addState(self, state):
+        print("adding state...")
+        r2tmp = state.r2api
+        state.r2api = None
+        new_state = deepcopy(state)
+        new_state.r2api = r2tmp
+        self.states.append(new_state)
 
     def parseExpression(self, expression, state):
 
@@ -167,28 +178,28 @@ class ESILSolver:
     # TODO: change this logic
     def doConditional(self, word, state):
         val = state.stack.pop()
-        return
-
+        
         expr = self.conditionals.pop(word.word)
-
-        # uhhh this sucks
-        if expr == "1,cf,:=":
-            return
 
         for option in [0, 1]:
             state.solver.push()
             cond = val == option
             state.solver.add(cond)
             sat = state.solver.check()
-            print(sat)
+            #print(sat)
             if str(sat) == "sat" and option == 1:
                 #print("Using conditional: %s" % str(cond))
                 self.parseExpression(expr, state)
+                self.addState(state, cond)
                 break
+
             elif str(sat) == "sat":
+                #self.addState(state)
                 break
 
             state.solver.pop()
+
+        #self.states = self.states[1:]
 
     def traceRegisters(self, state):
         for regname in state.registers._registers:
