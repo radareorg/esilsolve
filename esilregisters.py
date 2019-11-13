@@ -33,11 +33,14 @@ class ESILRegisters(dict):
 
     def getParentRegister(self, register):
         if register["type_str"] == "flg":
-            return 
+            return             
             
         parents = {}
         high_size = 0
         for reg in self.reg_info:
+            if reg["name"] == register["name"]:
+                continue
+
             size = reg["size"]
             reg_start = reg["offset"]
             reg_end = reg_start + size
@@ -47,6 +50,15 @@ class ESILRegisters(dict):
                     parents[size] = reg
                     if size > high_size:
                         high_size = size
+
+            elif reg["type"] == register["type"] and size == register["size"]:
+                if register["offset"] == reg["offset"]:
+                    if "bv" in reg:
+                        #self.aliases[register["name"]] = {"reg": reg["name"]}
+
+                        parents[size] = reg
+                        if size > high_size:
+                            high_size = size
 
         # the largest reg is the parent
         if high_size != 0:
@@ -71,6 +83,10 @@ class ESILRegisters(dict):
         
         else:
             parent = self._registers[register["parent"]]
+
+            if parent["size"] == register["size"]:
+                return parent["bv"]
+
             reg = solver.Extract(register["high"], register["low"], parent["bv"])
             #setRegisterName(reg, key)
             return reg

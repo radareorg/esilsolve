@@ -39,7 +39,7 @@ def test_run():
     r2p = r2pipe.open("tests/simplish")
     r2p.cmd("aaa; s sym.check; aei; aeim")
 
-    esilsolver = ESILSolver(r2p, debug=False)
+    esilsolver = ESILSolver(r2p, debug=True)
     #esilsolver.initVM()
 
     state = esilsolver.states[0]
@@ -48,7 +48,7 @@ def test_run():
     esilsolver.run(state, target=0x00000668)
     print(state.registers["zf"])
     state.solver.add(state.registers["zf"] == 1)
-    state.solver.minimize(rdi)
+    #state.solver.minimize(rdi)
     sat = state.solver.check()
     print(sat)
     m = state.solver.model()
@@ -60,8 +60,14 @@ def test_newreg():
     esilsolver.parseExpression("1,rax,+=[8],rax,[8],1,+", state)
     print(state.stack)
 
+def test_cond():
+    esilsolver = ESILSolver()
+    state = esilsolver.states[0]
+    esilsolver.parseExpression("1,?{,", state)
+    print(state.stack)
+
 def test_multi():
-    r2p = r2pipe.open("tests/multibranch")
+    r2p = r2pipe.open("tests/multibranch", flags=["-2"])
     r2p.cmd("aaa; s sym.check; aei; aeim;")
 
     esilsolver = ESILSolver(r2p, debug=False, trace=False)
@@ -90,10 +96,21 @@ def test_multi():
     m = state.solver.model()
     print(m.eval(rdi))
 
+def test_arm():
+    r2p = r2pipe.open("ipa://tests/crackme-level0-symbols.ipa", flags=["-2"])
+    r2p.cmd("aaa; s sym._validate; w 17492 @ 0x100000; aei; aeim; aer x0 = 0x100000")
+
+    esilsolver = ESILSolver(r2p, debug=True, trace=True)
+    state = esilsolver.states[0]
+    esilsolver.run(state, target=0x100005ea4)
+
+    print(state.stack)
+
 if __name__ == "__main__":
     #test_sym()
     #test_mem()
     #test_flg()
     #test_run()
     #test_newreg()
-    test_multi()
+    #test_multi()
+    test_arm()

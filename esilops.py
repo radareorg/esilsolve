@@ -2,6 +2,9 @@ from esilclasses import *
 from esilregisters import *
 import solver
 
+ONE = solver.BitVecVal(1, 1)
+ZERO = solver.BitVecVal(0, 1)
+
 def popValue(stack, state):
     val = stack.pop()
     return getValue(val, state)
@@ -191,6 +194,7 @@ def do_MOD(op, stack, state):
 
 def do_NOT(op, stack, state):
     arg1 = popValue(stack, state)
+    print(~arg1)
     stack.append(~arg1)
     state.esil["old"] = arg1
     state.esil["cur"] = stack[-1]
@@ -333,19 +337,19 @@ def lastsz(state):
 def do_ZF(op, stack, state):
     eq = (state.esil["cur"] == 0) # 
     #stack.append(eq)
-    stack.append(solver.If(eq, 1, 0))
+    stack.append(solver.If(eq, ONE, ZERO))
     
 def do_CF(op, stack, state):
     bits = popValue(stack, state)
     mask = genmask(bits & 0x3f)
     cf = (state.esil["cur"] & mask) < (state.esil["old"] & mask)
-    stack.append(solver.If(cf, 1, solver.BitVecVal(0, 1)))
+    stack.append(solver.If(cf, ONE, ZERO))
 
 def do_B(op, stack, state):
     bits = popValue(stack, state)
     mask = genmask((bits + 0x3f) & 0x3f)
     bf = (state.esil["old"] & mask) < (state.esil["cur"] & mask)
-    stack.append(solver.If(bf, 1, solver.BitVecVal(0, 1)))
+    stack.append(solver.If(bf, ONE, ZERO))
 
 '''
 	// Set if the number of set bits in the least significant _byte_ is a multiple of 2.
@@ -373,7 +377,7 @@ def do_P(op, stack, state):
 
     lsb = cur & 0xff
     pf = (((((lsb * c1) & c2) % c3) & 1) != 1)
-    stack.append(solver.If(pf, 1, 0))
+    stack.append(solver.If(pf, ONE, ZERO))
 
 def do_O(op, stack, state):
     try:
@@ -383,19 +387,19 @@ def do_O(op, stack, state):
         m = [sz-1, sz-2]
         of = (((cur & m[0]) < (old & m[0])) ^ ((cur & m[1]) < (old & m[1])) == 1)
 
-        stack.append(solver.If(of, 1, 0))
+        stack.append(solver.If(of, ONE, ZERO))
     except:
         stack.append(solver.BitVecVal(0, 1))
 
 def do_DS(op, stack, state):
     ds = ((state.esil["cur"] >> (lastsz(state) - 1)) & 1) == 1
-    stack.append(solver.If(ds, 1, 0))
+    stack.append(solver.If(ds, ONE, ZERO))
 
 def do_S(op, stack, state):
     try:
         size = popValue(stack, state)
         s = ((state.esil["cur"] >> size) & 1) == 1
-        stack.append(solver.If(s, 1, 0))
+        stack.append(solver.If(s, ONE, ZERO))
     except:
         stack.append(0)
 

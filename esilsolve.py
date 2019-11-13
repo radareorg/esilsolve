@@ -13,6 +13,7 @@ import logging
 class ESILWord:
     def __init__(self, word=None, state=None):
         self.word = word
+        self.len = len(word)
 
         if state != None:
             self.state = state
@@ -21,14 +22,25 @@ class ESILWord:
             self.registers = state.registers
             self.memory = state.memory
     
-    def isConditional(self):
-        return (self.word[0] == "?")
+    def isIf(self):
+        return (self.len > 0 and self.word[0] == "?")
+
+    def isElse(self):
+        return (self.word == "}{")
+
+    def isEndIf(self):
+        return (self.word == "}")
 
     def isOperator(self):
         return (self.word in esilops.opcodes)
 
     def isLiteral(self):
-        return (self.word.isdigit() or self.word[:2] == "0x")
+        if (self.word.isdigit() or (self.len > 2 and self.word[:2] == "0x")):
+            return True
+        elif self.len > 1 and self.word[0] == "-" and self.word[1:].isdigit():
+            return True
+        else: 
+            return False
 
     def isRegister(self):
         return (self.word in self.registers)
@@ -40,8 +52,10 @@ class ESILWord:
     def getLiteralValue(self):
         if(self.word.isdigit()):
             return int(self.word)
-        elif self.word[:2] == "0x":
+        elif self.len > 2 and self.word[:2] == "0x":
             return int(self.word, 16)
+        elif self.len > 1 and self.word[0] == "-" and self.word[1:].isdigit():
+            return int(self.word)
 
     def getPushValue(self):
         if(self.isLiteral()):
@@ -109,7 +123,7 @@ class ESILSolver:
     
     def executeInstruction(self, state, instr):
         if self.debug:
-            print("expr: %s" % instr["esil"])
+            print("\nexpr: %s" % instr["esil"])
             print("opcode: %s" % instr["opcode"])
 
         # pc should never be anything other than a BitVecVal
@@ -142,26 +156,27 @@ class ESILSolver:
 
     def parseExpression(self, expression, state):
 
-        stack = state.stack
-
-        if "?" in expression:
-            expression = self.parseConditionals(expression)
-            
+        stack = state.stack            
         words = expression.split(",")
 
+        execute = True
         for word_str in words:
-            if word_str == "": continue
-
             word = ESILWord(word_str, state)
 
-            if word.isConditional():
-                self.doConditional(word, state)
+            if execute and word.isIf():
+                execute = self.doIf(word, state)
 
-            elif word.isOperator():
-                word.doOp(stack)
+            elif word.isElse():
+                execute = not execute
 
-            else:
-                stack.append(word.getPushValue())
+            elif word.isEndIf():
+                execute = True
+
+            elif execute:
+                if word.isOperator():
+                    word.doOp(stack)
+                else:
+                    stack.append(word.getPushValue())
 
     def parseConditionals(self, expression):
         conditionals = re.findall(r"\?\{,(.*?),\}", expression)
@@ -175,6 +190,20 @@ class ESILSolver:
 
         return expression
         
+    def doIf(self, word, state):
+        val = state.stack.pop()
+        
+        state.solver.push()
+        cond = val != 0
+        state.solver.add(cond)
+        sat = state.solver.check()
+        
+        if str(sat) == "sat":
+            return True
+
+        state.solver.pop()
+        return False
+
     # TODO: change this logic
     def doConditional(self, word, state):
         val = state.stack.pop()
@@ -206,4 +235,5 @@ class ESILSolver:
             register = state.registers._registers[regname]
             if register["parent"] == None and register["type_str"] in ["gpr", "flg"]:
                 emureg = self.r2api.getRegValue(register["name"])
-                print("%s: %s , %s" % (register["name"], register["bv"], emureg))
+                if register["bv"].as_long() != emureg:
+                    print("%s: %s , %s" % (register["name"], register["bv"], emureg))
