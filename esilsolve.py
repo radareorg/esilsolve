@@ -192,6 +192,7 @@ class ESILSolver:
         
     def doIf(self, word, state):
         val = state.stack.pop()
+        return False
         
         state.solver.push()
         cond = val != 0
@@ -233,7 +234,13 @@ class ESILSolver:
     def traceRegisters(self, state):
         for regname in state.registers._registers:
             register = state.registers._registers[regname]
-            if register["parent"] == None and register["type_str"] in ["gpr", "flg"]:
+            #print(regname, reg_value)
+            if register["type_str"] in ["gpr", "flg"]:
                 emureg = self.r2api.getRegValue(register["name"])
-                if register["bv"].as_long() != emureg:
-                    print("%s: %s , %s" % (register["name"], register["bv"], emureg))
+                try:
+                    reg_value = solver.simplify(state.registers[regname])
+                    if reg_value.as_long() != emureg:
+                        print("%s: %s , %s" % (register["name"], reg_value, emureg))
+                except Exception as e:
+                    #print(e)
+                    pass

@@ -5,10 +5,14 @@ from esilmemory import *
 
 class ESILState:
     
-    def __init__(self, r2api):
+    def __init__(self, r2api, opt=False):
         self.r2api = r2api
-        self.solver = solver.Optimize()
-        #self.solver = solver.Solver()
+
+        if opt:
+            self.solver = solver.Optimize()
+        else:
+            self.solver = solver.Solver()
+
         self.model = None
 
         self.esil = {"cur":0, "old":0, "stack":[]}
@@ -47,7 +51,7 @@ class ESILState:
 
     def setSymbolicRegister(self, name):
         size = self.registers[name].size()
-        self.registers._registers[name]["bv"] = solver.BitVec(name, size)
+        self.registers[name] = solver.BitVec(name, size)
 
     def constrainRegister(self, name, val):
         reg = self.registers[name]

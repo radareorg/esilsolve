@@ -194,7 +194,7 @@ def do_MOD(op, stack, state):
 
 def do_NOT(op, stack, state):
     arg1 = popValue(stack, state)
-    print(~arg1)
+    #print(~arg1)
     stack.append(~arg1)
     state.esil["old"] = arg1
     state.esil["cur"] = stack[-1]
@@ -226,7 +226,7 @@ def do_WEQ(op, stack, state):
     val = popValue(stack, state)
 
     #setRegisterValue(reg, val, state)
-    state.registers[reg] = val
+    state.registers.weakSet(reg, val)
 
 def do_OPEQ(op, stack, state):
     reg = stack.pop()

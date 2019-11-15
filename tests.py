@@ -37,9 +37,9 @@ def test_flg():
 
 def test_run():
     r2p = r2pipe.open("tests/simplish")
-    r2p.cmd("aaa; s sym.check; aei; aeim")
+    r2p.cmd("aaa; s sym.check; aei; aeim; aer rdi=12605")
 
-    esilsolver = ESILSolver(r2p, debug=True)
+    esilsolver = ESILSolver(r2p, debug=True, trace=False)
     #esilsolver.initVM()
 
     state = esilsolver.states[0]
@@ -50,6 +50,7 @@ def test_run():
     state.solver.add(state.registers["zf"] == 1)
     #state.solver.minimize(rdi)
     sat = state.solver.check()
+    print(state.solver)
     print(sat)
     m = state.solver.model()
     print(m.eval(rdi))
@@ -63,7 +64,7 @@ def test_newreg():
 def test_cond():
     esilsolver = ESILSolver()
     state = esilsolver.states[0]
-    esilsolver.parseExpression("1,?{,", state)
+    esilsolver.parseExpression("1,?{,}", state)
     print(state.stack)
 
 def test_multi():
@@ -79,7 +80,7 @@ def test_multi():
     rdi = state.registers["rdi"]
 
     esilsolver.run(state, target=0x0000066f)
-    print(state.registers["zf"])
+    #print(state.registers["zf"])
     state.solver.add(state.registers["zf"] == 1)
     #sat = state.solver.check()
     #m = state.solver.model()
@@ -88,8 +89,8 @@ def test_multi():
     esilsolver.run(state, target=0x0000069f)
     #print(state.registers["zf"])
     state.solver.add(state.registers["zf"] == 1)
-    state.solver.minimize(rdi)
-    #print(state.solver)
+    #state.solver.minimize(rdi)
+    print(state.solver)
     sat = state.solver.check()
     print(sat)
 
@@ -100,7 +101,7 @@ def test_arm():
     r2p = r2pipe.open("ipa://tests/crackme-level0-symbols.ipa", flags=["-2"])
     r2p.cmd("aaa; s sym._validate; w 17492 @ 0x100000; aei; aeim; aer x0 = 0x100000")
 
-    esilsolver = ESILSolver(r2p, debug=True, trace=True)
+    esilsolver = ESILSolver(r2p, debug=True, trace=False)
     state = esilsolver.states[0]
     esilsolver.run(state, target=0x100005ea4)
 
@@ -112,5 +113,5 @@ if __name__ == "__main__":
     #test_flg()
     #test_run()
     #test_newreg()
-    #test_multi()
-    test_arm()
+    test_multi()
+    #test_arm()

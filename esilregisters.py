@@ -2,75 +2,82 @@
 from esilclasses import *
 import solver
 
+#def deepcopy(x):
+#    return x
+
 class ESILRegisters(dict):
     def __init__(self, reg_array, aliases={}):
         self.reg_info = reg_array
         self._registers = {}
+        self.offset_dictionary = {}
         self.aliases = aliases
 
         self.parent_dict = {}
         self.super = None
 
+        # sort reg array, this is important?
+        reg_array.sort(key=lambda x: x["size"], reverse=True)
+        #print(reg_array)
+
         for reg in reg_array:
-            self.processRegister(reg)
+            self.addRegister(reg)
 
-    def processRegister(self, reg):
-        parentRegister = self.getParentRegister(reg)
+    def addRegister(self, reg):
+        start = reg["offset"]
+        end = reg["offset"] + reg["size"]
+        size = reg["size"]
 
-        if parentRegister == None:
-            # register is not a subregister, give it a BV
-            reg["parent"] = None
+        reg["start"] = start
+        reg["end"] = end
+        self._registers[reg["name"]] = reg    
 
+        # if its a *flags reg treat it special
+        # this will have huge perf improvement
+        if reg["type_str"] == "flg" and size > 1:
+            return 
+
+        key = (start, end)
+
+        reg_value = self.getRegisterFromBounds(reg)
+
+        if reg_value != None:
+            if reg_value["size"] < size:
+                reg_value["size"] = size
+                reg_value["start"] = start
+                reg_value["end"] = end
+                reg_value["bv"] = solver.BitVecVal(reg.pop("value"), size)
+
+                self.offset_dictionary[key] = reg_value
+
+        else:
+            reg_value = {"type": reg["type"], "size": size, "start": start, "end": end}
             if "value" in reg:
-                reg["bv"] = solver.BitVecVal(reg.pop("value"), reg["size"])
+                reg_value["bv"] = solver.BitVecVal(reg.pop("value"), size)
 
-        else:
-            reg["parent"] = parentRegister["name"]
-            reg["low"] = reg["offset"] - parentRegister["offset"]
-            reg["high"] = reg["low"] + reg["size"]
-
-        self._registers[reg["name"]] = reg        
-
-    def getParentRegister(self, register):
-        if register["type_str"] == "flg":
-            return             
+            self.offset_dictionary[key] = reg_value
             
-        parents = {}
-        high_size = 0
-        for reg in self.reg_info:
-            if reg["name"] == register["name"]:
-                continue
+    def getRegisterFromBounds(self, reg):
+        start = reg["offset"]
+        end = reg["offset"] + reg["size"]
+        size = reg["size"]
 
-            size = reg["size"]
-            reg_start = reg["offset"]
-            reg_end = reg_start + size
+        key = (start, end)
 
-            if reg["type"] == register["type"] and size > register["size"]:
-                if register["offset"] >= reg_start and (register["offset"] + register["size"]) <= reg_end:
-                    parents[size] = reg
-                    if size > high_size:
-                        high_size = size
+        if key in self.offset_dictionary:
+            return self.offset_dictionary[key]
 
-            elif reg["type"] == register["type"] and size == register["size"]:
-                if register["offset"] == reg["offset"]:
-                    if "bv" in reg:
-                        #self.aliases[register["name"]] = {"reg": reg["name"]}
-
-                        parents[size] = reg
-                        if size > high_size:
-                            high_size = size
-
-        # the largest reg is the parent
-        if high_size != 0:
-            parent = parents[high_size]
-            self.parent_dict[register["name"]] = parent["name"]
-            return parent
-
-    def getParentName(self, name):
-        if name in self.parent_dict:
-            return self.parent_dict[name]
         else:
-            return name
+            for bounds in self.offset_dictionary:
+                old_reg = self.offset_dictionary[bounds]
+
+                if old_reg["type"] != reg["type"]:
+                    continue
+
+                above_start = (bounds[0] <= start and start <= bounds[1])
+                below_end = (bounds[0] <= end and end <= bounds[1])
+
+                if above_start and below_end:
+                    return old_reg
 
     def __getitem__(self, key):
         if key in self.aliases:
@@ -78,50 +85,91 @@ class ESILRegisters(dict):
 
         register = self._registers[key]
 
-        if register["parent"] == None:
-            return register["bv"]
-        
+        reg_value = self.getRegisterFromBounds(register)
+
+        if register["size"] == reg_value["size"]:
+            return reg_value["bv"]
+
         else:
-            parent = self._registers[register["parent"]]
-
-            if parent["size"] == register["size"]:
-                return parent["bv"]
-
-            reg = solver.Extract(register["high"], register["low"], parent["bv"])
-            #setRegisterName(reg, key)
+            low = register["start"] - reg_value["start"]
+            high = low + register["size"]
+            reg = solver.Extract(high-1, low, reg_value["bv"])
             return reg
 
     def __setitem__(self, key, val):
         if key in self.aliases:
             key = self.aliases[key]["reg"]
 
-        reg_name = self.getParentName(key)
-        register = self._registers[reg_name]["bv"]
+        register = self._registers[key]
+
+        reg_value = self.getRegisterFromBounds(register)
+
+        zero = solver.BitVecVal(0, reg_value["size"])
+        new_reg = self.setRegisterBits(register, reg_value, zero, val)
+
+        # added the simplify here... 
+        # idk if this actually will create any performance improvements
+        # but it will be better for debugging output maybe?
+        # or it will be worse?
+        reg_value["bv"] = solver.simplify(new_reg)
+        
+    def weakSet(self, key, val):
+        if key in self.aliases:
+            key = self.aliases[key]["reg"]
+
+        register = self._registers[key]
+
+        # this gets the full register bv not the subreg bv
+        reg_value = self.getRegisterFromBounds(register)
+
+        new_reg = self.setRegisterBits(register, reg_value, reg_value["bv"], val)
+
+        reg_value["bv"] = solver.simplify(new_reg)
+
+    def valToRegisterBV(self, reg, val):
+        new_val = val
 
         if type(val) == int:
-            new_reg = solver.BitVecVal(val, register.size())
+            new_val = solver.BitVecVal(val, reg["size"])
 
         elif type(val) in [solver.IntNumRef, solver.ArithRef]:
-            new_reg = solver.Int2BV(val, register.size())
-            
-        elif type(val) in [solver.BitVecNumRef, solver.BitVecRef]:
-            szdiff = register.size() - val.size()
-            if szdiff > 0:
-                new_reg = solver.Concat(solver.BitVecVal(0, szdiff), deepcopy(val))
+            new_val = solver.Int2BV(val, reg["size"])
 
-            elif szdiff < 0:
-                new_reg = solver.Extract(register.size()-1, 0, deepcopy(val))
+        elif type(val) in [solver.BitVecNumRef, solver.BitVecRef]:
+            if val.size() > reg["size"]:
+                new_val = solver.Extract(reg["size"]-1, 0, deepcopy(val))
+            elif val.size() < reg["size"]:
+                new_val = solver.Concat(solver.BitVecVal(0, reg["size"]-val.size()), deepcopy(val))
             else:
                 new_reg = deepcopy(val)
 
         else:
             raise ESILArgumentException
 
-        # added the simplify here... 
-        # idk if this actually will create any performance improvements
-        # but it will be better for debugging output maybe?
-        # or it will be worse?
-        self._registers[reg_name]["bv"] = solver.simplify(new_reg)
+        return new_val
+
+    def setRegisterBits(self, register, reg_value, bv, val):
+        low = register["start"] - reg_value["start"]
+        high = low + register["size"]
+
+        bvs = []
+
+        if high != reg_value["size"]:
+            upper = solver.Extract(reg_value["size"]-1, high, deepcopy(bv))
+            bvs.append(upper)
+
+        bvs.append(self.valToRegisterBV(register, val))
+        
+        if low != 0:
+            lower = solver.Extract(low-1, 0, deepcopy(bv))
+            bvs.append(lower)
+
+        if len(bvs) > 1:
+            new_reg = solver.Concat(bvs)
+        else:
+            new_reg = bvs[0]
+
+        return new_reg
 
     def __contains__(self, key):
         return self._registers.__contains__(key)
