@@ -2,8 +2,6 @@
 from esilclasses import *
 import solver
 
-#def deepcopy(x):
-#    return x
 
 class ESILRegisters(dict):
     def __init__(self, reg_array, aliases={}):
@@ -32,7 +30,7 @@ class ESILRegisters(dict):
         self._registers[reg["name"]] = reg    
 
         # if its a *flags reg treat it special
-        # this will have huge perf improvement
+        # this will be a perf improvement
         if reg["type_str"] == "flg" and size > 1:
             return 
 
@@ -137,11 +135,11 @@ class ESILRegisters(dict):
 
         elif type(val) in [solver.BitVecNumRef, solver.BitVecRef]:
             if val.size() > reg["size"]:
-                new_val = solver.Extract(reg["size"]-1, 0, deepcopy(val))
+                new_val = solver.Extract(reg["size"]-1, 0, val)
             elif val.size() < reg["size"]:
-                new_val = solver.Concat(solver.BitVecVal(0, reg["size"]-val.size()), deepcopy(val))
+                new_val = solver.Concat(solver.BitVecVal(0, reg["size"]-val.size()), val)
             else:
-                new_reg = deepcopy(val)
+                new_reg = val
 
         else:
             raise ESILArgumentException
@@ -155,13 +153,13 @@ class ESILRegisters(dict):
         bvs = []
 
         if high != reg_value["size"]:
-            upper = solver.Extract(reg_value["size"]-1, high, deepcopy(bv))
+            upper = solver.Extract(reg_value["size"]-1, high, bv)
             bvs.append(upper)
 
         bvs.append(self.valToRegisterBV(register, val))
         
         if low != 0:
-            lower = solver.Extract(low-1, 0, deepcopy(bv))
+            lower = solver.Extract(low-1, 0, bv)
             bvs.append(lower)
 
         if len(bvs) > 1:

@@ -389,7 +389,7 @@ def do_O(op, stack, state):
 
         stack.append(solver.If(of, ONE, ZERO))
     except:
-        stack.append(solver.BitVecVal(0, 1))
+        stack.append(ZERO)
 
 def do_DS(op, stack, state):
     ds = ((state.esil["cur"] >> (lastsz(state) - 1)) & 1) == 1
@@ -401,7 +401,7 @@ def do_S(op, stack, state):
         s = ((state.esil["cur"] >> size) & 1) == 1
         stack.append(solver.If(s, ONE, ZERO))
     except:
-        stack.append(0)
+        stack.append(ZERO)
 
 # jump target??
 def do_JT(op, stack, state):

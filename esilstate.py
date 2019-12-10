@@ -5,7 +5,7 @@ from esilmemory import *
 
 class ESILState:
     
-    def __init__(self, r2api, opt=False):
+    def __init__(self, r2api, opt=True):
         self.r2api = r2api
 
         if opt:

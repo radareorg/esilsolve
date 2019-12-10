@@ -2,6 +2,9 @@ from esilsolve import ESILSolver
 import r2pipe
 import solver
 
+ONE = solver.BitVecVal(1, 1)
+ZERO = solver.BitVecVal(0, 1)
+
 def test_sym():
     esilsolver = ESILSolver(debug=True)
     state = esilsolver.states[0]
@@ -48,7 +51,7 @@ def test_run():
     esilsolver.run(state, target=0x00000668)
     print(state.registers["zf"])
     state.solver.add(state.registers["zf"] == 1)
-    #state.solver.minimize(rdi)
+    state.solver.minimize(rdi)
     sat = state.solver.check()
     print(state.solver)
     print(sat)
@@ -69,7 +72,7 @@ def test_cond():
 
 def test_multi():
     r2p = r2pipe.open("tests/multibranch", flags=["-2"])
-    r2p.cmd("aaa; s sym.check; aei; aeim;")
+    r2p.cmd("aa; s sym.check; aei; aeim;")
 
     esilsolver = ESILSolver(r2p, debug=False, trace=False)
     #esilsolver.initVM()
@@ -87,10 +90,11 @@ def test_multi():
     #print(m.eval(rdi))
 
     esilsolver.run(state, target=0x0000069f)
-    #print(state.registers["zf"])
+    print(state.registers["zf"])
     state.solver.add(state.registers["zf"] == 1)
-    #state.solver.minimize(rdi)
-    print(state.solver)
+    state.solver.minimize(rdi)
+    #print(state.solver)
+    print("solving")
     sat = state.solver.check()
     print(sat)
 

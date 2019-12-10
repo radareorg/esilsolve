@@ -177,59 +177,25 @@ class ESILSolver:
                     word.doOp(stack)
                 else:
                     stack.append(word.getPushValue())
-
-    def parseConditionals(self, expression):
-        conditionals = re.findall(r"\?\{,(.*?),\}", expression)
-
-        for cond in conditionals:
-            ident = "?[%d]" % self.cond_count
-            self.conditionals[ident] = cond
-            self.cond_count += 1
-
-            expression = expression.replace("?{,%s,}" % cond, ident, 1)
-
-        return expression
         
     def doIf(self, word, state):
         val = state.stack.pop()
-        return False
+
+        # this should not be necessary but it is
+        # i really need to figure out what is happening here
+        if type(val) in [solver.BitVecNumRef, solver.BitVecRef]:
+            val = solver.BV2Int(val)
         
         state.solver.push()
-        cond = val != 0
+        cond = val == 0
         state.solver.add(cond)
         sat = state.solver.check()
         
-        if str(sat) == "sat":
-            return True
+        if sat == solver.sat:
+            return False
 
         state.solver.pop()
-        return False
-
-    # TODO: change this logic
-    def doConditional(self, word, state):
-        val = state.stack.pop()
-        
-        expr = self.conditionals.pop(word.word)
-
-        for option in [0, 1]:
-            state.solver.push()
-            cond = val == option
-            state.solver.add(cond)
-            sat = state.solver.check()
-            #print(sat)
-            if str(sat) == "sat" and option == 1:
-                #print("Using conditional: %s" % str(cond))
-                self.parseExpression(expr, state)
-                #self.addState(state, cond)
-                break
-
-            elif str(sat) == "sat":
-                #self.addState(state)
-                break
-
-            state.solver.pop()
-
-        #self.states = self.states[1:]
+        return True
 
     def traceRegisters(self, state):
         for regname in state.registers._registers:
