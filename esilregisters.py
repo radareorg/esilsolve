@@ -130,14 +130,14 @@ class ESILRegisters(dict):
         if type(val) == int:
             new_val = solver.BitVecVal(val, reg["size"])
 
-        elif type(val) in [solver.IntNumRef, solver.ArithRef]:
+        elif solver.is_int(val):
             new_val = solver.Int2BV(val, reg["size"])
 
-        elif type(val) in [solver.BitVecNumRef, solver.BitVecRef]:
+        elif solver.is_bv(val):
             if val.size() > reg["size"]:
                 new_val = solver.Extract(reg["size"]-1, 0, val)
             elif val.size() < reg["size"]:
-                new_val = solver.Concat(solver.BitVecVal(0, reg["size"]-val.size()), val)
+                new_val = solver.ZeroExt(reg["size"]-val.size(), val)
             else:
                 new_reg = val
 

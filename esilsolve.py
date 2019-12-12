@@ -183,11 +183,14 @@ class ESILSolver:
 
         # this should not be necessary but it is
         # i really need to figure out what is happening here
-        if type(val) in [solver.BitVecNumRef, solver.BitVecRef]:
+        print(val)
+        zero = 0
+        if solver.is_bv(val):
+            #zero = solver.BitVecVal(0, val.size())
             val = solver.BV2Int(val)
         
         state.solver.push()
-        cond = val == 0
+        cond = val == zero
         state.solver.add(cond)
         sat = state.solver.check()
         
@@ -195,6 +198,8 @@ class ESILSolver:
             return False
 
         state.solver.pop()
+        cond = val != zero
+        state.solver.add(cond)    
         return True
 
     def traceRegisters(self, state):
@@ -205,8 +210,8 @@ class ESILSolver:
                 emureg = self.r2api.getRegValue(register["name"])
                 try:
                     reg_value = solver.simplify(state.registers[regname])
-                    if reg_value.as_long() != emureg:
-                        print("%s: %s , %s" % (register["name"], reg_value, emureg))
+                    #if reg_value.as_long() != emureg:
+                    print("%s: %s , %s" % (register["name"], reg_value, emureg))
                 except Exception as e:
                     #print(e)
                     pass

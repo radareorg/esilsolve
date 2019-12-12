@@ -72,9 +72,9 @@ def test_cond():
 
 def test_multi():
     r2p = r2pipe.open("tests/multibranch", flags=["-2"])
-    r2p.cmd("aa; s sym.check; aei; aeim;")
+    r2p.cmd("aa; s sym.check; aei; aeim; aer rdi=22021")
 
-    esilsolver = ESILSolver(r2p, debug=False, trace=False)
+    esilsolver = ESILSolver(r2p, debug=True, trace=False)
     #esilsolver.initVM()
 
     state = esilsolver.states[0]
@@ -96,7 +96,7 @@ def test_multi():
     #print(state.solver)
     print("solving")
     sat = state.solver.check()
-    print(sat)
+    print(state.solver)
 
     m = state.solver.model()
     print(m.eval(rdi))

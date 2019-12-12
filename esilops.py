@@ -19,19 +19,19 @@ def getValue(val, state):
 def popIntValue(stack, state):
     val = getValue(stack.pop(), state)
     
-    if type(val) in [int, solver.ArithRef, solver.IntNumRef]:
-        return val
-    elif type(val) in [solver.BitVecNumRef, solver.BitVecRef]:
+    if solver.is_bv(val):
         return solver.BV2Int(val)
+    else:
+        return val
 
 def popExtValue(stack, state):
     val = getValue(stack.pop(), state)
     
-    if type(val) in [int, solver.ArithRef, solver.IntNumRef]:
-        return val
-    elif type(val) in [solver.BitVecNumRef, solver.BitVecRef]:
+    if solver.is_bv(val):
         tmp = solver.Concat(solver.BitVecVal(0, val.size()), val)
         return tmp
+    else:
+        return val
 
 def do_TRAP(op, stack, state):
     raise ESILTrapException
@@ -314,7 +314,7 @@ def genmask(bits):
     if(bits > 0 and bits < 64):
         m = (2 << bits) - 1
     
-    return m
+    return solver.BitVecVal(m, bits+1)
 
 def lastsz(state):
     old = state.esil["old"]
@@ -362,21 +362,22 @@ def do_B(op, stack, state):
 	return r_anal_esil_pushnum (esil, !((((lsb * c1) & c2) % c3) & 1));
 '''
 def do_P(op, stack, state):
-    c1 = 0x0101010101010101
-    c2 = 0x8040201008040201
-    c3 = 0x1FF
+    c1 = solver.BitVecVal(0x0101010101010101, 64)
+    c2 = solver.BitVecVal(0x8040201008040201, 64)
+    c3 = solver.BitVecVal(0x1FF, 64)
 
     cur = state.esil["cur"]
 
     if type(cur) == int:
         cur = solver.BitVecVal(cur, 64)
+        sz = 64
     else:
         sz = cur.size()
         if sz < 64:
-            cur = solver.Concat(solver.BitVecVal(0, 64-sz), cur)
+            cur = solver.ZeroExt(64-sz, cur)
 
-    lsb = cur & 0xff
-    pf = (((((lsb * c1) & c2) % c3) & 1) != 1)
+    lsb = cur & solver.BitVecVal(0xff, 64)
+    pf = (((((lsb * c1) & c2) % c3) & solver.BitVecVal(1, 64)) != 1)
     stack.append(solver.If(pf, ONE, ZERO))
 
 def do_O(op, stack, state):
