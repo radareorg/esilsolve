@@ -3,7 +3,7 @@ import binascii
 
 class R2API:
 
-    def __init__(self, r2p=None, filename="-", flags=[]):
+    def __init__(self, r2p=None, filename="-", flags=["-2"]):
         self.r2p = r2p
         if r2p == None:
             self.r2p = r2pipe.open(filename, flags=flags)

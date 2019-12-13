@@ -214,16 +214,24 @@ def do_DEC(op, stack, state):
 def do_EQU(op, stack, state):
     reg = stack.pop()
     val = popValue(stack, state)
+    tmp = state.registers[reg]
+
+    if state.condition != None:
+        val = solver.If(state.condition, val, tmp)
 
     #setRegisterValue(reg, val, state)
     state.registers[reg] = val
     #print(reg, val)
-    state.esil["old"] = state.registers[reg]
+    state.esil["old"] = tmp
     state.esil["cur"] = val
 
 def do_WEQ(op, stack, state):
     reg = stack.pop()
     val = popValue(stack, state)
+    tmp = state.registers[reg]
+
+    if state.condition != None:
+        val = solver.If(state.condition, val, tmp)
 
     #setRegisterValue(reg, val, state)
     state.registers.weakSet(reg, val)
@@ -278,6 +286,10 @@ def do_POKE(op, stack, state):
     addr = popValue(stack, state)
     data = popValue(stack, state)
 
+    if state.condition != None:
+        tmp = state.memory.readBV(addr, length)
+        data = solver.If(state.condition, data, tmp)
+
     state.memory.writeBV(addr, data, length)
     state.esil["old"] = addr
 
@@ -299,6 +311,10 @@ def do_OPPOKE(op, stack, state):
     newop = op.split("=")[0]
     opcodes[newop](newop, stack, state)
     data = popValue(stack, state)
+
+    if state.condition != None:
+        tmp = state.memory.readBV(addr, length)
+        data = solver.If(state.condition, data, tmp)
 
     state.memory.writeBV(addr, data, length)
     state.esil["old"] = addr

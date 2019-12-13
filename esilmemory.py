@@ -9,11 +9,11 @@ class ESILMemory(dict):
     def __init__(self, r2api, info):
         self._memory = {}
         self.r2api = r2api
-
+        self.info = info
+        
         self.endian = info["info"]["endian"]
         self.bits = info["info"]["bits"]
         self.chunklen = int(self.bits/8)
-
 
     def mask(self, addr):
         return int(addr - (addr % self.chunklen))
@@ -119,3 +119,15 @@ class ESILMemory(dict):
 
     def prepareData(self, data):
         return data
+
+    def initMemory(self):
+        pass
+
+    def clone(self):
+        clone = self.__class__(self.r2api, self.info)
+        clone._memory = deepcopy(self._memory)
+        clone.endian = self.endian
+        clone.bits = self.bits
+        clone.chunklen = self.chunklen
+
+        return clone

@@ -74,13 +74,15 @@ class ESILWord:
 
 
 class ESILSolver:
-    def __init__(self, r2p=None, init=True, debug=False, trace=False):
+    def __init__(self, r2p=None, init=False, optimize=False, debug=False, trace=False):
         self.debug = debug
         self.trace = trace
         self.states = []
+        self.statemanager = None
 
         self.conditionals = {}
         self.cond_count = 0
+        self.optimize = optimize
 
         if r2p == None:
             r2api = R2API()
@@ -99,86 +101,149 @@ class ESILSolver:
         self.r2api.initVM()
         self.didInitVM = True
 
-    def run(self, state=None, target=None):
+    def run(self, target=None, avoid=[]):
         # if target is None exec until ret
         if target == None:
             find = lambda x, s: x["opcode"] == "ret"
         elif type(target) == int:
             find = lambda x, s: x["offset"] == target
+        else:
+            find = target
 
         found = False
+        self.state_manager.avoid = avoid
 
-        states = self.states
+        '''states = self.states
         if state != None:
-            states = [state]
+            states = [state]'''
 
         while not found:
-            for state in states:
-                pc = state.registers["PC"].as_long() 
-                instr = self.r2api.disass(pc)
-                found = find(instr, state)
+            #for state in states:
+            state = self.state_manager.next()
 
-                if not found:
-                    self.executeInstruction(state, instr)
+            pc = state.registers["PC"].as_long() 
+
+            instr = self.r2api.disass(pc)
+            found = find(instr, state)
+
+            if not found:
+                self.executeInstruction(state, instr)
+                state.steps += 1
+            else:
+                self.state_manager.add(state)
     
     def executeInstruction(self, state, instr):
         if self.debug:
             print("\nexpr: %s" % instr["esil"])
-            print("opcode: %s" % instr["opcode"])
+            print("%016x: %s" % (instr["offset"], instr["opcode"]))
 
-        # pc should never be anything other than a BitVecVal
+        # old pc should never be anything other than a BitVecVal
         old_pc = state.registers["PC"].as_long() 
         self.parseExpression(instr["esil"], state)
-        new_pc = state.registers["PC"].as_long()
 
-        if new_pc == old_pc:
-            state.registers["PC"] = old_pc + instr["size"]
+        pc = state.registers["PC"]
+        if solver.is_bv_value(pc):
+            new_pc = pc.as_long()
 
-        if self.trace:
-            self.r2api.emustep()
-            self.traceRegisters(state)
+            if new_pc == old_pc:
+                state.registers["PC"] = old_pc + instr["size"]
+
+            if self.trace:
+                self.r2api.emustep()
+                self.traceRegisters(state)
+
+            self.state_manager.add(state)
+        else:
+            # symbolic pc value
+            if self.debug:
+                print("symbolic pc: %s" % str(pc))
+
+            possible_pcs = solver.eval_max(state.solver, pc)
+
+            for possible_pc in possible_pcs:
+                #print(possible_pc)
+
+                if len(possible_pcs) > 1:
+                    new_state = state.clone()
+                else:
+                    new_state = state
+
+                new_state.solver.add(pc == possible_pc)
+                if solver.simplify(possible_pc).as_long() == old_pc:
+                    new_state.registers["PC"] = possible_pc + instr["size"]
+                else:
+                    new_state.registers["PC"] = possible_pc
+
+                self.state_manager.add(new_state)
+
+            #new_pc = state.concretize(pc).as_long()
 
     def initState(self):
-        if len(self.states) > 0:
-            return self.states[0]
-
-        state = ESILState(self.r2api)
-        self.states.append(state)
+        state = ESILState(self.r2api, opt=self.optimize)
+        #self.states.append(state)
+        self.state_manager = ESILStateManager([state])
         return state
-
-    def addState(self, state):
-        print("adding state...")
-        r2tmp = state.r2api
-        state.r2api = None
-        new_state = deepcopy(state)
-        new_state.r2api = r2tmp
-        self.states.append(new_state)
 
     def parseExpression(self, expression, state):
 
-        stack = state.stack            
+        temp_stack1 = None
+        temp_stack2 = None
+        exec_type = None
         words = expression.split(",")
 
-        execute = True
         for word_str in words:
             word = ESILWord(word_str, state)
 
-            if execute and word.isIf():
-                execute = self.doIf(word, state)
+            if word.isIf():
+                state.condition = self.doIf(word, state)
+                exec_type = "IF"
+                temp_stack1 = state.stack
+                state.stack = []
 
             elif word.isElse():
-                execute = not execute
-
+                state.condition = solver.Not(state.condition)
+                exec_type = "ELSE"
+                temp_stack2 = state.stack
+                state.stack = []
+                
             elif word.isEndIf():
-                execute = True
+                # this code is weird and i dont like it
+                # but its just necessary to do in some way
+                if exec_type == "ELSE":
+                    state.stack.reverse()
+                    temp_stack2.reverse()
 
-            elif execute:
-                if word.isOperator():
-                    word.doOp(stack)
+                    while len(state.stack) > 0:
+                        if_val = temp_stack2.pop()
+                        else_val = state.stack.pop()
+                        condval = solver.If(state.condition, else_val, if_val)
+                        temp_stack1.append(solver.simplify(condval))
+                        #temp_stack1.append(condval)
                 else:
-                    stack.append(word.getPushValue())
+                    temp_stack1 += state.stack
+
+                state.condition = None
+                exec_type = None
+                state.stack = temp_stack1
+
+            else:
+                if word.isOperator():
+                    word.doOp(state.stack)
+                else:
+                    val = word.getPushValue()
+                    state.stack.append(val)
+
         
     def doIf(self, word, state):
+        val = esilops.popValue(state.stack, state)
+
+        zero = 0
+        if solver.is_bv(val):
+            zero = solver.BitVecVal(0, val.size())
+
+        return val != zero
+
+    def doIfOld(self, word, state):
         val = state.stack.pop()
 
         # this should not be necessary but it is

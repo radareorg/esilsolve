@@ -11,13 +11,14 @@ class ESILRegisters(dict):
         self.aliases = aliases
 
         self.parent_dict = {}
-        self.super = None
 
         # sort reg array, this is important?
         reg_array.sort(key=lambda x: x["size"], reverse=True)
         #print(reg_array)
 
-        for reg in reg_array:
+
+    def initRegisters(self):
+        for reg in self.reg_info:
             self.addRegister(reg)
 
     def addRegister(self, reg):
@@ -130,8 +131,8 @@ class ESILRegisters(dict):
         if type(val) == int:
             new_val = solver.BitVecVal(val, reg["size"])
 
-        elif solver.is_int(val):
-            new_val = solver.Int2BV(val, reg["size"])
+        #elif solver.is_int(val):
+        #    new_val = solver.Int2BV(val, reg["size"])
 
         elif solver.is_bv(val):
             if val.size() > reg["size"]:
@@ -171,3 +172,13 @@ class ESILRegisters(dict):
 
     def __contains__(self, key):
         return self._registers.__contains__(key)
+
+    def clone(self):
+        clone = self.__class__(self.reg_info, self.aliases)
+        clone._registers = deepcopy(self._registers)
+        clone.offset_dictionary = deepcopy(self.offset_dictionary)
+        clone.aliases = self.aliases
+
+        clone.parent_dict = self.parent_dict
+
+        return clone
