@@ -147,7 +147,7 @@ class ESILStateManager:
 
     def next(self):
         #print(self.active)
-        #print(self.unsat)
+        #print(self.inactive)
         if len(self.active) > 32:
             state = max(self.active, key=lambda s: s.steps)
         else:

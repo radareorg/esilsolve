@@ -78,6 +78,7 @@ class ESILSolver:
         self.debug = debug
         self.trace = trace
         self.states = []
+        self.hooks = {}
         self.statemanager = None
 
         self.conditionals = {}
@@ -102,20 +103,9 @@ class ESILSolver:
         self.didInitVM = True
 
     def run(self, target=None, avoid=[]):
-        # if target is None exec until ret
-        if target == None:
-            find = lambda x, s: x["opcode"] == "ret"
-        elif type(target) == int:
-            find = lambda x, s: x["offset"] == target
-        else:
-            find = target
 
         found = False
         self.state_manager.avoid = avoid
-
-        '''states = self.states
-        if state != None:
-            states = [state]'''
 
         while not found:
             #for state in states:
@@ -124,13 +114,18 @@ class ESILSolver:
             pc = state.registers["PC"].as_long() 
 
             instr = self.r2api.disass(pc)
-            found = find(instr, state)
+            found = pc == target
+        
+            if pc in self.hooks:
+                for hook in self.hooks[pc]:
+                    hook(instr, state)
 
             if not found:
                 self.executeInstruction(state, instr)
                 state.steps += 1
             else:
                 self.state_manager.add(state)
+                return state
     
     def executeInstruction(self, state, instr):
         if self.debug:
@@ -178,6 +173,12 @@ class ESILSolver:
 
             #new_pc = state.concretize(pc).as_long()
 
+    def registerHook(self, addr, func):
+        if addr in self.hooks:
+            self.hooks[addr].append(func)
+        else:
+            self.hooks[addr] = [func]
+
     def initState(self):
         state = ESILState(self.r2api, opt=self.optimize)
         #self.states.append(state)
@@ -189,6 +190,7 @@ class ESILSolver:
         temp_stack1 = None
         temp_stack2 = None
         exec_type = None
+        expression = expression.replace("|=}", "|=,}") # typo fix
         words = expression.split(",")
 
         for word_str in words:
@@ -214,8 +216,9 @@ class ESILSolver:
                     temp_stack2.reverse()
 
                     while len(state.stack) > 0:
-                        if_val = temp_stack2.pop()
-                        else_val = state.stack.pop()
+                        if_val = esilops.popValue(temp_stack2, state)
+                        else_val = esilops.popValue(state.stack, state)
+                        #print(if_val, else_val)
                         condval = solver.If(state.condition, else_val, if_val)
                         temp_stack1.append(solver.simplify(condval))
                         #temp_stack1.append(condval)
@@ -236,6 +239,8 @@ class ESILSolver:
         
     def doIf(self, word, state):
         val = esilops.popValue(state.stack, state)
+        if self.debug:
+            print("condition val: %s" % val)
 
         zero = 0
         if solver.is_bv(val):
@@ -275,8 +280,8 @@ class ESILSolver:
                 emureg = self.r2api.getRegValue(register["name"])
                 try:
                     reg_value = solver.simplify(state.registers[regname])
-                    #if reg_value.as_long() != emureg:
-                    print("%s: %s , %s" % (register["name"], reg_value, emureg))
+                    if reg_value.as_long() != emureg:
+                        print("%s: %s , %s" % (register["name"], reg_value, emureg))
                 except Exception as e:
                     #print(e)
                     pass

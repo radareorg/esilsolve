@@ -5,6 +5,8 @@ import solver
 ONE = solver.BitVecVal(1, 1)
 ZERO = solver.BitVecVal(0, 1)
 
+SIZE = 64
+
 def popValue(stack, state):
     val = stack.pop()
     return getValue(val, state)
@@ -12,9 +14,21 @@ def popValue(stack, state):
 def getValue(val, state):
     if type(val) == str:
         register = state.registers[val]
-        return register
+        state.esil["lastsz"] = register.size()
+        return prepare(register)
     else:
-        return val
+        state.esil["lastsz"] = SIZE
+        return prepare(val)
+
+def prepare(val):
+    if solver.is_bv(val):
+        szdiff = SIZE-val.size()
+        return solver.ZeroExt(szdiff, val)
+    elif solver.is_int(val):
+
+        return solver.Int2BV(val, SIZE)
+    else:
+        return solver.BitVecVal(val, SIZE)
 
 def popIntValue(stack, state):
     val = getValue(stack.pop(), state)
@@ -169,8 +183,9 @@ def do_SUB(op, stack, state):
     state.esil["cur"] = stack[-1]
 
 def do_MUL(op, stack, state):
-    arg1 = popExtValue(stack, state)
-    arg2 = popExtValue(stack, state)
+
+    arg1 = popValue(stack, state)
+    arg2 = popValue(stack, state)
 
     stack.append(arg1*arg2)
     state.esil["old"] = arg1
@@ -180,7 +195,9 @@ def do_DIV(op, stack, state):
     arg1 = popValue(stack, state)
     arg2 = popValue(stack, state)
 
-    stack.append(arg1/arg2)
+    stack.append(solver.If(arg1 == 0, 0, arg1/arg2))
+
+    #solver.div
     state.esil["old"] = arg1
     state.esil["cur"] = stack[-1]
 
@@ -195,7 +212,7 @@ def do_MOD(op, stack, state):
 def do_NOT(op, stack, state):
     arg1 = popValue(stack, state)
     #print(~arg1)
-    stack.append(~arg1)
+    stack.append(solver.If(arg1 == 0, ONE, ZERO))
     state.esil["old"] = arg1
     state.esil["cur"] = stack[-1]
 
@@ -214,7 +231,7 @@ def do_DEC(op, stack, state):
 def do_EQU(op, stack, state):
     reg = stack.pop()
     val = popValue(stack, state)
-    tmp = state.registers[reg]
+    tmp = prepare(state.registers[reg])
 
     if state.condition != None:
         val = solver.If(state.condition, val, tmp)
@@ -228,7 +245,7 @@ def do_EQU(op, stack, state):
 def do_WEQ(op, stack, state):
     reg = stack.pop()
     val = popValue(stack, state)
-    tmp = state.registers[reg]
+    tmp = prepare(state.registers[reg])
 
     if state.condition != None:
         val = solver.If(state.condition, val, tmp)
@@ -326,13 +343,19 @@ def do_NOP(op, stack, state):
     pass
 
 def genmask(bits):
+    bits = solver.simplify(bits)
+    if solver.is_bv(bits):
+        bits = bits.as_long()
+
     m = (2 << 63) - 1
     if(bits > 0 and bits < 64):
         m = (2 << bits) - 1
     
-    return solver.BitVecVal(m, bits+1)
+    return m
 
 def lastsz(state):
+    return state.esil["lastsz"]
+
     old = state.esil["old"]
     cur = state.esil["cur"]
 
@@ -358,13 +381,18 @@ def do_ZF(op, stack, state):
 def do_CF(op, stack, state):
     bits = popValue(stack, state)
     mask = genmask(bits & 0x3f)
-    cf = (state.esil["cur"] & mask) < (state.esil["old"] & mask)
+    #cf = (state.esil["cur"] & mask) < (state.esil["old"] & mask)
+    cf = solver.ULT((state.esil["cur"] & mask), (state.esil["old"] & mask))
+
     stack.append(solver.If(cf, ONE, ZERO))
 
 def do_B(op, stack, state):
     bits = popValue(stack, state)
     mask = genmask((bits + 0x3f) & 0x3f)
-    bf = (state.esil["old"] & mask) < (state.esil["cur"] & mask)
+    #print(solver.simplify((state.esil["old"] & mask)), solver.simplify((state.esil["cur"] & mask)))
+    bf = solver.ULT((state.esil["old"] & mask), (state.esil["cur"] & mask))
+
+    #print(bits, mask, solver.simplify(bf))
     stack.append(solver.If(bf, ONE, ZERO))
 
 '''
@@ -378,22 +406,22 @@ def do_B(op, stack, state):
 	return r_anal_esil_pushnum (esil, !((((lsb * c1) & c2) % c3) & 1));
 '''
 def do_P(op, stack, state):
-    c1 = solver.BitVecVal(0x0101010101010101, 64)
-    c2 = solver.BitVecVal(0x8040201008040201, 64)
-    c3 = solver.BitVecVal(0x1FF, 64)
+    c1 = solver.BitVecVal(0x0101010101010101, SIZE)
+    c2 = solver.BitVecVal(0x8040201008040201, SIZE)
+    c3 = solver.BitVecVal(0x1FF, SIZE)
 
     cur = state.esil["cur"]
 
     if type(cur) == int:
-        cur = solver.BitVecVal(cur, 64)
-        sz = 64
+        cur = solver.BitVecVal(cur, SIZE)
+        sz = SIZE
     else:
         sz = cur.size()
-        if sz < 64:
-            cur = solver.ZeroExt(64-sz, cur)
+        if sz < SIZE:
+            cur = solver.ZeroExt(SIZE-sz, cur)
 
-    lsb = cur & solver.BitVecVal(0xff, 64)
-    pf = (((((lsb * c1) & c2) % c3) & solver.BitVecVal(1, 64)) != 1)
+    lsb = cur & solver.BitVecVal(0xff, SIZE)
+    pf = (((((lsb * c1) & c2) % c3) & solver.BitVecVal(1, SIZE)) != 1)
     stack.append(solver.If(pf, ONE, ZERO))
 
 def do_O(op, stack, state):
@@ -483,7 +511,7 @@ opcodes = {
 }
 
 byte_vals = ["", "*", "1", "2", "4", "8"]
-op_vals = ["+", "-", "++", "--", "*", "/", "<<", ">>", "|", "&", "^", "%", "!"]
+op_vals = ["+", "-", "++", "--", "*", "/", "<<", ">>", "|", "&", "^", "%", "!", ">>>>", ">>>", "<<<"]
 
 for op_val in op_vals:
     opcodes["%s=" % op_val] = do_OPEQ

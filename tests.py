@@ -1,6 +1,7 @@
 from esilsolve import ESILSolver
 import r2pipe
 import solver
+import binascii
 
 ONE = solver.BitVecVal(1, 1)
 ZERO = solver.BitVecVal(0, 1)
@@ -77,7 +78,7 @@ def test_multi():
     r2p = r2pipe.open("tests/multibranch", flags=["-2"])
     r2p.cmd("aa; s sym.check; aei; aeim; aer rdi=22021")
 
-    esilsolver = ESILSolver(r2p, debug=True, trace=False)
+    esilsolver = ESILSolver(r2p, debug=False, trace=False)
     #esilsolver.initVM()
 
     state = esilsolver.initState()
@@ -92,7 +93,7 @@ def test_multi():
     #m = state.solver.model()
     #print(m.eval(rdi))
 
-    esilsolver.run(target=0x0000069f)
+    state = esilsolver.run(target=0x0000069f)
     print(state.registers["zf"])
     state.solver.add(state.registers["zf"] == 1)
     #state.solver.minimize(rdi)
@@ -106,7 +107,7 @@ def test_multi():
 
 def test_multi_hook():
     r2p = r2pipe.open("tests/multibranch", flags=["-2"])
-    r2p.cmd("aa; s sym.check; aei; aeim; aer rdi=22021")
+    r2p.cmd("s sym.check; aei; aeim; aer rdi=22021")
 
     esilsolver = ESILSolver(r2p, debug=False, trace=False)
     #esilsolver.initVM()
@@ -129,13 +130,33 @@ def test_multi_hook():
 
 def test_arm():
     r2p = r2pipe.open("ipa://tests/crackme-level0-symbols.ipa", flags=["-2"])
-    r2p.cmd("aaa; s sym._validate; w 17492 @ 0x100000; aei; aeim; aer x0 = 0x100000")
+    # w ewmfpkzbjowr hvb @ 0x100000
+    r2p.cmd("aaa; s sym._validate; aei; aeim; aer x0 = 0x100000;")
 
-    esilsolver = ESILSolver(r2p, debug=True, trace=False)
-    state = esilsolver.states[0]
-    esilsolver.run(state, target=0x100005ea4)
+    esilsolver = ESILSolver(r2p, debug=False, trace=False)
+    state = esilsolver.initState()
 
-    print(state.stack)
+    b = [solver.BitVec("b%d" % x, 8) for x in range(16)]
+    for x in range(16):
+        state.solver.add(solver.Or(solver.And(b[x] >= 0x61, b[x] <= 0x7a), b[x] == 0x20))
+
+    code = solver.Concat(*b)
+    #code = solver.BitVec("code", 128)
+    state.memory.writeBV(0x100000, code, 16)
+
+    def success(instr, state):
+        sat = state.solver.check()
+        m = state.solver.model()
+        c = m.eval(code).as_long()
+
+        cs = binascii.unhexlify("%x"%c)[::-1]
+        #print(cs)
+        print("CODE: %s" % cs.decode())
+
+    esilsolver.registerHook(0x10000600c, success)
+    esilsolver.run(target=0x10000600c, avoid=[0x100006014, 0x100005e38])
+
+    #print(state.stack)
 
 if __name__ == "__main__":
     #test_cond()
@@ -144,5 +165,6 @@ if __name__ == "__main__":
     #test_flg()
     #test_run()
     #test_newreg()
-    test_multi_hook()
-    #test_arm()
+    #test_multi()
+    #test_multi_hook()
+    test_arm()

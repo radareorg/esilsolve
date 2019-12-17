@@ -10,7 +10,7 @@ class ESILMemory(dict):
         self._memory = {}
         self.r2api = r2api
         self.info = info
-        
+
         self.endian = info["info"]["endian"]
         self.bits = info["info"]["bits"]
         self.chunklen = int(self.bits/8)
@@ -27,9 +27,11 @@ class ESILMemory(dict):
 
     def read(self, addr, length):
         maddr = self.mask(addr)
+        #print(maddr, length)
 
         data = []
         chunks = int(length/self.chunklen) + min(1, length%self.chunklen)
+        #print(chunks)
 
         for chunk in range(chunks):
             caddr = maddr + chunk*self.chunklen
@@ -42,6 +44,7 @@ class ESILMemory(dict):
 
         offset = addr-maddr
         #bv = solver.Concat(data[offset:offset+length])
+        #print(self._memory)
         return data[offset:offset+length]
 
 
@@ -52,7 +55,7 @@ class ESILMemory(dict):
         length = len(data)
 
         if maddr != addr or length % self.chunklen != 0:
-            prev = self.read(addr, length)
+            prev = self.read(maddr, length + (self.chunklen - (length % self.chunklen)))
             data = prev[:offset] + data + prev[offset+length:]
 
         chunks = int(length/self.chunklen) + min(1, length%self.chunklen)
@@ -60,13 +63,19 @@ class ESILMemory(dict):
             o = chunk*self.chunklen
             caddr = maddr + o
 
-            self._memory[caddr] = data[o:self.chunklen]
+            #print(caddr, data[o:o+self.chunklen])
+
+            self._memory[caddr] = data[o:o+self.chunklen]
+
+            #print(self._memory)
 
     def readBV(self, addr, length):
         if type(addr) != int:
             addr = self.bvToInt(addr)
 
+        #print(addr, length)
         data = self.read(addr, length)
+        #print(data)
 
         bve = []
 
@@ -84,7 +93,12 @@ class ESILMemory(dict):
         if self.endian == "little":
             bve.reverse()
 
-        bv = solver.simplify(solver.Concat(bve))
+        #print(bve)
+        if len(bve) > 1:
+            bv = solver.simplify(solver.Concat(*bve))
+        else:
+            bv = solver.simplify(bve[0])
+
         return bv
 
     def writeBV(self, addr, val, length):
