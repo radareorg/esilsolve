@@ -1,9 +1,10 @@
 from z3 import *
+import binascii
 
 set_param(auto_config=False)
 #solver.Z3_DEBUG = False
 
-def eval_max(solver, sym, n=16):
+def EvalMax(solver, sym, n=16):
     solutions = []
 
     while len(solutions) < n:
@@ -25,3 +26,6 @@ def eval_max(solver, sym, n=16):
         solver.pop()
 
     return solutions
+
+def BV2Bytes(bv):
+    return binascii.unhexlify("%x"%bv.as_long())[::-1]

@@ -9,7 +9,7 @@ class ESILRegisters(dict):
         self._registers = {}
         self.offset_dictionary = {}
         self.aliases = aliases
-
+        self._needs_copy = False
         self.parent_dict = {}
 
         # sort reg array, this is important?
@@ -96,6 +96,11 @@ class ESILRegisters(dict):
             return reg
 
     def __setitem__(self, key, val):
+
+        if self._needs_copy:
+            self._registers = deepcopy(self._registers)
+            self._needs_copy = False
+
         if key in self.aliases:
             key = self.aliases[key]["reg"]
 
@@ -113,6 +118,11 @@ class ESILRegisters(dict):
         reg_value["bv"] = solver.simplify(new_reg)
         
     def weakSet(self, key, val):
+        
+        if self._needs_copy:
+            self._registers = deepcopy(self._registers)
+            self._needs_copy = False
+
         if key in self.aliases:
             key = self.aliases[key]["reg"]
 
@@ -175,7 +185,9 @@ class ESILRegisters(dict):
 
     def clone(self):
         clone = self.__class__(self.reg_info, self.aliases)
-        clone._registers = deepcopy(self._registers)
+        clone._needs_copy = True
+        clone._registers = self._registers
+        #clone._registers = deepcopy(self._registers)
         clone.offset_dictionary = deepcopy(self.offset_dictionary)
         clone.aliases = self.aliases
 

@@ -2,10 +2,9 @@ from esilclasses import *
 from esilregisters import *
 import solver
 
-ONE = solver.BitVecVal(1, 1)
-ZERO = solver.BitVecVal(0, 1)
-
 SIZE = 64
+ONE = solver.BitVecVal(1, SIZE)
+ZERO = solver.BitVecVal(0, SIZE)
 
 def popValue(stack, state):
     val = stack.pop()
@@ -23,7 +22,10 @@ def getValue(val, state):
 def prepare(val):
     if solver.is_bv(val):
         szdiff = SIZE-val.size()
-        return solver.ZeroExt(szdiff, val)
+        if szdiff > 0:
+            return solver.ZeroExt(szdiff, val)
+        else:
+            return val
     elif solver.is_int(val):
 
         return solver.Int2BV(val, SIZE)

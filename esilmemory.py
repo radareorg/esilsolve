@@ -11,19 +11,30 @@ class ESILMemory(dict):
         self.r2api = r2api
         self.info = info
 
+        self._needs_copy = False
+
         self.endian = info["info"]["endian"]
         self.bits = info["info"]["bits"]
         self.chunklen = int(self.bits/8)
+
+        self.solver = None
 
     def mask(self, addr):
         return int(addr - (addr % self.chunklen))
 
     # attempt to concretize addr bv
-    # empty model for now
     def bvToInt(self, bv):
-        #print(bv)
-        m = solver.Model()
-        return m.eval(bv).as_long()
+        bv = solver.simplify(bv)
+        if solver.is_bv_value(bv):
+            return bv.as_long()
+        elif solver.is_bv(bv):
+            print("symbolic addr: %s" % bv)
+            sat = self.solver.check()
+            if sat == solver.sat:
+                model = self.solver.model()
+                val = model.eval(bv).as_long()
+                self.solver.add(bv == val)
+                return val
 
     def read(self, addr, length):
         maddr = self.mask(addr)
@@ -49,6 +60,11 @@ class ESILMemory(dict):
 
 
     def write(self, addr, data):
+
+        if self._needs_copy:
+            self._memory = deepcopy(self._memory)
+            self._needs_copy = False
+
         data = self.prepareData(data)
         maddr = self.mask(addr)
         offset = addr-maddr
@@ -73,10 +89,7 @@ class ESILMemory(dict):
         if type(addr) != int:
             addr = self.bvToInt(addr)
 
-        #print(addr, length)
         data = self.read(addr, length)
-        #print(data)
-
         bve = []
 
         if all(type(x) == int for x in data):
@@ -124,7 +137,7 @@ class ESILMemory(dict):
         else:
             val = solver.simplify(val) # useless?
             for i in range(length):
-                data.append(solver.Extract((i+1)*BYTE-1, i*BYTE, val))
+                data.append(solver.simplify(solver.Extract((i+1)*BYTE-1, i*BYTE, val)))
 
         if self.endian == "big":
             data.reverse()
@@ -139,7 +152,9 @@ class ESILMemory(dict):
 
     def clone(self):
         clone = self.__class__(self.r2api, self.info)
-        clone._memory = deepcopy(self._memory)
+        clone._needs_copy = True
+        clone._memory = self._memory
+        #clone._memory = deepcopy(self._memory)
         clone.endian = self.endian
         clone.bits = self.bits
         clone.chunklen = self.chunklen

@@ -1,6 +1,7 @@
 import r2lang
 import esilsolve
 import r2pipe
+import solver 
 
 class ESILSolvePlugin:
 
@@ -18,6 +19,7 @@ class ESILSolvePlugin:
         self.symbols = {}
         self.esinstance = None
         self.initialized = False
+        self.currentState = None
 
     def command(self, args):
         cmd = args[0]
@@ -94,7 +96,7 @@ class ESILSolvePlugin:
         register = self.symbols[reg]
         sat = state.solver.check()
 
-        if str(sat) != "sat":
+        if sat != solver.sat:
             print("error: not sat")
             return
 

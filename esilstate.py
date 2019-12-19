@@ -40,6 +40,7 @@ class ESILState:
 
     def initMemory(self):
         self.memory = ESILMemory(self.r2api, self.info)
+        self.memory.solver = self.solver
         self.memory.initMemory()
 
     def initRegisters(self):
@@ -122,13 +123,14 @@ class ESILState:
 
     def clone(self):
         clone = self.__class__(self.r2api, init=False)
-        clone.stack = copy.deepcopy(self.stack)
-        clone.solver = copy.deepcopy(self.solver)
+        clone.stack = deepcopy(self.stack)
+        clone.solver = deepcopy(self.solver)
         clone.steps = self.steps
         clone.bits = self.bits
-        clone.aliases = copy.deepcopy(self.aliases)
+        clone.aliases = self.aliases
         clone.registers = self.registers.clone()
         clone.memory = self.memory.clone()
+        clone.memory.solver = clone.solver
 
         return clone
 
@@ -157,7 +159,7 @@ class ESILStateManager:
         return state
 
     def add(self, state):
-        pc = solver.simplify(state.registers["PC"])
+        pc = state.registers["PC"]
         #print(pc)
         if solver.is_bv_value(pc):
             if pc.as_long() in self.avoid:

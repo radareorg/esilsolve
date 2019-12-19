@@ -153,7 +153,7 @@ class ESILSolver:
             if self.debug:
                 print("symbolic pc: %s" % str(pc))
 
-            possible_pcs = solver.eval_max(state.solver, pc)
+            possible_pcs = solver.EvalMax(state.solver, pc)
 
             for possible_pc in possible_pcs:
                 #print(possible_pc)
@@ -247,30 +247,6 @@ class ESILSolver:
             zero = solver.BitVecVal(0, val.size())
 
         return val != zero
-
-    def doIfOld(self, word, state):
-        val = state.stack.pop()
-
-        # this should not be necessary but it is
-        # i really need to figure out what is happening here
-        print(val)
-        zero = 0
-        if solver.is_bv(val):
-            #zero = solver.BitVecVal(0, val.size())
-            val = solver.BV2Int(val)
-        
-        state.solver.push()
-        cond = val == zero
-        state.solver.add(cond)
-        sat = state.solver.check()
-        
-        if sat == solver.sat:
-            return False
-
-        state.solver.pop()
-        cond = val != zero
-        state.solver.add(cond)    
-        return True
 
     def traceRegisters(self, state):
         for regname in state.registers._registers:
