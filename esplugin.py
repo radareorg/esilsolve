@@ -1,6 +1,7 @@
 import r2lang
 import esilsolve
 import r2pipe
+import solver 
 
 class ESILSolvePlugin:
 
@@ -18,6 +19,7 @@ class ESILSolvePlugin:
         self.symbols = {}
         self.esinstance = None
         self.initialized = False
+        self.currentState = None
 
     def command(self, args):
         cmd = args[0]
@@ -53,12 +55,17 @@ class ESILSolvePlugin:
         s = 0
         if len(args) > 3:
             s = int(args[3])
+        state = self.esinstance.states[s]
 
         reg = args[1]
-        val = toInt(args[2])
 
-        state = self.esinstance.states[s]
-        state.constrainRegister(reg, val)
+        if args[2] == "min": 
+            state.solver.minimize(state.registers[reg])
+        elif args[2] == "max":
+            state.solver.maximize(state.registers[reg])
+        else:
+            val = toInt(args[2])
+            state.constrainRegister(reg, val)
 
     def handleRun(self, args):
         if not self.initialized:
@@ -89,7 +96,7 @@ class ESILSolvePlugin:
         register = self.symbols[reg]
         sat = state.solver.check()
 
-        if str(sat) != "sat":
+        if sat != solver.sat:
             print("error: not sat")
             return
 
@@ -105,6 +112,12 @@ class ESILSolvePlugin:
             s = int(args[1])
 
         state = self.esinstance.states[s]
+
+        if len(args) > 2:
+            regname = args[2]
+            reg = state.registers._registers[regname]
+            print("%s: %s" % (reg["name"], reg["bv"]))
+            return
 
         for regname in state.registers._registers:
             reg = state.registers._registers[regname]
@@ -138,5 +151,5 @@ def esplugin(a):
         "call": _call,
     }
 es = ESILSolvePlugin()
-print("Registering ESILSolve plugin...")
+#print("Registering ESILSolve plugin...")
 r2lang.plugin("core", esplugin)

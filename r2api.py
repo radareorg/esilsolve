@@ -3,24 +3,32 @@ import binascii
 
 class R2API:
 
-    def __init__(self, r2p=None, filename="-", flags=[]):
+    def __init__(self, r2p=None, filename="-", flags=["-2"]):
         self.r2p = r2p
         if r2p == None:
             self.r2p = r2pipe.open(filename, flags=flags)
 
-        self.register_info = self.r2p.cmdj("aerpj")
-        self.all_regs = [r["name"] for r in self.register_info["reg_info"]]
+        self.getRegisterInfo()
 
     def getInfo(self):
         return self.r2p.cmdj("iaj")
 
     def getRegisterInfo(self):
         self.register_info = self.r2p.cmdj("aerpj")
-        self.all_regs = [r["name"] for r in self.register_info["reg_info"]]
-        return self.r2p.cmdj("aerpj")
+
+        # uhhh wtf
+        '''regs = []
+        for reg in self.register_info["reg_info"]:
+            if not ((reg["name"][0] == "d" and reg["name"][1:].isdigit()) or reg["name"] == "dsp"):
+                regs.append(reg)
+                
+        self.register_info["reg_info"] = regs'''
+        
+        self.all_regs = [r["name"] for r in self.register_info["reg_info"]] 
+        return self.register_info
 
     def getRegValue(self, reg):
-        return int(self.r2p.cmd("ar %s" % reg), 16)
+        return int(self.r2p.cmd("aer %s" % reg), 16)
 
     def getGPRValues(self):
         return self.r2p.cmdj("aerj")
@@ -31,8 +39,17 @@ class R2API:
     def step(self, sz):
         self.r2p.cmd("s+ %d" % sz)
 
-    def disass(self, instrs=1):
-        return self.r2p.cmdj("pdj %d" % instrs)
+    def disass(self, addr=None, instrs=1):
+        cmd = "pdj %d" % instrs
+        if addr != None:
+            cmd += " @ %d" % addr
+
+        result = self.r2p.cmdj(cmd)
+
+        if instrs == 1:
+            return result[0]
+
+        return result
 
     def read(self, addr, length):
         return self.r2p.cmdj("xj %d @ %d" % (length, addr))
@@ -55,7 +72,7 @@ class R2API:
     def getAllRegisters(self):
         reg_dict = {}
         reg_str = ",".join(self.all_regs)
-        val_str = self.r2p.cmd("ar %s" % reg_str)
+        val_str = self.r2p.cmd("aer %s" % reg_str)
         # this got a little too long
         all_vals = list(map(lambda x: int(x, 16), val_str.split("\n")[:-1]))
 
