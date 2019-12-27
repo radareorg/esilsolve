@@ -3,8 +3,6 @@ import solver
 import esilops
 import json
 from esilclasses import * 
-from esilregisters import *
-from esilmemory import *
 from esilstate import *
 import re
 
@@ -23,7 +21,7 @@ class ESILWord:
             self.memory = state.memory
     
     def isIf(self):
-        return (self.len > 0 and self.word[0] == "?")
+        return (self.word == "?{")
 
     def isElse(self):
         return (self.word == "}{")
@@ -71,7 +69,6 @@ class ESILWord:
     def doOp(self, stack):
         op = esilops.opcodes[self.word]
         op(self.word, stack, self.state)
-
 
 class ESILSolver:
     def __init__(self, r2p=None, init=False, optimize=False, debug=False, trace=False):
