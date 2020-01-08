@@ -2,11 +2,12 @@ import solver
 from esilclasses import *
 from esilregisters import *
 from esilmemory import *
+from esilprocess import *
 import copy
 
 class ESILState:
     
-    def __init__(self, r2api, opt=False, init=True):
+    def __init__(self, r2api, opt=False, init=True, debug=False, trace=False):
         self.r2api = r2api
 
         if opt:
@@ -19,6 +20,7 @@ class ESILState:
         self.esil = {"cur":0, "old":0, "stack":[]}
         self.stack = self.esil["stack"]
         self.info = self.r2api.getInfo()
+        self.proc = ESILProcess(r2api, debug=debug, trace=trace)
         self.memory = {}
         self.registers = {}
         self.aliases = {}
@@ -106,25 +108,11 @@ class ESILState:
         
         return False
 
-    def popAndEval(self):
-        val = self.stack.pop()
-
-        if type(val) == int:
-            return val
-            
-        if self.model == None:
-            sat = self.solver.check()
-            if sat:
-                self.model = self.solver.model()
-            else:
-                raise ESILUnsatException
-
-        return self.model.eval(val)
-
     def clone(self):
         clone = self.__class__(self.r2api, init=False)
         clone.stack = deepcopy(self.stack)
         clone.solver = deepcopy(self.solver)
+        clone.proc = self.proc.clone()
         clone.steps = self.steps
         clone.bits = self.bits
         clone.aliases = self.aliases
@@ -160,7 +148,6 @@ class ESILStateManager:
 
     def add(self, state):
         pc = state.registers["PC"]
-        #print(pc)
         if solver.is_bv_value(pc):
             if pc.as_long() in self.avoid:
                 self.inactive.add(state)
@@ -173,3 +160,8 @@ class ESILStateManager:
 
         else:
             self.unsat.add(state)
+
+    def entryState(self, r2api, optimize=False):
+        state = ESILState(r2api, opt=optimize)
+        self.add(state)
+        return state
