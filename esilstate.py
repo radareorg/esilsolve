@@ -124,7 +124,7 @@ class ESILState:
 
 class ESILStateManager:
 
-    def __init__(self, active=[], avoid=None):
+    def __init__(self, active=[], avoid=[]):
         self.active = set(active)
         self.inactive = set()
         self.unsat = set()

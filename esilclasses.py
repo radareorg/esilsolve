@@ -1,16 +1,6 @@
 import solver
 from copy import deepcopy
 
-class ESILBitVecVal(solver.BitVecNumRef):
-
-    def setName(self, name):
-        self.name = name
-
-class ESILBitVec(solver.BitVecRef):
-
-    def setName(self, name):
-        self.name = name
-
 class ESILRegister(str):
     pass
     

@@ -57,15 +57,22 @@ class ESILSolver:
                     hook(instr, state)
 
             if not found:
-                self.executeInstruction(state, instr)
+                new_states = state.proc.executeInstruction(state, instr)
+                for new_state in new_states:
+                    self.state_manager.add(new_state)
                 state.steps += 1
             else:
                 self.state_manager.add(state)
                 return state
 
+    def registerHook(self, addr, func):
+        if addr in self.hooks:
+            self.hooks[addr].append(func)
+        else:
+            self.hooks[addr] = [func]
+
     def initState(self):
-        state = ESILState(self.r2api, opt=self.optimize, self.debug, self.trace)
-        #self.states.append(state)
-        self.state_manager = ESILStateManager([state])
+        self.state_manager = ESILStateManager([])
+        state = self.state_manager.entryState(self.r2api, self.optimize)
         return state
 

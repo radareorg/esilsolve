@@ -32,8 +32,8 @@ class ESILRegisters(dict):
 
         # if its a *flags reg treat it special
         # this will be a perf improvement
-        if reg["type_str"] == "flg" and size > 1:
-            return 
+        #if reg["type_str"] == "flg" and size > 1:
+        #    return 
 
         key = (start, end)
 

@@ -70,13 +70,15 @@ class ESILWord:
         op = esilops.opcodes[self.word]
         op(self.word, stack, self.state)
 
+# some constants for exec type idk
+UNCON = 0
+IF = 1 
+ELSE = 2
+
 class ESILProcess:
     def __init__(self, r2p=None, debug=False, trace=False):
         self.debug = debug
         self.trace = trace
-        self.states = []
-        self.hooks = {}
-        self.statemanager = None
 
         self.conditionals = {}
         self.cond_count = 0
@@ -84,36 +86,10 @@ class ESILProcess:
         if r2p == None:
             r2api = R2API()
         else:
-            r2api = R2API(r2p)
+            r2api = r2p
 
         self.r2api = r2api
-        self.didInitVM = False
         self.info = self.r2api.getInfo()
-
-    def run(self, target=None, avoid=[]):
-
-        found = False
-        self.state_manager.avoid = avoid
-
-        while not found:
-            #for state in states:
-            state = self.state_manager.next()
-
-            pc = state.registers["PC"].as_long() 
-
-            instr = self.r2api.disass(pc)
-            found = pc == target
-        
-            if pc in self.hooks:
-                for hook in self.hooks[pc]:
-                    hook(instr, state)
-
-            if not found:
-                self.executeInstruction(state, instr)
-                state.steps += 1
-            else:
-                self.state_manager.add(state)
-                return state
     
     def executeInstruction(self, state, instr):
         if self.debug:
@@ -135,13 +111,14 @@ class ESILProcess:
                 self.r2api.emustep()
                 self.traceRegisters(state)
 
-            self.state_manager.add(state)
+            return [state]
         else:
             # symbolic pc value
             if self.debug:
                 print("symbolic pc: %s" % str(pc))
 
             possible_pcs = solver.EvalMax(state.solver, pc)
+            states = []
 
             for possible_pc in possible_pcs:
                 #print(possible_pc)
@@ -157,21 +134,17 @@ class ESILProcess:
                 else:
                     new_state.registers["PC"] = possible_pc
 
-                self.state_manager.add(new_state)
+                states.append(new_state)
+                #self.state_manager.add(new_state)
 
+            return states
             #new_pc = state.concretize(pc).as_long()
-
-    def registerHook(self, addr, func):
-        if addr in self.hooks:
-            self.hooks[addr].append(func)
-        else:
-            self.hooks[addr] = [func]
 
     def parseExpression(self, expression, state):
 
         temp_stack1 = None
         temp_stack2 = None
-        exec_type = None
+        exec_type = UNCON
         expression = expression.replace("|=}", "|=,}") # typo fix
         words = expression.split(",")
 
@@ -180,20 +153,20 @@ class ESILProcess:
 
             if word.isIf():
                 state.condition = self.doIf(word, state)
-                exec_type = "IF"
+                exec_type = IF
                 temp_stack1 = state.stack
                 state.stack = []
 
             elif word.isElse():
                 state.condition = solver.Not(state.condition)
-                exec_type = "ELSE"
+                exec_type = ELSE
                 temp_stack2 = state.stack
                 state.stack = []
                 
             elif word.isEndIf():
                 # this code is weird and i dont like it
                 # but its just necessary to do in some way
-                if exec_type == "ELSE":
+                if exec_type == ELSE:
                     state.stack.reverse()
                     temp_stack2.reverse()
 
@@ -208,7 +181,7 @@ class ESILProcess:
                     temp_stack1 += state.stack
 
                 state.condition = None
-                exec_type = None
+                exec_type = UNCON
                 state.stack = temp_stack1
 
             else:
@@ -243,3 +216,7 @@ class ESILProcess:
                 except Exception as e:
                     #print(e)
                     pass
+
+    def clone(self):
+        clone = self.__class__(self.r2api, debug=self.debug, trace=self.trace)
+        return clone
