@@ -99,6 +99,7 @@ class ESILProcess:
         # old pc should never be anything other than a BitVecVal
         old_pc = state.registers["PC"].as_long() 
         self.parseExpression(instr["esil"], state)
+        state.steps += 1
 
         pc = state.registers["PC"]
         if solver.is_bv_value(pc):
@@ -135,10 +136,8 @@ class ESILProcess:
                     new_state.registers["PC"] = possible_pc
 
                 states.append(new_state)
-                #self.state_manager.add(new_state)
 
             return states
-            #new_pc = state.concretize(pc).as_long()
 
     def parseExpression(self, expression, state):
 

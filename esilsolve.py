@@ -60,7 +60,6 @@ class ESILSolver:
                 new_states = state.proc.executeInstruction(state, instr)
                 for new_state in new_states:
                     self.state_manager.add(new_state)
-                state.steps += 1
             else:
                 self.state_manager.add(state)
                 return state
