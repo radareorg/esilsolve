@@ -1,4 +1,3 @@
-import solver
 from copy import deepcopy
 
 class ESILRegister(str):
