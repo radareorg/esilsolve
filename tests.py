@@ -189,6 +189,6 @@ if __name__ == "__main__":
     #test_run()
     #test_newreg()
     #test_multi()
-    #est_multi_hook()
+    #test_multi_hook()
     #test_multi32()
     test_arm()
