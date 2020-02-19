@@ -20,19 +20,19 @@ class ESILWord:
             self.registers = state.registers
             self.memory = state.memory
     
-    def isIf(self):
+    def is_if(self):
         return (self.word == "?{")
 
-    def isElse(self):
+    def is_else(self):
         return (self.word == "}{")
 
-    def isEndIf(self):
+    def is_end_if(self):
         return (self.word == "}")
 
-    def isOperator(self):
+    def is_operator(self):
         return (self.word in esilops.opcodes)
 
-    def isLiteral(self):
+    def is_literal(self):
         if (self.word.isdigit() or (self.len > 2 and self.word[:2] == "0x")):
             return True
         elif self.len > 1 and self.word[0] == "-" and self.word[1:].isdigit():
@@ -40,14 +40,14 @@ class ESILWord:
         else: 
             return False
 
-    def isRegister(self):
+    def is_register(self):
         return (self.word in self.registers)
 
-    def getRegister(self):
+    def get_register(self):
         #register = self.registers[self.word]
         return self.word
 
-    def getLiteralValue(self):
+    def get_literal_value(self):
         if(self.word.isdigit()):
             return int(self.word)
         elif self.len > 2 and self.word[:2] == "0x":
@@ -55,18 +55,18 @@ class ESILWord:
         elif self.len > 1 and self.word[0] == "-" and self.word[1:].isdigit():
             return int(self.word)
 
-    def getPushValue(self):
-        if(self.isLiteral()):
-            val = self.getLiteralValue()
+    def get_push_value(self):
+        if(self.is_literal()):
+            val = self.get_literal_value()
             return val
 
-        elif(self.isRegister()):
-            return self.getRegister()
+        elif(self.is_register()):
+            return self.get_register()
 
         else:
             raise esilops.ESILUnimplementedException
 
-    def doOp(self, stack):
+    def do_op(self, stack):
         op = esilops.opcodes[self.word]
         op(self.word, stack, self.state)
 
@@ -89,16 +89,16 @@ class ESILProcess:
             r2api = r2p
 
         self.r2api = r2api
-        self.info = self.r2api.getInfo()
+        self.info = self.r2api.get_info()
     
-    def executeInstruction(self, state, instr):
+    def execute_instruction(self, state, instr):
         if self.debug:
             print("\nexpr: %s" % instr["esil"])
             print("%016x: %s" % (instr["offset"], instr["opcode"]))
 
         # old pc should never be anything other than a BitVecVal
         old_pc = state.registers["PC"].as_long() 
-        self.parseExpression(instr["esil"], state)
+        self.parse_expression(instr["esil"], state)
         state.steps += 1
 
         pc = state.registers["PC"]
@@ -110,7 +110,7 @@ class ESILProcess:
 
             if self.trace:
                 self.r2api.emustep()
-                self.traceRegisters(state)
+                self.trace_registers(state)
 
             return [state]
         else:
@@ -139,7 +139,7 @@ class ESILProcess:
 
             return states
 
-    def parseExpression(self, expression, state):
+    def parse_expression(self, expression, state):
 
         temp_stack1 = None
         temp_stack2 = None
@@ -150,19 +150,19 @@ class ESILProcess:
         for word_str in words:
             word = ESILWord(word_str, state)
 
-            if word.isIf():
-                state.condition = self.doIf(word, state)
+            if word.is_if():
+                state.condition = self.do_if(word, state)
                 exec_type = IF
                 temp_stack1 = state.stack
                 state.stack = []
 
-            elif word.isElse():
+            elif word.is_else():
                 state.condition = solver.Not(state.condition)
                 exec_type = ELSE
                 temp_stack2 = state.stack
                 state.stack = []
                 
-            elif word.isEndIf():
+            elif word.is_end_if():
                 # this code is weird and i dont like it
                 # but its just necessary to do in some way
                 if exec_type == ELSE:
@@ -170,8 +170,8 @@ class ESILProcess:
                     temp_stack2.reverse()
 
                     while len(state.stack) > 0:
-                        if_val = esilops.popValue(temp_stack2, state)
-                        else_val = esilops.popValue(state.stack, state)
+                        if_val = esilops.pop_value(temp_stack2, state)
+                        else_val = esilops.pop_value(state.stack, state)
                         #print(if_val, else_val)
                         condval = solver.If(state.condition, else_val, if_val)
                         temp_stack1.append(solver.simplify(condval))
@@ -184,15 +184,15 @@ class ESILProcess:
                 state.stack = temp_stack1
 
             else:
-                if word.isOperator():
-                    word.doOp(state.stack)
+                if word.is_operator():
+                    word.do_op(state.stack)
                 else:
-                    val = word.getPushValue()
+                    val = word.get_push_value()
                     state.stack.append(val)
 
         
-    def doIf(self, word, state):
-        val = esilops.popValue(state.stack, state)
+    def do_if(self, word, state):
+        val = esilops.pop_value(state.stack, state)
         if self.debug:
             print("condition val: %s" % val)
 
@@ -202,12 +202,12 @@ class ESILProcess:
 
         return val != zero
 
-    def traceRegisters(self, state):
+    def trace_registers(self, state):
         for regname in state.registers._registers:
             register = state.registers._registers[regname]
             #print(regname, reg_value)
             if register["type_str"] in ["gpr", "flg"]:
-                emureg = self.r2api.getRegValue(register["name"])
+                emureg = self.r2api.get_reg_value(register["name"])
                 try:
                     reg_value = solver.simplify(state.registers[regname])
                     if reg_value.as_long() != emureg:

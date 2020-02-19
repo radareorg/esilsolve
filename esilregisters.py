@@ -17,11 +17,11 @@ class ESILRegisters(dict):
         #print(reg_array)
 
 
-    def initRegisters(self):
+    def init_registers(self):
         for reg in self.reg_info:
-            self.addRegister(reg)
+            self.add_register(reg)
 
-    def addRegister(self, reg):
+    def add_register(self, reg):
         start = reg["offset"]
         end = reg["offset"] + reg["size"]
         size = reg["size"]
@@ -37,7 +37,7 @@ class ESILRegisters(dict):
 
         key = (start, end)
 
-        reg_value = self.getRegisterFromBounds(reg)
+        reg_value = self.get_register_from_bounds(reg)
 
         if reg_value != None:
             if reg_value["size"] < size:
@@ -55,7 +55,7 @@ class ESILRegisters(dict):
 
             self.offset_dictionary[key] = reg_value
             
-    def getRegisterFromBounds(self, reg):
+    def get_register_from_bounds(self, reg):
         start = reg["offset"]
         end = reg["offset"] + reg["size"]
         size = reg["size"]
@@ -84,7 +84,7 @@ class ESILRegisters(dict):
 
         register = self._registers[key]
 
-        reg_value = self.getRegisterFromBounds(register)
+        reg_value = self.get_register_from_bounds(register)
 
         if register["size"] == reg_value["size"]:
             return reg_value["bv"]
@@ -106,10 +106,10 @@ class ESILRegisters(dict):
 
         register = self._registers[key]
 
-        reg_value = self.getRegisterFromBounds(register)
+        reg_value = self.get_register_from_bounds(register)
 
         zero = solver.BitVecVal(0, reg_value["size"])
-        new_reg = self.setRegisterBits(register, reg_value, zero, val)
+        new_reg = self.set_register_bits(register, reg_value, zero, val)
 
         # added the simplify here... 
         # idk if this actually will create any performance improvements
@@ -117,7 +117,7 @@ class ESILRegisters(dict):
         # or it will be worse?
         reg_value["bv"] = solver.simplify(new_reg)
         
-    def weakSet(self, key, val):
+    def weak_set(self, key, val):
         
         if self._needs_copy:
             self._registers = deepcopy(self._registers)
@@ -129,13 +129,13 @@ class ESILRegisters(dict):
         register = self._registers[key]
 
         # this gets the full register bv not the subreg bv
-        reg_value = self.getRegisterFromBounds(register)
+        reg_value = self.get_register_from_bounds(register)
 
-        new_reg = self.setRegisterBits(register, reg_value, reg_value["bv"], val)
+        new_reg = self.set_register_bits(register, reg_value, reg_value["bv"], val)
 
         reg_value["bv"] = solver.simplify(new_reg)
 
-    def valToRegisterBV(self, reg, val):
+    def val_to_register_bv(self, reg, val):
         new_val = val
 
         if type(val) == int:
@@ -157,7 +157,7 @@ class ESILRegisters(dict):
 
         return new_val
 
-    def setRegisterBits(self, register, reg_value, bv, val):
+    def set_register_bits(self, register, reg_value, bv, val):
         low = register["start"] - reg_value["start"]
         high = low + register["size"]
 
@@ -167,7 +167,7 @@ class ESILRegisters(dict):
             upper = solver.Extract(reg_value["size"]-1, high, bv)
             bvs.append(upper)
 
-        bvs.append(self.valToRegisterBV(register, val))
+        bvs.append(self.val_to_register_bv(register, val))
         
         if low != 0:
             lower = solver.Extract(low-1, 0, bv)

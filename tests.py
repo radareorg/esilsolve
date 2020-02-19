@@ -6,8 +6,8 @@ import binascii
 def test_sym():
     esilsolver = ESILSolver(debug=True)
     state = esilsolver.states[0]
-    state.setSymbolicRegister("rax")
-    esilsolver.parseExpression("1,rax,+,rbx,=,2,bx,<<,rbx,=", state)
+    state.set_symbolic_register("rax")
+    esilsolver.parse_expression("1,rax,+,rbx,=,2,bx,<<,rbx,=", state)
     #esilsolver.constrainRegister("rbx", 277)
     state.solver.add(state.registers["rbx"] > 277)
     state.solver.add(state.registers["bh"] % 2 == 0)
@@ -18,21 +18,21 @@ def test_sym():
 
 def test_mem():
     esilsolver = ESILSolver()
-    state = esilsolver.initState()
+    state = esilsolver.init_state()
     #esilsolver.context["memory"].write(0, [0xbe, 0xba, 0xfe, 0xca])
     #esilsolver.r2api.write(0, 0xcafebabe)
-    state.setSymbolicRegister("rbx")
-    esilsolver.parseExpression("7,rcx,=,rcx,0,+=[8],0,[8],rbx,+,rcx,=", state)
+    state.set_symbolic_register("rbx")
+    esilsolver.parse_expression("7,rcx,=,rcx,0,+=[8],0,[8],rbx,+,rcx,=", state)
     state.solver.add(state.registers["rcx"] > 0xcafed00d)
 
     print(state.stack)
-    print(state.evaluateRegister("rbx")) 
+    print(state.evaluate_register("rbx")) 
 
 def test_flg():
     esilsolver = ESILSolver(debug=True)
     state = esilsolver.states[0]
     #esilsolver.parseExpression("1,1,==,$z,zf,:=,zf", state)
-    esilsolver.parseExpression("2,0x4,rbp,-,[4],==,$z,zf,:=,32,$b,cf,:=,$p,pf,:=,$s,sf,:=,$o,of,:=", state)
+    esilsolver.parse_expression("2,0x4,rbp,-,[4],==,$z,zf,:=,32,$b,cf,:=,$p,pf,:=,$s,sf,:=,$o,of,:=", state)
     print(state.stack)
     #print(state.popAndEval())
 
@@ -43,8 +43,8 @@ def test_run():
     esilsolver = ESILSolver(r2p, debug=True, trace=False)
     #esilsolver.initVM()
 
-    state = esilsolver.initState()
-    state.setSymbolicRegister("rdi")
+    state = esilsolver.init_state()
+    state.setSymbolic_register("rdi")
     rdi = state.registers["rdi"]
     esilsolver.run(target=0x00000668)
     #print(state.registers["zf"])
@@ -61,13 +61,13 @@ def test_run():
 def test_newreg():
     esilsolver = ESILSolver()
     state = esilsolver.states[0]
-    esilsolver.parseExpression("1,rax,+=[8],rax,[8],1,+", state)
+    esilsolver.parse_expression("1,rax,+=[8],rax,[8],1,+", state)
     print(state.stack)
 
 def test_cond():
     esilsolver = ESILSolver()
     state = esilsolver.states[0]
-    esilsolver.parseExpression("rdx,?{,4,rbx,=,5,}{,1,2,rbx,=,},rbx,rax", state)
+    esilsolver.parse_expression("rdx,?{,4,rbx,=,5,}{,1,2,rbx,=,},rbx,rax", state)
     print(state.stack)
     print(state.registers["rbx"])
 
@@ -78,8 +78,8 @@ def test_multi():
     esilsolver = ESILSolver(r2p, debug=False, trace=False)
     #esilsolver.initVM()
 
-    state = esilsolver.initState()
-    state.setSymbolicRegister("rdi")
+    state = esilsolver.init_state()
+    state.set_symbolic_register("rdi")
     #state.registers["rdi"] = solver.BitVecVal(0xdead, 64)
     rdi = state.registers["rdi"]
 
@@ -109,8 +109,8 @@ def test_multi_hook():
     esilsolver = ESILSolver(r2p, debug=True, trace=False)
     #esilsolver.initVM()
 
-    state = esilsolver.initState()
-    state.setSymbolicRegister("rdi")
+    state = esilsolver.init_state()
+    state.set_symbolic_register("rdi")
     rdi = state.registers["rdi"]
     state.solver.add(rdi >= 0)
 
@@ -131,8 +131,8 @@ def test_multi32():
 
     esilsolver = ESILSolver(r2p, debug=False, trace=False)
     #esilsolver.initVM()
-    state = esilsolver.initState()
-    state.memory.writeBV(0x00178004, solver.BitVec("arg1", 32), 4)
+    state = esilsolver.init_state()
+    state.memory.write_bv(0x00178004, solver.BitVec("arg1", 32), 4)
 
     state = esilsolver.run(target=0x0000052d)
     eax = state.registers["eax"]
@@ -157,14 +157,14 @@ def test_arm():
     r2p.cmd("aaa; s sym._validate; aei; aeim; aer x0 = 0x100000;")
 
     esilsolver = ESILSolver(r2p, debug=False, trace=False)
-    state = esilsolver.initState()
+    state = esilsolver.init_state()
 
     b = [solver.BitVec("b%d" % x, 8) for x in range(16)]
     for x in range(16):
         state.solver.add(solver.Or(solver.And(b[x] >= 0x61, b[x] <= 0x7a), b[x] == 0x20))
 
     code = solver.Concat(*b)
-    state.memory.writeBV(0x100000, code, 16)
+    state.memory.write_bv(0x100000, code, 16)
 
     def success(instr, state):
         sat = state.solver.check()
@@ -178,7 +178,7 @@ def test_arm():
         #print(cs)
         print("CODE: %s" % cs.decode())
 
-    esilsolver.registerHook(0x10000600c, success)
+    esilsolver.register_hook(0x10000600c, success)
     esilsolver.run(target=0x10000600c, avoid=[0x100006014, 0x100005e38])
 
 if __name__ == "__main__":

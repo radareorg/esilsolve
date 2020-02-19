@@ -8,12 +8,12 @@ class R2API:
         if r2p == None:
             self.r2p = r2pipe.open(filename, flags=flags)
 
-        self.getRegisterInfo()
+        self.get_register_info()
 
-    def getInfo(self):
+    def get_info(self):
         return self.r2p.cmdj("iaj")
 
-    def getRegisterInfo(self):
+    def get_register_info(self):
         self.register_info = self.r2p.cmdj("aerpj")
 
         # uhhh wtf
@@ -27,10 +27,10 @@ class R2API:
         self.all_regs = [r["name"] for r in self.register_info["reg_info"]] 
         return self.register_info
 
-    def getRegValue(self, reg):
+    def get_reg_value(self, reg):
         return int(self.r2p.cmd("aer %s" % reg), 16)
 
-    def getGPRValues(self):
+    def get_gpr_values(self):
         return self.r2p.cmdj("aerj")
 
     def seek(self, addr):
@@ -69,7 +69,7 @@ class R2API:
 
     # theres no arj all function to get all the regs as json so i made this
     # i should just make a pull request for r2
-    def getAllRegisters(self):
+    def get_all_registers(self):
         reg_dict = {}
         reg_str = ",".join(self.all_regs)
         val_str = self.r2p.cmd("aer %s" % reg_str)
@@ -81,7 +81,7 @@ class R2API:
 
         return reg_dict
 
-    def initVM(self):
+    def init_vm(self):
         self.r2p.cmd("aei; aeim")
 
     def emu(self, instr):

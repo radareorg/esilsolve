@@ -23,7 +23,7 @@ class ESILMemory(dict):
         return int(addr - (addr % self.chunklen))
 
     # attempt to concretize addr bv
-    def bvToInt(self, bv):
+    def bv_to_int(self, bv):
         bv = solver.simplify(bv)
         if solver.is_bv_value(bv):
             return bv.as_long()
@@ -51,7 +51,7 @@ class ESILMemory(dict):
 
             else:
                 d = self.r2api.read(caddr, self.chunklen)
-                data += self.prepareData(d)
+                data += self.prepare_data(d)
 
         offset = addr-maddr
         #bv = solver.Concat(data[offset:offset+length])
@@ -65,7 +65,7 @@ class ESILMemory(dict):
             self._memory = deepcopy(self._memory)
             self._needs_copy = False
 
-        data = self.prepareData(data)
+        data = self.prepare_data(data)
         maddr = self.mask(addr)
         offset = addr-maddr
         length = len(data)
@@ -85,15 +85,15 @@ class ESILMemory(dict):
 
             #print(self._memory)
 
-    def readBV(self, addr, length):
+    def read_bv(self, addr, length):
         if type(addr) != int:
-            addr = self.bvToInt(addr)
+            addr = self.bv_to_int(addr)
 
         data = self.read(addr, length)
         bve = []
 
         if all(type(x) == int for x in data):
-            bv = self.packBV(data)
+            bv = self.pack_bv(data)
             return bv 
 
         for datum in data:
@@ -114,21 +114,21 @@ class ESILMemory(dict):
 
         return bv
 
-    def writeBV(self, addr, val, length):
+    def write_bv(self, addr, val, length):
         if type(addr) != int:
-            addr = self.bvToInt(addr)
+            addr = self.bv_to_int(addr)
 
-        data = self.unpackBV(val, length)
+        data = self.unpack_bv(val, length)
         self.write(addr, data)
 
-    def packBV(self, data):
+    def pack_bv(self, data):
         val = 0
         for ind, dat in enumerate(data):
             val += dat << BYTE*ind
 
         return solver.BitVecVal(val, BYTE*len(data))
 
-    def unpackBV(self, val, length):
+    def unpack_bv(self, val, length):
         data = []
         if type(val) == int:
             for i in range(length):
@@ -144,10 +144,10 @@ class ESILMemory(dict):
 
         return data
 
-    def prepareData(self, data):
+    def prepare_data(self, data):
         return data
 
-    def initMemory(self):
+    def init_memory(self):
         pass
 
     def clone(self):

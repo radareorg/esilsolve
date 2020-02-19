@@ -27,16 +27,16 @@ class ESILSolver:
             r2api = R2API(r2p)
 
         self.r2api = r2api
-        self.didInitVM = False
-        self.info = self.r2api.getInfo()
+        self.did_init_vm = False
+        self.info = self.r2api.get_info()
 
         if init:
-            self.initState()
+            self.init_state()
 
     # initialize the ESIL VM
-    def initVM(self):
-        self.r2api.initVM()
-        self.didInitVM = True
+    def init_vm(self):
+        self.r2api.init_vm()
+        self.did_init_vm = True
 
     def run(self, target=None, avoid=[]):
 
@@ -57,21 +57,21 @@ class ESILSolver:
                     hook(instr, state)
 
             if not found:
-                new_states = state.proc.executeInstruction(state, instr)
+                new_states = state.proc.execute_instruction(state, instr)
                 for new_state in new_states:
                     self.state_manager.add(new_state)
             else:
                 self.state_manager.add(state)
                 return state
 
-    def registerHook(self, addr, func):
+    def register_hook(self, addr, func):
         if addr in self.hooks:
             self.hooks[addr].append(func)
         else:
             self.hooks[addr] = [func]
 
-    def initState(self):
+    def init_state(self):
         self.state_manager = ESILStateManager([])
-        state = self.state_manager.entryState(self.r2api, self.optimize)
+        state = self.state_manager.entry_state(self.r2api, self.optimize)
         return state
 

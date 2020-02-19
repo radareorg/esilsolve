@@ -19,7 +19,7 @@ class ESILState:
 
         self.esil = {"cur":0, "old":0, "stack":[]}
         self.stack = self.esil["stack"]
-        self.info = self.r2api.getInfo()
+        self.info = self.r2api.get_info()
         self.proc = ESILProcess(r2api, debug=debug, trace=trace)
         self.memory = {}
         self.registers = {}
@@ -33,24 +33,24 @@ class ESILState:
             self.bits = 64
 
         if init:
-            self.initState()
+            self.init_state()
 
-    def initState(self):
+    def init_state(self):
         # get information about the registers and memory
-        self.initRegisters()
-        self.initMemory()
+        self.init_registers()
+        self.init_memory()
 
-    def initMemory(self):
+    def init_memory(self):
         self.memory = ESILMemory(self.r2api, self.info)
         self.memory.solver = self.solver
-        self.memory.initMemory()
+        self.memory.init_memory()
 
-    def initRegisters(self):
-        self.register_info = self.r2api.getRegisterInfo()
+    def init_registers(self):
+        self.register_info = self.r2api.get_register_info()
         self.aliases = {}
         registers = self.register_info["reg_info"]
         aliases = self.register_info["alias_info"]
-        register_values = self.r2api.getAllRegisters()
+        register_values = self.r2api.get_all_registers()
 
         for alias in aliases:
             self.aliases[alias["role_str"]] = alias
@@ -59,17 +59,17 @@ class ESILState:
             register["value"] = register_values[register["name"]]
 
         self.registers = ESILRegisters(registers, self.aliases) #reg_dict
-        self.registers.initRegisters()
+        self.registers.init_registers()
 
-    def setSymbolicRegister(self, name):
+    def set_symbolic_register(self, name):
         size = self.registers[name].size()
         self.registers[name] = solver.BitVec(name, size)
 
-    def constrainRegister(self, name, val):
+    def constrain_register(self, name, val):
         reg = self.registers[name]
         self.solver.add(reg == val)
 
-    def evaluateRegister(self, name, eval_type="eval"):
+    def evaluate_register(self, name, eval_type="eval"):
         val = self.registers[name]
 
         if eval_type == "max":
@@ -102,7 +102,7 @@ class ESILState:
 
         return value
 
-    def isSat(self):
+    def is_sat(self):
         if self.solver.check() == solver.sat:
             return True
         
@@ -161,7 +161,7 @@ class ESILStateManager:
         else:
             self.unsat.add(state)
 
-    def entryState(self, r2api, optimize=False):
+    def entry_state(self, r2api, optimize=False):
         state = ESILState(r2api, opt=optimize)
         self.add(state)
         return state

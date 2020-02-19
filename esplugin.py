@@ -7,31 +7,31 @@ class ESILSolvePlugin:
 
     def __init__(self):
         self.commands = {
-            "aesxi": self.handleInit,
-            "aesxs": self.handleSym,
-            "aesxc": self.handleConstrain,
-            "aesxr": self.handleRun,
-            #"aesxm": self.handleModel,
-            "aesxe": self.handleEval,
-            "aesxd": self.handleDump
+            "aesxi": self.handle_init,
+            "aesxs": self.handle_sym,
+            "aesxc": self.handle_constrain,
+            "aesxr": self.handle_run,
+            #"aesxm": self.handle_model,
+            "aesxe": self.handle_eval,
+            "aesxd": self.handle_dump
         }
 
         self.symbols = {}
         self.esinstance = None
         self.initialized = False
-        self.currentState = None
+        self.current_state = None
 
     def command(self, args):
         cmd = args[0]
         self.commands[cmd](args)
 
-    def handleInit(self, args):
+    def handle_init(self, args):
         self.r2p = r2pipe.open()
         self.r2p.cmd("aei; aeim")
         self.esinstance = esilsolve.ESILSolver(self.r2p)
         self.initialized = True
 
-    def handleSym(self, args):
+    def handle_sym(self, args):
         if not self.initialized:
             print("error: need to initialize first")
             return
@@ -43,11 +43,11 @@ class ESILSolvePlugin:
         reg = args[1]
 
         state = self.esinstance.states[s]
-        state.setSymbolicRegister(reg)
+        state.set_symbolic_register(reg)
 
         self.symbols[reg] = state.registers[reg]
 
-    def handleConstrain(self, args):
+    def handle_constrain(self, args):
         if not self.initialized:
             print("error: need to initialize first")
             return
@@ -65,9 +65,9 @@ class ESILSolvePlugin:
             state.solver.maximize(state.registers[reg])
         else:
             val = toInt(args[2])
-            state.constrainRegister(reg, val)
+            state.constrain_register(reg, val)
 
-    def handleRun(self, args):
+    def handle_run(self, args):
         if not self.initialized:
             print("error: need to initialize first")
             return
@@ -81,7 +81,7 @@ class ESILSolvePlugin:
         state = self.esinstance.states[s]
         self.esinstance.run(state, target=target)
 
-    def handleEval(self, args):
+    def handle_eval(self, args):
         if not self.initialized:
             print("error: need to initialize first")
             return
@@ -105,7 +105,7 @@ class ESILSolvePlugin:
 
         print("%s: %s" % (reg, v))
 
-    def handleDump(self, args):
+    def handle_dump(self, args):
         print("registers:")
         s = 0
         if len(args) > 1:
@@ -124,7 +124,7 @@ class ESILSolvePlugin:
             if reg["parent"] == None:
                 print("%s: %s" % (reg["name"], reg["bv"]))
 
-def toInt(v):
+def to_int(v):
     if len(v) > 2 and v[:2] == "0x":
         return int(v, 16)
     
