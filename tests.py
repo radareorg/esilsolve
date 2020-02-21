@@ -115,14 +115,12 @@ def test_multi_hook():
     state.solver.add(rdi >= 0)
 
     def success(instr, state):
-        if instr["offset"] == 0x000006a1:
-            sat = state.solver.check()
-            m = state.solver.model()
-            print("ARG1: %d" % m.eval(rdi).as_long())
-            return True
-        
-        return False
+        sat = state.solver.check()
+        m = state.solver.model()
+        print("ARG1: %d" % m.eval(rdi).as_long())
+        return True
 
+    esilsolver.register_hook(0x6a1, success)
     esilsolver.run(target=0x000006a1, avoid=[0x000006a8])
 
 def test_multi32():
@@ -154,7 +152,7 @@ def test_multi32():
 def test_arm():
     r2p = r2pipe.open("ipa://tests/crackme-level0-symbols.ipa", flags=["-2"])
     # w ewmfpkzbjowr hvb @ 0x100000
-    r2p.cmd("aaa; s sym._validate; aei; aeim; aer x0 = 0x100000;")
+    r2p.cmd("s sym._validate; aei; aeim; aer x0 = 0x100000;")
 
     esilsolver = ESILSolver(r2p, debug=False, trace=False)
     state = esilsolver.init_state()
@@ -188,7 +186,7 @@ if __name__ == "__main__":
     #test_flg()
     #test_run()
     #test_newreg()
-    #test_multi()
+    test_multi()
     #test_multi_hook()
     #test_multi32()
-    test_arm()
+    #test_arm()
