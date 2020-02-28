@@ -57,7 +57,7 @@ class ESILMemory(dict):
 
             else:
                 if self.pure_symbolic:
-                    d = [solver.BitVec("addr_%016x" % caddr, BYTE) for i in range(self.chunklen)]
+                    d = [solver.BitVec("mem_%016x" % caddr, BYTE) for i in range(self.chunklen)]
                 else:
                     d = self.r2api.read(caddr, self.chunklen)
 
