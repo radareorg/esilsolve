@@ -10,12 +10,13 @@ import re
 import logging
 
 class ESILSolver:
-    def __init__(self, r2p=None, init=False, optimize=False, debug=False, trace=False):
+    def __init__(self, r2p=None, init=False, optimize=False, debug=False, trace=False, sym=False):
         self.debug = debug
         self.trace = trace
         self.states = []
         self.hooks = {}
-        self.statemanager = None
+        self.state_manager = None
+        self.pure_symbolic = sym
 
         self.conditionals = {}
         self.cond_count = 0
@@ -72,6 +73,6 @@ class ESILSolver:
 
     def init_state(self):
         self.state_manager = ESILStateManager([])
-        state = self.state_manager.entry_state(self.r2api, self.optimize)
+        state = self.state_manager.entry_state(self.r2api, self.optimize, self.pure_symbolic)
         return state
 

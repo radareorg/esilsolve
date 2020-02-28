@@ -6,10 +6,11 @@ BYTE = 8
 
 class ESILMemory(dict):
     
-    def __init__(self, r2api, info):
+    def __init__(self, r2api, info, sym=False):
         self._memory = {}
         self.r2api = r2api
         self.info = info
+        self.pure_symbolic = sym
 
         self._needs_copy = False
 
@@ -22,19 +23,24 @@ class ESILMemory(dict):
     def mask(self, addr):
         return int(addr - (addr % self.chunklen))
 
-    # attempt to concretize addr bv
     def bv_to_int(self, bv):
         bv = solver.simplify(bv)
         if solver.is_bv_value(bv):
             return bv.as_long()
+
+        # this is terrible and temporary
         elif solver.is_bv(bv):
             print("symbolic addr: %s" % bv)
             sat = self.solver.check()
             if sat == solver.sat:
                 model = self.solver.model()
-                val = model.eval(bv).as_long()
-                self.solver.add(bv == val)
-                return val
+
+                try:
+                    val = model.eval(bv).as_long()
+                    self.solver.add(bv == val)
+                    return val
+                except:
+                    return 0
 
     def read(self, addr, length):
         maddr = self.mask(addr)
@@ -50,7 +56,11 @@ class ESILMemory(dict):
                 data += self._memory[caddr]
 
             else:
-                d = self.r2api.read(caddr, self.chunklen)
+                if self.pure_symbolic:
+                    d = [solver.BitVec("addr_%016x" % caddr, BYTE) for i in range(self.chunklen)]
+                else:
+                    d = self.r2api.read(caddr, self.chunklen)
+
                 data += self.prepare_data(d)
 
         offset = addr-maddr

@@ -7,8 +7,9 @@ import copy
 
 class ESILState:
     
-    def __init__(self, r2api, opt=False, init=True, debug=False, trace=False):
+    def __init__(self, r2api, opt=False, init=True, debug=False, trace=False, sym=False):
         self.r2api = r2api
+        self.pure_symbolic = sym
 
         if opt:
             self.solver = solver.Optimize()
@@ -41,7 +42,7 @@ class ESILState:
         self.init_memory()
 
     def init_memory(self):
-        self.memory = ESILMemory(self.r2api, self.info)
+        self.memory = ESILMemory(self.r2api, self.info, self.pure_symbolic)
         self.memory.solver = self.solver
         self.memory.init_memory()
 
@@ -58,7 +59,7 @@ class ESILState:
         for register in registers:
             register["value"] = register_values[register["name"]]
 
-        self.registers = ESILRegisters(registers, self.aliases) #reg_dict
+        self.registers = ESILRegisters(registers, self.aliases, sym=self.pure_symbolic) #reg_dict
         self.registers.init_registers()
 
     def set_symbolic_register(self, name):
@@ -101,6 +102,12 @@ class ESILState:
         value = self.model.eval(val)
 
         return value
+
+    def step(self):
+        pc = self.registers["PC"].as_long() 
+        instr = self.r2api.disass(pc)
+        new_states = self.proc.execute_instruction(self, instr)
+        return new_states
 
     def is_sat(self):
         if self.solver.check() == solver.sat:
@@ -155,13 +162,13 @@ class ESILStateManager:
             else:
                 self.active.add(state)
 
-        elif state.isSat():
+        elif state.is_sat():
             self.active.add(state)
 
         else:
             self.unsat.add(state)
 
-    def entry_state(self, r2api, optimize=False):
-        state = ESILState(r2api, opt=optimize)
+    def entry_state(self, r2api, optimize=False, sym=False):
+        state = ESILState(r2api, opt=optimize, sym=sym)
         self.add(state)
         return state

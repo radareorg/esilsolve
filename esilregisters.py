@@ -4,13 +4,14 @@ import solver
 
 
 class ESILRegisters(dict):
-    def __init__(self, reg_array, aliases={}):
+    def __init__(self, reg_array, aliases={}, sym=False):
         self.reg_info = reg_array
         self._registers = {}
         self.offset_dictionary = {}
         self.aliases = aliases
         self._needs_copy = False
         self.parent_dict = {}
+        self.pure_symbolic = sym
 
         # sort reg array, this is important?
         reg_array.sort(key=lambda x: x["size"], reverse=True)
@@ -44,14 +45,22 @@ class ESILRegisters(dict):
                 reg_value["size"] = size
                 reg_value["start"] = start
                 reg_value["end"] = end
-                reg_value["bv"] = solver.BitVecVal(reg.pop("value"), size)
+
+                if self.pure_symbolic and reg["name"] != self.aliases["PC"]:
+                    reg.pop("value")
+                    reg_value["bv"] = solver.BitVec(reg["name"], size)
+                else:
+                    reg_value["bv"] = solver.BitVecVal(reg.pop("value"), size)
 
                 self.offset_dictionary[key] = reg_value
 
         else:
             reg_value = {"type": reg["type"], "size": size, "start": start, "end": end}
-            if "value" in reg:
+            if "value" in reg and (not self.pure_symbolic and reg["name"] != self.aliases["PC"]):
                 reg_value["bv"] = solver.BitVecVal(reg.pop("value"), size)
+            else:
+                reg.pop("value")
+                reg_value["bv"] = solver.BitVec(reg["name"], size) 
 
             self.offset_dictionary[key] = reg_value
             
