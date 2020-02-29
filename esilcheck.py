@@ -122,3 +122,7 @@ if __name__ == "__main__":
     esilcheck = ESILCheck("arm", bits=32)
     esilcheck.check("add r0, r0, r1")
     esilcheck.check("sub r0, r0, r1")
+
+    esilcheck = ESILCheck("amd64", bits=64)
+    esilcheck.check("add rax, rbx")
+    esilcheck.check("sub rax, rbx")
