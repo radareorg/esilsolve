@@ -1,11 +1,8 @@
 from r2api import R2API
 import solver
-import esilops
-import json
 from esilclasses import * 
-from esilstate import *
-from esilprocess import *
-import re
+from esilstate import ESILState, ESILStateManager
+from esilprocess import ESILProcess
 
 import logging
 

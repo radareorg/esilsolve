@@ -1,4 +1,4 @@
-from esilsolve import *
+from esilsolve import ESILSolver
 import angr
 import claripy
 import solver
@@ -8,7 +8,7 @@ import re
 import logging
 
 logging.getLogger('angr').setLevel('ERROR')
-reg_pattern = re.compile('^reg_([a-z0-9]+)_\d+_\d+$')
+reg_pattern = re.compile('^reg_([a-z0-9]+)_\\d+_\\d+$')
 
 class ESILCheck:
     def __init__(self, arch, bits=64):
