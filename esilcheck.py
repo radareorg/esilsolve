@@ -36,7 +36,6 @@ class ESILCheck:
         esilsolver = ESILSolver(r2p, sym=True)
         esstate = esilsolver.init_state()
         esstate.registers["PC"] = solver.BitVecVal(0, 32)
-        esstate.registers["eflags"] = solver.BitVecVal(0, 32)
 
         esclone = esstate.clone()
 
