@@ -193,7 +193,7 @@ class ESILRegisters(dict):
         return self._registers.__contains__(key)
 
     def clone(self):
-        clone = self.__class__(self.reg_info, self.aliases)
+        clone = self.__class__(self.reg_info, self.aliases, self.pure_symbolic)
         clone._needs_copy = True
         clone._registers = self._registers
         #clone._registers = deepcopy(self._registers)

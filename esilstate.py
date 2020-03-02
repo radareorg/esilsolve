@@ -116,7 +116,7 @@ class ESILState:
         return False
 
     def clone(self):
-        clone = self.__class__(self.r2api, init=False)
+        clone = self.__class__(self.r2api, init=False, sym=self.pure_symbolic)
         clone.stack = deepcopy(self.stack)
         clone.solver = deepcopy(self.solver)
         clone.proc = self.proc.clone()

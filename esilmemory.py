@@ -11,6 +11,7 @@ class ESILMemory(dict):
         self.r2api = r2api
         self.info = info
         self.pure_symbolic = sym
+        self.default_addr = 0x100000
 
         self._needs_copy = False
 
@@ -30,7 +31,7 @@ class ESILMemory(dict):
 
         # this is terrible and temporary
         elif solver.is_bv(bv):
-            print("symbolic addr: %s" % bv)
+            #print("symbolic addr: %s" % bv)
             sat = self.solver.check()
             if sat == solver.sat:
                 model = self.solver.model()
@@ -40,7 +41,9 @@ class ESILMemory(dict):
                     self.solver.add(bv == val)
                     return val
                 except:
-                    return 0
+                    # idk man i need a default value in case
+                    # there are no constraints on the addr
+                    return self.default_addr
 
     def read(self, addr, length):
         maddr = self.mask(addr)
@@ -57,7 +60,10 @@ class ESILMemory(dict):
 
             else:
                 if self.pure_symbolic:
-                    d = [solver.BitVec("mem_%016x" % caddr, BYTE) for i in range(self.chunklen)]
+                    coffset = caddr+chunk*self.chunklen
+                    bv = solver.BitVec("mem_%016x" % (coffset), self.chunklen*BYTE)
+                    self.write_bv(addr, bv, self.chunklen)
+                    d = self.unpack_bv(bv, self.chunklen)
                 else:
                     d = self.r2api.read(caddr, self.chunklen)
 
@@ -161,7 +167,7 @@ class ESILMemory(dict):
         pass
 
     def clone(self):
-        clone = self.__class__(self.r2api, self.info)
+        clone = self.__class__(self.r2api, self.info, self.pure_symbolic)
         clone._needs_copy = True
         clone._memory = self._memory
         #clone._memory = deepcopy(self._memory)
