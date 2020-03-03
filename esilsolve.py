@@ -73,3 +73,8 @@ class ESILSolver:
         state = self.state_manager.entry_state(self.r2api, self.optimize, self.pure_symbolic)
         return state
 
+    def blank_state(self, addr=0):
+        self.state_manager = ESILStateManager([])
+        state = self.state_manager.entry_state(self.r2api, self.optimize, True)
+        state.registers["PC"] = solver.BitVecVal(addr, state.registers["PC"].size())
+        return state

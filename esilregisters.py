@@ -46,7 +46,7 @@ class ESILRegisters(dict):
                 reg_value["start"] = start
                 reg_value["end"] = end
 
-                if self.pure_symbolic and reg["name"] != self.aliases["PC"]:
+                if self.pure_symbolic and reg["name"] != self.aliases["PC"]["reg"] and reg["type_str"] != "flg":
                     reg.pop("value")
                     reg_value["bv"] = solver.BitVec(reg["name"], size)
                 else:
@@ -56,7 +56,7 @@ class ESILRegisters(dict):
 
         else:
             reg_value = {"type": reg["type"], "size": size, "start": start, "end": end}
-            if "value" in reg and (not self.pure_symbolic and reg["name"] != self.aliases["PC"]):
+            if "value" in reg and (not self.pure_symbolic or reg["name"] == self.aliases["PC"]["reg"] or reg["type_str"] == "flg"):
                 reg_value["bv"] = solver.BitVecVal(reg.pop("value"), size)
             else:
                 reg.pop("value")
@@ -92,7 +92,6 @@ class ESILRegisters(dict):
             key = self.aliases[key]["reg"]
 
         register = self._registers[key]
-
         reg_value = self.get_register_from_bounds(register)
 
         if register["size"] == reg_value["size"]:

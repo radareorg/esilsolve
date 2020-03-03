@@ -30,10 +30,10 @@ def test_mem():
 
 def test_flg():
     esilsolver = ESILSolver(debug=True)
-    state = esilsolver.states[0]
+    state = esilsolver.init_state()
     #esilsolver.parseExpression("1,1,==,$z,zf,:=,zf", state)
-    esilsolver.parse_expression("2,0x4,rbp,-,[4],==,$z,zf,:=,32,$b,cf,:=,$p,pf,:=,$s,sf,:=,$o,of,:=", state)
-    print(state.stack)
+    state.proc.parse_expression("ebx,eax,+=,31,$o,of,:=,31,$s,sf,:=,$z,zf,:=,31,$c,cf,:=,$p,pf,:=", state)
+    print(solver.simplify(state.registers["eflags"]).as_long())
     #print(state.popAndEval())
 
 def test_run():

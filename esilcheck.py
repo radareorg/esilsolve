@@ -8,7 +8,7 @@ import re
 import logging
 
 logging.getLogger('angr').setLevel('ERROR')
-reg_pattern = re.compile('^reg_([a-z0-9]+)_\\d+_\\d+$')
+reg_pattern = re.compile('^reg_([a-z0-9_]+)_\\d+_\\d+$')
 mem_pattern = re.compile('^mem_([a-f0-9]+)_\\d+_(\\d+)$')
 
 class ESILCheck:
@@ -34,8 +34,7 @@ class ESILCheck:
         print("[*] instruction: %s : %s\n" % (instr["opcode"], instr["esil"]))
 
         esilsolver = ESILSolver(r2p, sym=True)
-        esstate = esilsolver.init_state()
-        esstate.registers["PC"] = solver.BitVecVal(0, 32)
+        esstate = esilsolver.blank_state()
 
         esclone = esstate.clone()
 
@@ -83,6 +82,7 @@ class ESILCheck:
             except Exception as e:
                 print("[!] error with write reg %s: %s" % (regn, str(e)))
 
+            #basesolver.add(essuccessor.registers["af"] == 1)
             satisfiable = basesolver.check()
             if satisfiable == solver.sat:
                 model = basesolver.model()
@@ -99,7 +99,11 @@ class ESILCheck:
         esreg = self.stmt_to_reg(angrstmt)
         if esreg != None:
             if esreg not in equated:
-                basesolver.add(angrstmt == esstate.registers[esreg])
+                if "cc_dep" in esreg: # previous vex flag placeholder, zero it
+                    basesolver.add(angrstmt == 0)
+                else:
+                    basesolver.add(angrstmt == esstate.registers[esreg])
+
                 equated[esreg] = True
         else:
             esmem = self.stmt_to_mem(angrstmt)
@@ -147,13 +151,14 @@ def trunc(s, maxlen=64):
         return s
 
 if __name__ == "__main__":
+
     esilcheck = ESILCheck("x86", bits=32)
+    esilcheck.check("or eax, ebx")
+    quit()
     esilcheck.check("add eax, ebx")
     esilcheck.check("sub eax, ebx")
 
     esilcheck.check("imul eax") # edx not equivalent
-
-    quit()
 
     esilcheck = ESILCheck("arm", bits=32)
     esilcheck.check("add r0, r0, r1")

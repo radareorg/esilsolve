@@ -431,10 +431,11 @@ def do_P(op, stack, state):
 
 def do_O(op, stack, state):
     try:
+        bit = pop_value(stack, state)
         old = state.esil["old"]
         cur = state.esil["cur"]
         sz = lastsz(state)
-        m = [sz-1, sz-2]
+        m = [genmask (bit & 0x3f), genmask ((bit + 0x3f) & 0x3f)]
         of = (((cur & m[0]) < (old & m[0])) ^ ((cur & m[1]) < (old & m[1])) == 1)
 
         stack.append(solver.If(of, ONE, ZERO))
