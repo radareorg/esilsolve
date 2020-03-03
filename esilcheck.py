@@ -154,7 +154,6 @@ if __name__ == "__main__":
 
     esilcheck = ESILCheck("x86", bits=32)
     esilcheck.check("or eax, ebx")
-    quit()
     esilcheck.check("add eax, ebx")
     esilcheck.check("sub eax, ebx")
 

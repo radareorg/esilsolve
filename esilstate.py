@@ -21,6 +21,8 @@ class ESILState:
         self.esil = {"cur":0, "old":0, "stack":[]}
         self.stack = self.esil["stack"]
         self.info = self.r2api.get_info()
+        self.debug = debug
+        self.trace = trace
         self.proc = ESILProcess(r2api, debug=debug, trace=trace)
         self.memory = {}
         self.registers = {}
@@ -116,7 +118,7 @@ class ESILState:
         return False
 
     def clone(self):
-        clone = self.__class__(self.r2api, init=False, sym=self.pure_symbolic)
+        clone = self.__class__(self.r2api, init=False, sym=self.pure_symbolic, debug=self.debug, trace=self.trace)
         clone.stack = deepcopy(self.stack)
         clone.solver = deepcopy(self.solver)
         clone.proc = self.proc.clone()
@@ -168,7 +170,7 @@ class ESILStateManager:
         else:
             self.unsat.add(state)
 
-    def entry_state(self, r2api, optimize=False, sym=False):
-        state = ESILState(r2api, opt=optimize, sym=sym)
+    def entry_state(self, r2api, optimize=False, sym=False, debug=False, trace=False):
+        state = ESILState(r2api, opt=optimize, sym=sym, debug=debug, trace=trace)
         self.add(state)
         return state

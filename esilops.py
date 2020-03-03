@@ -209,7 +209,7 @@ def do_MOD(op, stack, state):
     arg1 = pop_value(stack, state)
     arg2 = pop_value(stack, state)
 
-    stack.append(arg1%arg2)
+    stack.append(solver.URem(arg1, arg2))
     state.esil["old"] = arg1
     state.esil["cur"] = stack[-1]
 
@@ -426,21 +426,20 @@ def do_P(op, stack, state):
             cur = solver.ZeroExt(SIZE-sz, cur)
 
     lsb = cur & solver.BitVecVal(0xff, SIZE)
-    pf = (((((lsb * c1) & c2) % c3) & solver.BitVecVal(1, SIZE)) != 1)
+    #pf = (((((lsb * c1) & c2) % c3) & ONE) != 1)
+    pf = ((solver.URem(((lsb * c1) & c2), c3) & ONE) != 1)
     stack.append(solver.If(pf, ONE, ZERO))
 
 def do_O(op, stack, state):
-    try:
-        bit = pop_value(stack, state)
-        old = state.esil["old"]
-        cur = state.esil["cur"]
-        sz = lastsz(state)
-        m = [genmask (bit & 0x3f), genmask ((bit + 0x3f) & 0x3f)]
-        of = (((cur & m[0]) < (old & m[0])) ^ ((cur & m[1]) < (old & m[1])) == 1)
+    bit = pop_value(stack, state)
+    old = state.esil["old"]
+    cur = state.esil["cur"]
+    m = [genmask (bit & 0x3f), genmask ((bit + 0x3f) & 0x3f)]
+    first = solver.If(solver.ULT((cur & m[0]), (old & m[0])), ONE, ZERO)
+    second = solver.If(solver.ULT((cur & m[1]), (old & m[1])), ONE, ZERO)
+    of = (first ^ second == 1)
 
-        stack.append(solver.If(of, ONE, ZERO))
-    except:
-        stack.append(ZERO)
+    stack.append(solver.If(of, ONE, ZERO))
 
 def do_DS(op, stack, state):
     ds = ((state.esil["cur"] >> (lastsz(state) - 1)) & 1) == 1
