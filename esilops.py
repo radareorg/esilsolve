@@ -11,13 +11,12 @@ def pop_value(stack, state):
     return get_value(val, state)
 
 def get_value(val, state):
-    #print(val)
     if type(val) == str:
         register = state.registers[val]
         state.esil["lastsz"] = register.size()
         return prepare(register)
     else:
-        state.esil["lastsz"] = SIZE
+        #state.esil["lastsz"] = SIZE
         return prepare(val)
 
 def prepare(val):
@@ -111,80 +110,60 @@ def do_LS(op, stack, state):
     arg2 = pop_value(stack, state)
 
     stack.append(arg1<<arg2)
-    state.esil["old"] = arg1
-    state.esil["cur"] = stack[-1]
 
 def do_RS(op, stack, state):
     arg1 = pop_value(stack, state)
     arg2 = pop_value(stack, state)
 
     stack.append(arg1>>arg2)
-    state.esil["old"] = arg1
-    state.esil["cur"] = stack[-1]
 
 def do_LRS(op, stack, state):
     arg1 = pop_value(stack, state)
     arg2 = pop_value(stack, state)
 
     stack.append(solver.LShR(arg1, arg2))
-    state.esil["old"] = arg1
-    state.esil["cur"] = stack[-1]
 
 def do_LR(op, stack, state):
     arg1 = pop_value(stack, state)
     arg2 = pop_value(stack, state)
 
     stack.append(solver.RotateLeft(arg1, arg2))
-    state.esil["old"] = arg1
-    state.esil["cur"] = stack[-1]
 
 def do_RR(op, stack, state):
     arg1 = pop_value(stack, state)
     arg2 = pop_value(stack, state)
 
     stack.append(solver.RotateRight(arg1, arg2))
-    state.esil["old"] = arg1
-    state.esil["cur"] = stack[-1]
 
 def do_AND(op, stack, state):
     arg1 = pop_value(stack, state)
     arg2 = pop_value(stack, state)
 
     stack.append(arg1&arg2)
-    state.esil["old"] = arg1
-    state.esil["cur"] = stack[-1]
 
 def do_OR(op, stack, state):
     arg1 = pop_value(stack, state)
     arg2 = pop_value(stack, state)
 
     stack.append(arg1|arg2)
-    state.esil["old"] = arg1
-    state.esil["cur"] = stack[-1]
 
 def do_XOR(op, stack, state):
     arg1 = pop_value(stack, state)
     arg2 = pop_value(stack, state)
 
     stack.append(arg1^arg2)
-    state.esil["old"] = arg1
-    state.esil["cur"] = stack[-1]
 
 def do_ADD(op, stack, state):
     arg1 = pop_value(stack, state)
     arg2 = pop_value(stack, state)
 
     stack.append(arg1+arg2)
-    state.esil["old"] = arg1
-    state.esil["cur"] = stack[-1]
 
 def do_SUB(op, stack, state):
     arg1 = pop_value(stack, state)
     arg2 = pop_value(stack, state)
 
     stack.append(arg1-arg2)
-    state.esil["old"] = arg1
-    state.esil["cur"] = stack[-1]
 
 def do_MUL(op, stack, state):
 
@@ -192,8 +171,6 @@ def do_MUL(op, stack, state):
     arg2 = pop_value(stack, state)
 
     stack.append(arg1*arg2)
-    state.esil["old"] = arg1
-    state.esil["cur"] = stack[-1]
 
 def do_DIV(op, stack, state):
     arg1 = pop_value(stack, state)
@@ -201,41 +178,29 @@ def do_DIV(op, stack, state):
 
     stack.append(solver.If(arg1 == 0, 0, arg1/arg2))
 
-    #solver.div
-    state.esil["old"] = arg1
-    state.esil["cur"] = stack[-1]
-
 def do_MOD(op, stack, state):
     arg1 = pop_value(stack, state)
     arg2 = pop_value(stack, state)
 
     stack.append(solver.URem(arg1, arg2))
-    state.esil["old"] = arg1
-    state.esil["cur"] = stack[-1]
 
 def do_NOT(op, stack, state):
     arg1 = pop_value(stack, state)
     #print(~arg1)
     stack.append(solver.If(arg1 == 0, ONE, ZERO))
-    state.esil["old"] = arg1
-    state.esil["cur"] = stack[-1]
 
 def do_INC(op, stack, state):
     arg1 = pop_value(stack, state)
     stack.append(arg1+1)
-    state.esil["old"] = arg1
-    state.esil["cur"] = stack[-1]
 
 def do_DEC(op, stack, state):
     arg1 = pop_value(stack, state)
     stack.append(arg1-1)
-    state.esil["old"] = arg1
-    state.esil["cur"] = stack[-1]
 
 def do_EQU(op, stack, state):
     reg = stack.pop()
     val = pop_value(stack, state)
-    tmp = prepare(state.registers[reg])
+    tmp = get_value(reg, state)
 
     if state.condition != None:
         val = solver.If(state.condition, val, tmp)
@@ -314,6 +279,8 @@ def do_POKE(op, stack, state):
 
     state.memory.write_bv(addr, data, length)
     state.esil["old"] = addr
+    state.esil["lastsz"] = length*8
+
 
 def do_PEEK(op, stack, state):
     length = memlen(op)
@@ -323,6 +290,7 @@ def do_PEEK(op, stack, state):
     stack.append(data)
     state.esil["old"] = addr
     state.esil["cur"] = stack[-1]
+    state.esil["lastsz"] = length*8
 
 def do_OPPOKE(op, stack, state):
     length = memlen(op)
@@ -348,9 +316,11 @@ def do_NOP(op, stack, state):
     pass
 
 def genmask(bits):
-    bits = solver.simplify(bits)
-    if solver.is_bv(bits):
-        bits = bits.as_long()
+    
+    if type(bits) != int:
+        bits = solver.simplify(bits)
+        if solver.is_bv(bits):
+            bits = bits.as_long()
 
     m = (2 << 63) - 1
     if(bits > 0 and bits < 64):
@@ -379,23 +349,23 @@ def lastsz(state):
 # flag op functions
 # jesus h g wells christ these are gross
 def do_ZF(op, stack, state):
-    eq = (state.esil["cur"] == 0) # 
-    #stack.append(eq)
+    eq = ((state.esil["cur"] & genmask(lastsz(state)-1)) == ZERO) # 
     stack.append(solver.If(eq, ONE, ZERO))
     
 def do_CF(op, stack, state):
     bits = pop_value(stack, state)
     mask = genmask(bits & 0x3f)
-    #cf = (state.esil["cur"] & mask) < (state.esil["old"] & mask)
-    cf = solver.ULT((state.esil["cur"] & mask), (state.esil["old"] & mask))
-
+    old = state.esil["old"]
+    cur = state.esil["cur"]
+    cf = solver.ULT((cur & mask), (old & mask))
     stack.append(solver.If(cf, ONE, ZERO))
 
 def do_B(op, stack, state):
     bits = pop_value(stack, state)
-    mask = genmask((bits + 0x3f) & 0x3f)
-    #print(solver.simplify((state.esil["old"] & mask)), solver.simplify((state.esil["cur"] & mask)))
-    bf = solver.ULT((state.esil["old"] & mask), (state.esil["cur"] & mask))
+    mask = genmask(bits & 0x3f)
+    old = state.esil["old"]
+    cur = state.esil["cur"]
+    bf = solver.ULT((old & mask), (cur & mask))
 
     #print(bits, mask, solver.simplify(bf))
     stack.append(solver.If(bf, ONE, ZERO))
@@ -427,7 +397,7 @@ def do_P(op, stack, state):
 
     lsb = cur & solver.BitVecVal(0xff, SIZE)
     #pf = (((((lsb * c1) & c2) % c3) & ONE) != 1)
-    pf = ((solver.URem(((lsb * c1) & c2), c3) & ONE) != 1)
+    pf = ((solver.URem(((lsb * c1) & c2), c3) & ONE) != ONE)
     stack.append(solver.If(pf, ONE, ZERO))
 
 def do_O(op, stack, state):
@@ -435,23 +405,36 @@ def do_O(op, stack, state):
     old = state.esil["old"]
     cur = state.esil["cur"]
     m = [genmask (bit & 0x3f), genmask ((bit + 0x3f) & 0x3f)]
-    first = solver.If(solver.ULT((cur & m[0]), (old & m[0])), ONE, ZERO)
-    second = solver.If(solver.ULT((cur & m[1]), (old & m[1])), ONE, ZERO)
-    of = (first ^ second == 1)
+    c_in = solver.If(solver.ULT((cur & m[0]), (old & m[0])), ONE, ZERO)
+    c_out = solver.If(solver.ULT((cur & m[1]), (old & m[1])), ONE, ZERO)
+    print(solver.simplify(c_in))
+    print(solver.simplify(c_out))
+    of = ((c_in ^ c_out) == 1)
+
+    stack.append(solver.If(of, ONE, ZERO))
+
+def do_SO(op, stack, state):
+    bit = pop_value(stack, state)
+    old = state.esil["old"]
+    cur = state.esil["cur"]
+    m = [genmask (bit & 0x3f), genmask ((bit + 0x3f) & 0x3f)]
+    c_0 = solver.If(((old-cur) & m[0]) == (1<<bit), ONE, ZERO)
+    c_in = solver.If(solver.ULT((cur & m[0]), (old & m[0])), ONE, ZERO)
+    c_out = solver.If(solver.ULT((cur & m[1]), (old & m[1])), ONE, ZERO)
+    print(solver.simplify(c_in))
+    print(solver.simplify(c_out))
+    of = ((c_0 ^ c_in) ^ c_out == 1)
 
     stack.append(solver.If(of, ONE, ZERO))
 
 def do_DS(op, stack, state):
-    ds = ((state.esil["cur"] >> (lastsz(state) - 1)) & 1) == 1
+    ds = ((state.esil["cur"] >> (lastsz(state) - 1)) & ONE) == ONE
     stack.append(solver.If(ds, ONE, ZERO))
 
 def do_S(op, stack, state):
-    try:
-        size = pop_value(stack, state)
-        s = ((state.esil["cur"] >> size) & 1) == 1
-        stack.append(solver.If(s, ONE, ZERO))
-    except:
-        stack.append(ZERO)
+    size = pop_value(stack, state)
+    s = ((state.esil["cur"] >> size) & ONE) == ONE
+    stack.append(solver.If(s, ONE, ZERO))
 
 # jump target??
 def do_JT(op, stack, state):
@@ -508,6 +491,7 @@ opcodes = {
     "$b": do_B,
     "$p": do_P,
     "$o": do_O,
+    "$so": do_SO,
     "$s": do_S,
     "$ds": do_DS,
     "$jt": do_JT,

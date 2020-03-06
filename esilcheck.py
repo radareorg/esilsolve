@@ -11,10 +11,18 @@ logging.getLogger('angr').setLevel('ERROR')
 reg_pattern = re.compile('^reg_([a-z0-9_]+)_\\d+_\\d+$')
 mem_pattern = re.compile('^mem_([a-f0-9]+)_\\d+_(\\d+)$')
 
+arch_dict = {
+    64: {"arm": "aarch64", "x86": "amd64"}
+}
 class ESILCheck:
     def __init__(self, arch, bits=64):
         self.arch = arch
         self.bits = bits
+
+        self.aarch = self.arch
+        if bits in arch_dict and arch in arch_dict[bits]:
+            self.aarch = arch_dict[bits][arch]
+
         self.converter = claripy.backends.z3
 
     def check(self, instruction=None, code=None):
@@ -38,13 +46,15 @@ class ESILCheck:
 
         esclone = esstate.clone()
 
-        proj = angr.load_shellcode(code, arch=self.arch)
+        proj = angr.load_shellcode(code, arch=self.aarch)
         state = proj.factory.blank_state()
         block = proj.factory.block(proj.entry)
 
         successor = state.step()[0]
         essuccessor = esclone.step()[0]
         basesolver = self.converter.solver()
+
+        #basesolver.add(esstate.registers["ebx"] != 2147483648)
 
         insn = block.capstone.insns[0].insn
         regs_read, regs_write = insn.regs_access()
@@ -79,6 +89,12 @@ class ESILCheck:
                 print("[+]\t ES  %s: %s" % (regn, trunc(esregv)),)
 
                 self.equate_regs(basesolver, convregv, esstate, essuccessor, equated)
+
+                #if "flags" in regn:
+                    #basesolver.add(convregv & 0x10 == 0)
+                    #basesolver.add(convregv & 0x800 == 0)
+                    #basesolver.add(esregv & 0x800 == 0)
+
             except Exception as e:
                 print("[!] error with write reg %s: %s" % (regn, str(e)))
 
@@ -153,15 +169,21 @@ def trunc(s, maxlen=64):
 if __name__ == "__main__":
 
     esilcheck = ESILCheck("x86", bits=32)
-    esilcheck.check("or eax, ebx")
+    #esilcheck.check("or eax, ebx")
     esilcheck.check("add eax, ebx")
-    esilcheck.check("sub eax, ebx")
+    esilcheck.check("sub eax, ebx") # error in angr when ebx=0x80000000
+    #quit()
 
-    esilcheck.check("imul eax") # edx not equivalent
+    esilcheck.check("inc eax") # edx not equivalent
+    quit()
 
     esilcheck = ESILCheck("arm", bits=32)
     esilcheck.check("add r0, r0, r1")
     esilcheck.check("sub r0, r0, r1")
+
+    esilcheck = ESILCheck("arm", bits=64)
+    esilcheck.check("add x0, x0, x1")
+    esilcheck.check("sub x0, x0, x1")
 
     esilcheck = ESILCheck("amd64", bits=64)
     esilcheck.check("add rax, rbx")
@@ -169,4 +191,4 @@ if __name__ == "__main__":
 
     esilcheck = ESILCheck("x86", bits=32)
     esilcheck.check("add eax, [ebx]")
-    esilcheck.check("sub eax, [ebx]")
+    esilcheck.check("sub eax, [ebx]") # error in angr when [ebx]=0x80000000

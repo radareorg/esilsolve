@@ -32,8 +32,8 @@ def test_flg():
     esilsolver = ESILSolver(debug=True, trace=True)
     state = esilsolver.init_state()
     #esilsolver.parseExpression("1,1,==,$z,zf,:=,zf", state)
-    state.proc.parse_expression("128,ebx,=,ebx,eax,|=,31,$s,sf,:=,$z,zf,:=,$p,pf,:=,0,of,:=,0,cf,:=", state)
-    print(solver.simplify(state.registers["pf"]).as_long())
+    state.proc.parse_expression("2147483648,ebx,=,2164261373,eax,=,ebx,eax,-=,31,$o,of,:=,31,$s,sf,:=,$z,zf,:=,$p,pf,:=,32,$b,cf,:=", state)
+    print("%x" % solver.simplify(state.registers["eflags"]).as_long())
     #print(state.popAndEval())
 
 def test_run():
@@ -75,11 +75,11 @@ def test_multi():
     r2p = r2pipe.open("tests/multibranch", flags=["-2"])
     r2p.cmd("aa; s sym.check; aei; aeim; aer rdi=22021")
 
-    esilsolver = ESILSolver(r2p, debug=True, trace=True)
+    esilsolver = ESILSolver(r2p, optimize=False, debug=False, trace=False)
     #esilsolver.initVM()
 
     state = esilsolver.init_state()
-    #state.set_symbolic_register("rdi")
+    state.set_symbolic_register("rdi")
     #state.registers["rdi"] = solver.BitVecVal(0xdead, 64)
     rdi = state.registers["rdi"]
 
@@ -183,7 +183,7 @@ if __name__ == "__main__":
     #test_cond()
     #test_sym()
     #test_mem()
-    test_flg()
+    #test_flg()
     #test_run()
     #test_newreg()
     test_multi()
