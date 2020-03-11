@@ -172,10 +172,8 @@ if __name__ == "__main__":
     #esilcheck.check("or eax, ebx")
     esilcheck.check("add eax, ebx")
     esilcheck.check("sub eax, ebx") # error in angr when ebx=0x80000000
+    esilcheck.check("test eax, eax") # edx not equivalent
     #quit()
-
-    esilcheck.check("inc eax") # edx not equivalent
-    quit()
 
     esilcheck = ESILCheck("arm", bits=32)
     esilcheck.check("add r0, r0, r1")

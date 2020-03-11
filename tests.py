@@ -44,7 +44,7 @@ def test_run():
     #esilsolver.initVM()
 
     state = esilsolver.init_state()
-    state.setSymbolic_register("rdi")
+    state.set_symbolic_register("rdi")
     rdi = state.registers["rdi"]
     esilsolver.run(target=0x00000668)
     #print(state.registers["zf"])
@@ -186,7 +186,7 @@ if __name__ == "__main__":
     #test_flg()
     #test_run()
     #test_newreg()
-    test_multi()
+    #test_multi()
     #test_multi_hook()
     #test_multi32()
-    #test_arm()
+    test_arm()

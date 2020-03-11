@@ -13,7 +13,6 @@ def pop_value(stack, state):
 def get_value(val, state):
     if type(val) == str:
         register = state.registers[val]
-        state.esil["lastsz"] = register.size()
         return prepare(register)
     else:
         #state.esil["lastsz"] = SIZE
@@ -211,6 +210,9 @@ def do_EQU(op, stack, state):
     state.esil["old"] = tmp
     state.esil["cur"] = val
 
+    state.esil["lastsz"] = state.registers[reg].size()
+
+
 def do_WEQ(op, stack, state):
     reg = stack.pop()
     val = pop_value(stack, state)
@@ -329,22 +331,11 @@ def genmask(bits):
     return m
 
 def lastsz(state):
-    return state.esil["lastsz"]
-
-    old = state.esil["old"]
-    cur = state.esil["cur"]
-
     try:
-        return cur.size()
+        return state.esil["lastsz"]
     except:
-        pass
-    
-    try:
-        return old.size()
-    except:
-        pass
-    
-    return state.info["bits"]
+        #print(state.info)
+        return state.info["info"]["bits"]
 
 # flag op functions
 # jesus h g wells christ these are gross
@@ -407,8 +398,8 @@ def do_O(op, stack, state):
     m = [genmask (bit & 0x3f), genmask ((bit + 0x3f) & 0x3f)]
     c_in = solver.If(solver.ULT((cur & m[0]), (old & m[0])), ONE, ZERO)
     c_out = solver.If(solver.ULT((cur & m[1]), (old & m[1])), ONE, ZERO)
-    print(solver.simplify(c_in))
-    print(solver.simplify(c_out))
+    #print(solver.simplify(c_in))
+    #print(solver.simplify(c_out))
     of = ((c_in ^ c_out) == 1)
 
     stack.append(solver.If(of, ONE, ZERO))
@@ -421,8 +412,8 @@ def do_SO(op, stack, state):
     c_0 = solver.If(((old-cur) & m[0]) == (1<<bit), ONE, ZERO)
     c_in = solver.If(solver.ULT((cur & m[0]), (old & m[0])), ONE, ZERO)
     c_out = solver.If(solver.ULT((cur & m[1]), (old & m[1])), ONE, ZERO)
-    print(solver.simplify(c_in))
-    print(solver.simplify(c_out))
+    #print(solver.simplify(c_in))
+    #print(solver.simplify(c_out))
     of = ((c_0 ^ c_in) ^ c_out == 1)
 
     stack.append(solver.If(of, ONE, ZERO))

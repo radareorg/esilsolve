@@ -210,8 +210,9 @@ class ESILProcess:
                 emureg = self.r2api.get_reg_value(register["name"])
                 try:
                     reg_value = solver.simplify(state.registers[regname])
-                    if reg_value.as_long() != emureg:
-                        print("%s: %s , %s" % (register["name"], reg_value, emureg))
+                    #print(reg_value)
+                    #if reg_value.as_long() != emureg:
+                    print("%s: %s , %s" % (register["name"], reg_value, emureg))
                 except Exception as e:
                     #print(e)
                     pass
