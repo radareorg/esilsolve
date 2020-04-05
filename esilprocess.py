@@ -96,10 +96,30 @@ class ESILProcess:
             print("\nexpr: %s" % instr["esil"])
             print("%016x: %s" % (instr["offset"], instr["opcode"]))
 
-        # old pc should never be anything other than a BitVecVal
+        # clone the original state if theres a peek
+        # this is so terrible 
+        og_state = None
+        if "[" in instr["esil"] and state.memory.multi_concretize:
+            og_state = state.clone()
+
+        # old pc should never be anything other than a BitVecVal        
         old_pc = state.registers["PC"].as_long() 
         self.parse_expression(instr["esil"], state)
         state.steps += 1
+        states = []
+
+        # christ this is getting convoluted
+        if state.memory.hit_symbolic_addr and og_state != None: 
+            state.memory.hit_symbolic_addr = False
+            
+            for addr in state.memory.concrete_addrs:
+                for val in addr["values"]:
+                    new_state = og_state.clone()
+                    new_state.solver.add(addr["bv"] == val)
+
+                    states.extend(self.execute_instruction(new_state, instr))
+
+            state.memory.concrete_addrs = []
 
         pc = state.registers["PC"]
         if solver.is_bv_value(pc):
@@ -112,14 +132,13 @@ class ESILProcess:
                 self.r2api.emustep()
                 self.trace_registers(state)
 
-            return [state]
+            states.append(state)
         else:
             # symbolic pc value
             if self.debug:
                 print("symbolic pc: %s" % str(pc))
 
             possible_pcs = solver.EvalMax(state.solver, pc)
-            states = []
 
             for possible_pc in possible_pcs:
                 #print(possible_pc)
@@ -137,7 +156,7 @@ class ESILProcess:
 
                 states.append(new_state)
 
-            return states
+        return states
 
     def parse_expression(self, expression, state):
 

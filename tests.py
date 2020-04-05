@@ -58,6 +58,29 @@ def test_run():
     print(m.eval(rdi))
     #print(state.solver.statistics())
 
+
+def test_multi_addr():
+    r2p = r2pipe.open("-", flags=["-2"])
+    r2p.cmd("wa mov [rax], rbx")
+
+    esilsolver = ESILSolver(r2p, debug=True, trace=False)
+    #esilsolver.initVM()
+
+    state = esilsolver.init_state()
+    state.set_symbolic_register("rax")
+    rax = state.registers["rax"]
+    state.solver.add(rax > 7)
+    state.solver.add(rax < 16)
+
+    esilsolver.run(target=0x00000003)
+
+    sat = state.solver.check()
+    #print(state.solver)
+    print(sat)
+    m = state.solver.model()
+    print(m.eval(rax))
+    #print(state.solver.statistics())
+
 def test_newreg():
     esilsolver = ESILSolver()
     state = esilsolver.states[0]
@@ -189,4 +212,5 @@ if __name__ == "__main__":
     #test_multi()
     #test_multi_hook()
     #test_multi32()
-    test_arm()
+    #test_arm()
+    test_multi_addr()

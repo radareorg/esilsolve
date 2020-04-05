@@ -13,6 +13,10 @@ class ESILMemory(dict):
         self.pure_symbolic = sym
         self.default_addr = 0x100000
 
+        self.multi_concretize = False # True destroys performance
+        self.hit_symbolic_addr = False
+        self.concrete_addrs = []
+
         self._needs_copy = False
 
         self.endian = info["info"]["endian"]
@@ -31,13 +35,24 @@ class ESILMemory(dict):
 
         # this is terrible and temporary
         elif solver.is_bv(bv):
-            #print("symbolic addr: %s" % bv)
+            print("symbolic addr: %s" % bv)
+            self.hit_symbolic_addr = True
             sat = self.solver.check()
             if sat == solver.sat:
                 model = self.solver.model()
 
                 try:
                     val = model.eval(bv).as_long()
+                    #print(val)
+
+                    if self.multi_concretize:
+                        self.solver.push()
+                        self.solver.add(bv != val)
+                        vals = solver.EvalMax(self.solver, bv)
+                        if len(vals) > 0:
+                            self.concrete_addrs.append({"bv": bv, "values": vals})
+                        self.solver.pop()
+
                     self.solver.add(bv == val)
                     return val
                 except:
