@@ -1,6 +1,6 @@
-from esilclasses import *
-from esilregisters import *
-import solver
+from .esilclasses import *
+from .esilregisters import *
+from . import solver
 
 SIZE = 64
 ONE = solver.BitVecVal(1, SIZE)

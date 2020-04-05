@@ -1,6 +1,6 @@
 
-from esilclasses import *
-import solver
+from .esilclasses import *
+from . import solver
 
 
 class ESILRegisters(dict):

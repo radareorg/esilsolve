@@ -1,8 +1,8 @@
-import solver
-from esilclasses import *
-from esilregisters import *
-from esilmemory import *
-from esilprocess import *
+from . import solver
+from .esilclasses import *
+from .esilregisters import *
+from .esilmemory import *
+from .esilprocess import *
 import copy
 
 class ESILState:

@@ -1,5 +1,5 @@
-import solver
-from esilclasses import *
+from . import solver
+from .esilclasses import *
 import struct
 
 BYTE = 8

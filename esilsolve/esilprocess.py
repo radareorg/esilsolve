@@ -1,9 +1,9 @@
-from r2api import R2API
-import solver
-import esilops
+from .r2api import R2API
+from . import solver
+from . import esilops
 import json
-from esilclasses import * 
-from esilstate import *
+from .esilclasses import * 
+from .esilstate import *
 import re
 
 import logging

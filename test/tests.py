@@ -1,6 +1,6 @@
 from esilsolve import ESILSolver
 import r2pipe
-import solver
+import esilsolve.solver as solver
 import binascii
 
 def test_sym():
@@ -207,10 +207,10 @@ if __name__ == "__main__":
     #test_sym()
     #test_mem()
     #test_flg()
-    #test_run()
+    test_run()
     #test_newreg()
     #test_multi()
     #test_multi_hook()
     #test_multi32()
     #test_arm()
-    test_multi_addr()
+    #test_multi_addr()

@@ -1,8 +1,8 @@
-from r2api import R2API
-import solver
-from esilclasses import * 
-from esilstate import ESILState, ESILStateManager
-from esilprocess import ESILProcess
+from .r2api import R2API
+from . import solver
+from .esilclasses import * 
+from .esilstate import ESILState, ESILStateManager
+from .esilprocess import ESILProcess
 
 import logging
 
