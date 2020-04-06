@@ -17,14 +17,6 @@ class R2API:
 
     def get_register_info(self):
         self.register_info = self.r2p.cmdj("aerpj")
-
-        # uhhh wtf
-        '''regs = []
-        for reg in self.register_info["reg_info"]:
-            if not ((reg["name"][0] == "d" and reg["name"][1:].isdigit()) or reg["name"] == "dsp"):
-                regs.append(reg)
-                
-        self.register_info["reg_info"] = regs'''
         
         self.all_regs = [r["name"] for r in self.register_info["reg_info"]] 
         return self.register_info
