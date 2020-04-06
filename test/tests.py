@@ -186,7 +186,7 @@ def test_arm():
         funcaddr = int(r2p.cmd("s"), 16)
     else:
         r2p = r2pipe.open("frida://133ebc680e67c885e7f04621481d8a0229bef371//com.nowsecure.crackme", flags=["-2"])
-        r2p.cmd("\\dc; `\\il~:0[0]`; `\\is~validate$:0[0]`;") # r2 pro mode
+        r2p.cmd("\dc; `\il~:0[0]`; `\is~validate$:0[0]`;") # r2 pro mode
         funcaddr = int(r2p.cmd("s"), 16)
         varaddr = int(r2p.cmd("\dma 0x1000"), 16)
         stackaddr = int(r2p.cmd("\dma 0x2000"), 16) + 0x1000
