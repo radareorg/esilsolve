@@ -173,7 +173,7 @@ def test_multi32():
     print(m.eval(eax))
 
 def test_arm():
-    local = False
+    local = True
 
     funcaddr = 0
     varaddr = 0x100000
@@ -181,7 +181,7 @@ def test_arm():
     if local:
         r2p = r2pipe.open("ipa://tests/crackme-level0-symbols.ipa", flags=["-2"])
         # w ewmfpkzbjowr hvb @ 0x100000
-        r2p.cmd("s sym._validate; aei; aeip; aeim; aer x0 = 0x100000;")
+        r2p.cmd("s sym._validate; aei; aeim; aer x0 = 0x100000;")
         #print(r2p.cmd("aer"))
         funcaddr = int(r2p.cmd("s"), 16)
     else:
@@ -193,6 +193,7 @@ def test_arm():
         r2p.cmd("aei; aeip; aer x0 = %d; aer sp = %d; aer fp = %d;" % (varaddr, stackaddr, stackaddr))
 
     esilsolver = ESILSolver(r2p, debug=False, trace=False)
+    esilsolver.r2api.disass(instrs=100) # cache instrs for performance
     state = esilsolver.init_state()
 
     b = [solver.BitVec("b%d" % x, 8) for x in range(16)]

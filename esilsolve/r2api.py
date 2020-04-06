@@ -8,6 +8,8 @@ class R2API:
         if r2p == None:
             self.r2p = r2pipe.open(filename, flags=flags)
 
+        self.instruction_cache = {}
+
         self.get_register_info()
 
     def get_info(self):
@@ -40,11 +42,17 @@ class R2API:
         self.r2p.cmd("s+ %d" % sz)
 
     def disass(self, addr=None, instrs=1):
+        if addr in self.instruction_cache and instrs == 1:
+            return self.instruction_cache[addr]
+
         cmd = "pdj %d" % instrs
         if addr != None:
             cmd += " @ %d" % addr
 
         result = self.r2p.cmdj(cmd)
+
+        for instr in result:
+            self.instruction_cache[instr["offset"]] = instr
 
         if instrs == 1:
             return result[0]

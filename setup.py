@@ -11,7 +11,7 @@ setuptools.setup(
     description="A symbolic execution tool using r2 and ESIL",
     long_description=long_description,
     long_description_content_type="text/markdown",
-    url="https://gitlab.com/nowsecure/research/esilsolver",
+    url="https://gitlab.com/nowsecure/research/esilsolve",
     packages=setuptools.find_packages(),
     classifiers=[
         "Programming Language :: Python :: 3",
