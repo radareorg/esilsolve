@@ -173,9 +173,24 @@ def test_multi32():
     print(m.eval(eax))
 
 def test_arm():
-    r2p = r2pipe.open("ipa://tests/crackme-level0-symbols.ipa", flags=["-2"])
-    # w ewmfpkzbjowr hvb @ 0x100000
-    r2p.cmd("s sym._validate; aei; aeim; aer x0 = 0x100000;")
+    local = False
+
+    funcaddr = 0
+    varaddr = 0x100000
+    stackaddr = 0x200000
+    if local:
+        r2p = r2pipe.open("ipa://tests/crackme-level0-symbols.ipa", flags=["-2"])
+        # w ewmfpkzbjowr hvb @ 0x100000
+        r2p.cmd("s sym._validate; aei; aeip; aeim; aer x0 = 0x100000;")
+        #print(r2p.cmd("aer"))
+        funcaddr = int(r2p.cmd("s"), 16)
+    else:
+        r2p = r2pipe.open("frida://133ebc680e67c885e7f04621481d8a0229bef371//com.nowsecure.crackme", flags=["-2"])
+        r2p.cmd("\\dc; `\\il~:0[0]`; `\\is~validate$:0[0]`;") # r2 pro mode
+        funcaddr = int(r2p.cmd("s"), 16)
+        varaddr = int(r2p.cmd("\dma 0x1000"), 16)
+        stackaddr = int(r2p.cmd("\dma 0x2000"), 16) + 0x1000
+        r2p.cmd("aei; aeip; aer x0 = %d; aer sp = %d; aer fp = %d;" % (varaddr, stackaddr, stackaddr))
 
     esilsolver = ESILSolver(r2p, debug=False, trace=False)
     state = esilsolver.init_state()
@@ -185,7 +200,7 @@ def test_arm():
         state.solver.add(solver.Or(solver.And(b[x] >= 0x61, b[x] <= 0x7a), b[x] == 0x20))
 
     code = solver.Concat(*b)
-    state.memory.write_bv(0x100000, code, 16)
+    state.memory.write_bv(varaddr, code, 16)
 
     def success(instr, state):
         sat = state.solver.check()
@@ -197,20 +212,20 @@ def test_arm():
 
         cs = solver.BV2Bytes(c)
         #print(cs)
-        print("CODE: %s" % cs.decode())
+        print("CODE: '%s'" % cs.decode())
 
-    esilsolver.register_hook(0x10000600c, success)
-    esilsolver.run(target=0x10000600c, avoid=[0x100006014, 0x100005e38])
+    esilsolver.register_hook(funcaddr+0x210, success)
+    esilsolver.run(target=funcaddr+0x210, avoid=[funcaddr+0x218, funcaddr+0x3c])
 
 if __name__ == "__main__":
     #test_cond()
     #test_sym()
     #test_mem()
     #test_flg()
-    test_run()
+    #test_run()
     #test_newreg()
     #test_multi()
     #test_multi_hook()
     #test_multi32()
-    #test_arm()
+    test_arm()
     #test_multi_addr()
