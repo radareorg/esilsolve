@@ -126,9 +126,6 @@ class ESILProcess:
         if solver.is_bv_value(pc):
             new_pc = pc.as_long()
 
-            #if new_pc == old_pc:
-            #    state.registers["PC"] = old_pc + instr["size"]
-
             if self.trace:
                 self.r2api.emustep()
                 self.trace_registers(state)
@@ -226,10 +223,8 @@ class ESILProcess:
                 try:
                     reg_value = solver.simplify(state.registers[regname])
                     #print(reg_value)
-                    print("%s: %s , %s" % (register["name"], reg_value, emureg))
                     if reg_value.as_long() != emureg:
-                        #print("%s: %s , %s" % (register["name"], reg_value, emureg))
-                        exit()
+                        print("%s: %s , %s" % (register["name"], reg_value, emureg))
                 except Exception as e:
                     #print(e)
                     pass
