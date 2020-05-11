@@ -264,14 +264,16 @@ def do_CLEAR(op, stack, state):
 def do_GOTO(op, stack, state):
     raise ESILUnimplementedException
 
-def memlen(op):
+def memlen(op, state):
     b1 = op.index("[")
     b2 = op.index("]")
     if op[b1+1:b2].isdigit():
         return int(op[b1+1:b2])
+    else:
+        return int(state.bits/8)
 
 def do_POKE(op, stack, state):
-    length = memlen(op)
+    length = memlen(op, state)
     addr = pop_value(stack, state)
     data = pop_value(stack, state)
 
@@ -285,7 +287,7 @@ def do_POKE(op, stack, state):
 
 
 def do_PEEK(op, stack, state):
-    length = memlen(op)
+    length = memlen(op, state)
     addr = pop_value(stack, state)
 
     data = state.memory.read_bv(addr, length)
@@ -295,7 +297,7 @@ def do_PEEK(op, stack, state):
     state.esil["lastsz"] = length*8
 
 def do_OPPOKE(op, stack, state):
-    length = memlen(op)
+    length = memlen(op, state)
     addr = pop_value(stack, state)
     stack.append(addr)
 

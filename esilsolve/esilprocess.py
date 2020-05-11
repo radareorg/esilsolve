@@ -104,6 +104,7 @@ class ESILProcess:
 
         # old pc should never be anything other than a BitVecVal        
         old_pc = state.registers["PC"].as_long() 
+        state.registers["PC"] = old_pc + instr["size"]
         self.parse_expression(instr["esil"], state)
         state.steps += 1
         states = []
@@ -125,8 +126,8 @@ class ESILProcess:
         if solver.is_bv_value(pc):
             new_pc = pc.as_long()
 
-            if new_pc == old_pc:
-                state.registers["PC"] = old_pc + instr["size"]
+            #if new_pc == old_pc:
+            #    state.registers["PC"] = old_pc + instr["size"]
 
             if self.trace:
                 self.r2api.emustep()
@@ -149,10 +150,7 @@ class ESILProcess:
                     new_state = state
 
                 new_state.solver.add(pc == possible_pc)
-                if solver.simplify(possible_pc).as_long() == old_pc:
-                    new_state.registers["PC"] = possible_pc + instr["size"]
-                else:
-                    new_state.registers["PC"] = possible_pc
+                new_state.registers["PC"] = possible_pc
 
                 states.append(new_state)
 
@@ -160,47 +158,45 @@ class ESILProcess:
 
     def parse_expression(self, expression, state):
 
-        temp_stack1 = None
-        temp_stack2 = None
+        temp_stack1 = []
+        temp_stack2 = []
         exec_type = UNCON
         expression = expression.replace("|=}", "|=,}") # typo fix
         words = expression.split(",")
 
         for word_str in words:
+            #print(word_str, temp_stack1, state.stack)
             word = ESILWord(word_str, state)
 
             if word.is_if():
                 state.condition = self.do_if(word, state)
                 exec_type = IF
                 temp_stack1 = state.stack
-                state.stack = []
+                state.stack = temp_stack1[:]
 
             elif word.is_else():
                 state.condition = solver.Not(state.condition)
                 exec_type = ELSE
                 temp_stack2 = state.stack
-                state.stack = []
+                state.stack = temp_stack1[:]
                 
             elif word.is_end_if():
                 # this code is weird and i dont like it
                 # but its just necessary to do in some way
+                new_stack = []
+                new_temp = temp_stack1
                 if exec_type == ELSE:
-                    state.stack.reverse()
-                    temp_stack2.reverse()
+                    new_temp = temp_stack2
 
-                    while len(state.stack) > 0:
-                        if_val = esilops.pop_value(temp_stack2, state)
-                        else_val = esilops.pop_value(state.stack, state)
-                        #print(if_val, else_val)
-                        condval = solver.If(state.condition, else_val, if_val)
-                        temp_stack1.append(solver.simplify(condval))
-                        #temp_stack1.append(condval)
-                else:
-                    temp_stack1 += state.stack
+                while len(state.stack) > 0 and len(new_temp) > 0:
+                    if_val = esilops.pop_value(new_temp, state)
+                    else_val = esilops.pop_value(state.stack, state)
+                    condval = solver.If(state.condition, else_val, if_val)
+                    new_stack.append(solver.simplify(condval))
 
                 state.condition = None
                 exec_type = UNCON
-                state.stack = temp_stack1
+                state.stack = new_stack[::-1]
 
             else:
                 if word.is_operator():
@@ -219,7 +215,7 @@ class ESILProcess:
         if solver.is_bv(val):
             zero = solver.BitVecVal(0, val.size())
 
-        return val != zero
+        return solver.simplify(val != zero)
 
     def trace_registers(self, state):
         for regname in state.registers._registers:
@@ -230,8 +226,10 @@ class ESILProcess:
                 try:
                     reg_value = solver.simplify(state.registers[regname])
                     #print(reg_value)
-                    #if reg_value.as_long() != emureg:
                     print("%s: %s , %s" % (register["name"], reg_value, emureg))
+                    if reg_value.as_long() != emureg:
+                        #print("%s: %s , %s" % (register["name"], reg_value, emureg))
+                        exit()
                 except Exception as e:
                     #print(e)
                     pass

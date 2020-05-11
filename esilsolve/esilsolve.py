@@ -37,6 +37,7 @@ class ESILSolver:
         self.did_init_vm = True
 
     def run(self, target=None, avoid=[]):
+        self.r2api.disass(instrs=128) # cache instrs for performance
 
         found = False
         self.state_manager.avoid = avoid
