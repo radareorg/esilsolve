@@ -36,8 +36,8 @@ def esilsolve_execution(targets):
         # never take jumps for failed solutions
         newstate.solver.add(newstate.registers["zf"] == 1) 
 
-    #for jne_addr in targets["jnes"]:
-    #    esilsolver.register_hook(jne_addr, constrain_jump)
+    for jne_addr in targets["jnes"]:
+        esilsolver.register_hook(jne_addr, constrain_jump)
 
     final = esilsolver.run(targets["goal"], avoid=[targets["check_start"]+39])
     
@@ -121,7 +121,7 @@ def download_program(f):
     #f.close()
 
 def parse_disassembly():
-    r2p.cmd("aaa")
+    r2p.cmd("aa")
     main_instrs = r2p.cmdj("s main; pdfj")
 
     r2xors = []
@@ -139,7 +139,7 @@ def parse_disassembly():
             r2buf = int(instr["disasm"].split("[")[1][:-1], 16)
 
     r2jnes = [x["addr"] for x in r2p.cmdj("/amj jne")]
-    r2goal = r2p.cmdj("axtj sym.imp.memcpy")[0]["from"]
+    r2goal = r2p.cmdj("pdj 1 @ sym.imp.memcpy")[0]["offset"]
     r2mprotect = r2p.cmdj("pdj 1 @ sym.imp.mprotect")[0]["offset"]
     r2movs = [x["addr"] for x in r2p.cmdj("/amj movzx edx, byte") if "- 4" in x["opstr"]]
 
