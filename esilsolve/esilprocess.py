@@ -103,8 +103,8 @@ class ESILProcess:
             og_state = state.clone()
 
         # old pc should never be anything other than a BitVecVal        
-        old_pc = state.registers["PC"].as_long() 
-        state.registers["PC"] = old_pc + instr["size"]
+        old_pc = state.registers["PC"].as_long() + instr["size"]
+        state.registers["PC"] = old_pc
         self.parse_expression(instr["esil"], state)
         state.steps += 1
         states = []
@@ -137,11 +137,12 @@ class ESILProcess:
                 print("symbolic pc: %s" % str(pc))
 
             possible_pcs = solver.EvalMax(state.solver, pc)
+            pc_count = len(possible_pcs)
 
             for possible_pc in possible_pcs:
-                #print(possible_pc)
 
-                if len(possible_pcs) > 1:
+                # this is the secret to speed, dont always clone states
+                if possible_pc.as_long() != old_pc and pc_count > 1:
                     new_state = state.clone()
                 else:
                     new_state = state
@@ -186,14 +187,15 @@ class ESILProcess:
                     new_temp = temp_stack2
 
                 while len(state.stack) > 0 and len(new_temp) > 0:
-                    if_val = esilops.pop_value(new_temp, state)
-                    else_val = esilops.pop_value(state.stack, state)
-                    condval = solver.If(state.condition, else_val, if_val)
+                    else_val = esilops.pop_value(new_temp, state)
+                    if_val = esilops.pop_value(state.stack, state)
+                    condval = solver.If(state.condition, if_val, else_val)
                     new_stack.append(solver.simplify(condval))
 
                 state.condition = None
                 exec_type = UNCON
-                state.stack = new_stack[::-1]
+                new_stack.reverse()
+                state.stack = new_stack
 
             else:
                 if word.is_operator():
