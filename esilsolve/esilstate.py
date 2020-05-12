@@ -95,16 +95,15 @@ class ESILState:
 
         return value
 
-    def concretize(self, val):
-        if self.model == None:
-            sat = self.solver.check()
-            
-            if sat == solver.sat:
-                self.model = self.solver.model()
-            else:
-                raise ESILUnsatException
+    def evaluate(self, val):
+        sat = self.solver.check()
+        
+        if sat == solver.sat:
+            model = self.solver.model()
+        else:
+            raise ESILUnsatException
 
-        value = self.model.eval(val, True)
+        value = model.eval(val, True)
 
         return value
 

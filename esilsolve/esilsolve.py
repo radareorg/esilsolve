@@ -23,7 +23,10 @@ class ESILSolver:
         if r2p == None:
             r2api = R2API()
         else:
-            r2api = R2API(r2p)
+            if type(r2p) == str:
+                r2api = R2API(filename=r2p)
+            else:
+                r2api = R2API(r2p)
 
         self.r2api = r2api
         self.did_init_vm = False
@@ -49,8 +52,8 @@ class ESILSolver:
 
             pc = state.registers["PC"].as_long() 
 
-            if target != None:
-                state.distance = abs(target-pc)
+            if target != None: 
+                state.distance = abs(target-pc) # useless?
 
             instr = self.r2api.disass(pc)
             found = pc == target
@@ -72,6 +75,12 @@ class ESILSolver:
             self.hooks[addr].append(func)
         else:
             self.hooks[addr] = [func]
+
+    def call_state(self, function):
+        # seek to function and init vm
+        self.r2api.seek(function)
+        self.init_vm()
+        return self.init_state()
 
     def init_state(self):
         self.state_manager = ESILStateManager([])

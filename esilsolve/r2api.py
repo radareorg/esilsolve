@@ -29,7 +29,7 @@ class R2API:
         return self.r2p.cmdj("aerj")
 
     def seek(self, addr):
-        self.r2p.cmd("s %d" % addr)
+        self.r2p.cmd("s %s" % str(addr))
 
     def step(self, sz):
         self.r2p.cmd("s+ %d" % sz)
