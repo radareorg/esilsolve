@@ -13,7 +13,7 @@ import r2pipe
 
 context.arch = 'amd64'
 
-path = "./aeg_program"
+path = "tests/aeg_program"
 r2p = None
 
 def esilsolve_execution(targets):
@@ -191,7 +191,7 @@ if __name__ == "__main__":
     x = process([path, exploit])
     x.read()
     #time.sleep(0.1)
-    x.writeline("cat flag")
+    x.writeline("cat tests/flag")
     log.info("FLAG: %s" % x.read().decode())
 
     '''f.read()

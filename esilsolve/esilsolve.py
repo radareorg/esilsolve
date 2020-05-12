@@ -30,6 +30,8 @@ class ESILSolver:
 
         self.r2api = r2api
         self.r2pipe = r2api.r2p
+        self.smt = solver
+        
         self.did_init_vm = False
         self.info = self.r2api.get_info()
         self.processes = []

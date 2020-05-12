@@ -28,4 +28,6 @@ def EvalMax(solver, sym, n=16):
     return solutions
 
 def BV2Bytes(bv):
-    return binascii.unhexlify(("%x"%bv.as_long()).ljust(bv.size(),"0"))[::-1]
+    val = bv.as_long()
+    length = int(bv.size()/8)
+    return binascii.unhexlify(("%x"%val).ljust(length,"0"))[::-1]
