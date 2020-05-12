@@ -28,7 +28,10 @@ class ESILState:
         self.registers = {}
         self.aliases = {}
         self.condition = None
+
+        # steps executed and distance from goal
         self.steps = 0
+        self.distance = 0xffffffff
 
         if "info" in self.info:
             self.bits = self.info["info"]["bits"]
@@ -88,7 +91,7 @@ class ESILState:
             else:
                 raise ESILUnsatException
 
-        value = self.model.eval(val)
+        value = self.model.eval(val, True)
 
         return value
 
@@ -101,7 +104,7 @@ class ESILState:
             else:
                 raise ESILUnsatException
 
-        value = self.model.eval(val)
+        value = self.model.eval(val, True)
 
         return value
 
@@ -120,7 +123,7 @@ class ESILState:
     def clone(self):
         clone = self.__class__(self.r2api, init=False, sym=self.pure_symbolic, debug=self.debug, trace=self.trace)
         clone.stack = deepcopy(self.stack)
-        clone.solver = deepcopy(self.solver)
+        clone.solver = self.solver.__deepcopy__()
         clone.proc = self.proc.clone()
         clone.steps = self.steps
         clone.bits = self.bits
@@ -143,14 +146,17 @@ class ESILStateManager:
             avoid = (avoid,)
 
         self.avoid = avoid
+        self.cutoff = 32
 
     def next(self):
         #print(self.active)
         #print(self.inactive)
-        if len(self.active) > 32:
+
+        if len(self.active) > self.cutoff:
             state = max(self.active, key=lambda s: s.steps)
         else:
-            state = min(self.active, key=lambda s: s.steps)
+            #state = min(self.active, key=lambda s: s.steps)
+            state = min(self.active, key=lambda s: s.distance) 
 
         self.active.discard(state)
         return state

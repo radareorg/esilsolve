@@ -340,7 +340,7 @@ def lastsz(state):
         return state.info["info"]["bits"]
 
 # flag op functions
-# jesus h g wells christ these are gross
+# these are essentially taken from esil.c
 def do_ZF(op, stack, state):
     eq = ((state.esil["cur"] & genmask(lastsz(state)-1)) == ZERO) # 
     stack.append(solver.If(eq, ONE, ZERO))

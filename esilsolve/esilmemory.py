@@ -42,7 +42,7 @@ class ESILMemory(dict):
                 model = self.solver.model()
 
                 try:
-                    val = model.eval(bv).as_long()
+                    val = model.eval(bv, model_completion=True).as_long()
                     #print(val)
 
                     if self.multi_concretize:
@@ -186,8 +186,5 @@ class ESILMemory(dict):
         clone._needs_copy = True
         clone._memory = self._memory
         #clone._memory = deepcopy(self._memory)
-        clone.endian = self.endian
-        clone.bits = self.bits
-        clone.chunklen = self.chunklen
 
         return clone

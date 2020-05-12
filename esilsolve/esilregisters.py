@@ -107,6 +107,7 @@ class ESILRegisters(dict):
 
         if self._needs_copy:
             self._registers = deepcopy(self._registers)
+            self.offset_dictionary = deepcopy(self.offset_dictionary)
             self._needs_copy = False
 
         if key in self.aliases:
@@ -138,9 +139,7 @@ class ESILRegisters(dict):
 
         # this gets the full register bv not the subreg bv
         reg_value = self.get_register_from_bounds(register)
-
         new_reg = self.set_register_bits(register, reg_value, reg_value["bv"], val)
-
         reg_value["bv"] = solver.simplify(new_reg)
 
     def val_to_register_bv(self, reg, val):
@@ -196,9 +195,7 @@ class ESILRegisters(dict):
         clone._needs_copy = True
         clone._registers = self._registers
         #clone._registers = deepcopy(self._registers)
-        clone.offset_dictionary = deepcopy(self.offset_dictionary)
-        clone.aliases = self.aliases
-
+        clone.offset_dictionary = self.offset_dictionary
         clone.parent_dict = self.parent_dict
 
         return clone

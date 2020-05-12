@@ -17,7 +17,7 @@ def EvalMax(solver, sym, n=16):
 
         if satisfiable == sat:
             m = solver.model()
-            solutions.append(m.eval(sym))
+            solutions.append(m.eval(sym, model_completion=True))
 
         else:
             solver.pop()

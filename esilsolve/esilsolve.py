@@ -4,6 +4,7 @@ from .esilclasses import *
 from .esilstate import ESILState, ESILStateManager
 from .esilprocess import ESILProcess
 
+import multiprocessing
 import logging
 
 class ESILSolver:
@@ -27,6 +28,7 @@ class ESILSolver:
         self.r2api = r2api
         self.did_init_vm = False
         self.info = self.r2api.get_info()
+        self.processes = []
 
         if init:
             self.init_state()
@@ -36,17 +38,19 @@ class ESILSolver:
         self.r2api.init_vm()
         self.did_init_vm = True
 
-    def run(self, target=None, avoid=[]):
+    def run(self, target=None, avoid=[], procs=1):
         self.r2api.disass(instrs=128) # cache instrs for performance
 
         found = False
         self.state_manager.avoid = avoid
 
         while not found:
-            #for state in states:
             state = self.state_manager.next()
 
             pc = state.registers["PC"].as_long() 
+
+            if target != None:
+                state.distance = abs(target-pc)
 
             instr = self.r2api.disass(pc)
             found = pc == target

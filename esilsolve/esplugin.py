@@ -101,7 +101,7 @@ class ESILSolvePlugin:
             return
 
         model = state.solver.model()
-        v = model.eval(register)
+        v = model.eval(register, True)
 
         print("%s: %s" % (reg, v))
 

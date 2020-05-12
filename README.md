@@ -22,13 +22,12 @@ state = esilsolver.init_state()
 # make rdi (arg1) symbolic
 state.set_symbolic_register("rdi")
 rdi = state.registers["rdi"]
-state.solver.add(rdi >= 0)
 
 # hook callback
 def success(instr, state):
     sat = state.solver.check()
     m = state.solver.model()
-    print("ARG1: %d" % m.eval(rdi).as_long())
+    print("ARG1: %d" % m.eval(rdi, True).as_long())
     return True
 
 # hook any address to manipulate states
