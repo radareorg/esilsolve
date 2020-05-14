@@ -17,7 +17,7 @@ class ESILMemory(dict):
         self.hit_symbolic_addr = False
         self.concrete_addrs = []
 
-        self._needs_copy = False
+        self._refs = {"count": 1}
 
         self.endian = info["info"]["endian"]
         self.bits = info["info"]["bits"]
@@ -92,9 +92,8 @@ class ESILMemory(dict):
 
     def write(self, addr, data):
 
-        if self._needs_copy:
-            self._memory = deepcopy(self._memory)
-            self._needs_copy = False
+        if self._refs["count"] > 1:
+            self.full_clone()
 
         data = self.prepare_data(data)
         maddr = self.mask(addr)
@@ -110,11 +109,7 @@ class ESILMemory(dict):
             o = chunk*self.chunklen
             caddr = maddr + o
 
-            #print(caddr, data[o:o+self.chunklen])
-
             self._memory[caddr] = data[o:o+self.chunklen]
-
-            #print(self._memory)
 
     def read_bv(self, addr, length):
         if type(addr) != int:
@@ -183,8 +178,14 @@ class ESILMemory(dict):
 
     def clone(self):
         clone = self.__class__(self.r2api, self.info, self.pure_symbolic)
-        clone._needs_copy = True
+        self._refs["count"] += 1
+        clone._refs = self._refs
         clone._memory = self._memory
         #clone._memory = deepcopy(self._memory)
 
         return clone
+
+    def full_clone(self):
+        self._memory = deepcopy(self._memory)
+        self._refs["count"] -= 1
+        self._refs = {"count": 1}

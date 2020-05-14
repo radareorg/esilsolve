@@ -9,7 +9,8 @@ class ESILRegisters(dict):
         self._registers = {}
         self.offset_dictionary = {}
         self.aliases = aliases
-        self._needs_copy = False
+        self._refs = {"count": 1}
+
         self.parent_dict = {}
         self.pure_symbolic = sym
 
@@ -105,10 +106,8 @@ class ESILRegisters(dict):
 
     def __setitem__(self, key, val):
 
-        if self._needs_copy:
-            self._registers = deepcopy(self._registers)
-            self.offset_dictionary = deepcopy(self.offset_dictionary)
-            self._needs_copy = False
+        if self._refs["count"] > 1:
+            self.full_clone()
 
         if key in self.aliases:
             key = self.aliases[key]["reg"]
@@ -128,9 +127,8 @@ class ESILRegisters(dict):
         
     def weak_set(self, key, val):
         
-        if self._needs_copy:
-            self._registers = deepcopy(self._registers)
-            self._needs_copy = False
+        if self._refs["count"] > 1:
+            self.full_clone()
 
         if key in self.aliases:
             key = self.aliases[key]["reg"]
@@ -192,10 +190,17 @@ class ESILRegisters(dict):
 
     def clone(self):
         clone = self.__class__(self.reg_info, self.aliases, self.pure_symbolic)
-        clone._needs_copy = True
+        self._refs["count"] += 1
+        clone._refs = self._refs
         clone._registers = self._registers
         #clone._registers = deepcopy(self._registers)
         clone.offset_dictionary = self.offset_dictionary
         clone.parent_dict = self.parent_dict
 
         return clone
+
+    def full_clone(self):
+        #self._registers = deepcopy(self._registers)
+        self.offset_dictionary = deepcopy(self.offset_dictionary)
+        self._refs["count"] -= 1
+        self._refs = {"count": 1}

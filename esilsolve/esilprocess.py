@@ -142,7 +142,7 @@ class ESILProcess:
             for possible_pc in possible_pcs:
 
                 # this is the secret to speed, dont always clone states
-                if possible_pc.as_long() != old_pc and pc_count > 1:
+                if pc_count > 1:
                     new_state = state.clone()
                 else:
                     new_state = state

@@ -64,7 +64,7 @@ class ESILSolvePlugin:
         elif args[2] == "max":
             state.solver.maximize(state.registers[reg])
         else:
-            val = toInt(args[2])
+            val = to_int(args[2])
             state.constrain_register(reg, val)
 
     def handle_run(self, args):
@@ -76,7 +76,7 @@ class ESILSolvePlugin:
         if len(args) > 2:
             s = int(args[2])
 
-        target = toInt(args[1])
+        target = to_int(args[1])
 
         state = self.esinstance.states[s]
         self.esinstance.run(state, target=target)
