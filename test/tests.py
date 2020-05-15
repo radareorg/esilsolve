@@ -40,7 +40,7 @@ def test_run():
     r2p = r2pipe.open("tests/simplish", flags=["-2"])
     r2p.cmd("s sym.check; aei; aeim; aer rdi=12605")
 
-    esilsolver = ESILSolver(r2p, debug=True, trace=False)
+    esilsolver = ESILSolver(r2p, debug=False, trace=False)
     #esilsolver.initVM()
 
     state = esilsolver.init_state()
@@ -88,11 +88,11 @@ def test_newreg():
     print(state.stack)
 
 def test_cond():
-    esilsolver = ESILSolver()
-    state = esilsolver.states[0]
-    esilsolver.parse_expression("rdx,?{,4,rbx,=,5,}{,1,2,rbx,=,},rbx,rax", state)
+    esilsolver = ESILSolver(debug=True)
+    state = esilsolver.init_state()
+    state.proc.parse_expression("0,?{,1,rax,=,}", state)
     print(state.stack)
-    print(state.registers["rbx"])
+    print(state.registers["rax"])
 
 def test_multi():
     r2p = r2pipe.open("tests/multibranch", flags=["-2"])
@@ -109,12 +109,8 @@ def test_multi():
     esilsolver.run(target=0x0000066f)
     #print(state.registers["zf"])
     state.solver.add(state.registers["zf"] == 1)
-    #sat = state.solver.check()
-    #m = state.solver.model()
-    #print(m.eval(rdi))
-
     state = esilsolver.run(target=0x0000069f)
-    print(state.registers["zf"])
+    #print(state.registers["zf"])
     state.solver.add(state.registers["zf"] == 1)
     #state.solver.minimize(rdi)
     #print(state.solver)
@@ -129,7 +125,7 @@ def test_multi_hook():
     r2p = r2pipe.open("tests/multibranch", flags=["-2"])
     r2p.cmd("s sym.check; aei; aeim; aer rdi=22021")
 
-    esilsolver = ESILSolver(r2p, debug=True, trace=False)
+    esilsolver = ESILSolver(r2p, debug=False, trace=False)
     #esilsolver.initVM()
 
     state = esilsolver.init_state()
@@ -182,7 +178,6 @@ def test_arm():
         r2p = r2pipe.open("ipa://tests/crackme-level0-symbols.ipa", flags=["-2"])
         # w ewmfpkzbjowr hvb @ 0x100000
         r2p.cmd("s sym._validate; aei; aeim; aer x0 = 0x100000;")
-        #print(r2p.cmd("aer"))
         funcaddr = int(r2p.cmd("s"), 16)
     else:
         r2p = r2pipe.open("frida://133ebc680e67c885e7f04621481d8a0229bef371//com.nowsecure.crackme", flags=["-2"])
@@ -190,10 +185,9 @@ def test_arm():
         funcaddr = int(r2p.cmd("s"), 16)
         varaddr = int(r2p.cmd("\dma 0x1000"), 16)
         stackaddr = int(r2p.cmd("\dma 0x2000"), 16) + 0x1000
-        r2p.cmd("aei; aeip; aer x0 = %d; aer sp = %d; aer fp = %d;" % (varaddr, stackaddr, stackaddr))
+        r2p.cmd("aei; aeip; aer x0=%d; aer sp=%d; aer fp=%d;" % (varaddr, stackaddr, stackaddr))
 
     esilsolver = ESILSolver(r2p, debug=False, trace=False)
-    esilsolver.r2api.disass(instrs=100) # cache instrs for performance
     state = esilsolver.init_state()
 
     b = [solver.BitVec("b%d" % x, 8) for x in range(16)]
@@ -209,7 +203,7 @@ def test_arm():
             return 
 
         m = state.solver.model()
-        c = m.eval(code)
+        c = m.eval(code, True)
 
         cs = solver.BV2Bytes(c)
         #print(cs)

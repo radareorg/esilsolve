@@ -95,6 +95,19 @@ class ESILMemory(dict):
         if self._refs["count"] > 1:
             self.full_clone()
 
+        if type(addr) != int:
+            addr = self.bv_to_int(addr)
+
+        if solver.is_bv(data):
+            length = int(data.size()/BYTE)
+            data = self.unpack_bv(data, length)
+        elif type(data) == bytes:
+            data = list(data)
+        elif type(data) == str:
+            data = list(data.encode())
+        elif type(data) == int:
+            data = self.unpack_bv(data, int(self.bits/8))
+
         data = self.prepare_data(data)
         maddr = self.mask(addr)
         offset = addr-maddr
@@ -175,6 +188,12 @@ class ESILMemory(dict):
 
     def init_memory(self):
         pass
+
+    def __getitem__(self, addr):
+        return self.read_bv(addr, self.bits)
+
+    def __setitem__(self, addr, value):
+        return self.write(addr, value)
 
     def clone(self):
         clone = self.__class__(self.r2api, self.info, self.pure_symbolic)

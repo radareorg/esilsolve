@@ -5,6 +5,9 @@ from .esilmemory import *
 from .esilprocess import *
 import copy
 
+import re # for buffer constraint
+all_bytes = "".join([chr(x) for x in range(256)])
+
 class ESILState:
     
     def __init__(self, r2api, opt=False, init=True, debug=False, trace=False, sym=False):
@@ -16,6 +19,7 @@ class ESILState:
         else:
             self.solver = solver.SimpleSolver()
 
+        self.constraints = []
         self.model = None
 
         self.esil = {"cur":0, "old":0, "stack":[]}
@@ -64,16 +68,59 @@ class ESILState:
         for register in registers:
             register["value"] = register_values[register["name"]]
 
-        self.registers = ESILRegisters(registers, self.aliases, sym=self.pure_symbolic) #reg_dict
+        self.registers = ESILRegisters(registers, self.aliases, sym=self.pure_symbolic)
         self.registers.init_registers()
 
     def set_symbolic_register(self, name):
         size = self.registers[name].size()
         self.registers[name] = solver.BitVec(name, size)
 
+    def constrain(self, constraint):
+        self.constraints.append(constraint)
+        self.solver.add(constraint)
+
+    # this bizarre function takes a regular expression like [A-Z 123]
+    # and constrains all the bytes in the bv to fit the expression
+    def constrain_bytes(self, bv, regex):
+        if solver.is_bv(bv):
+            bv = [solver.Extract(b*8+7, b*8, bv) for b in range(int(bv.size()/8))]
+            
+        # this is gross and could probably break
+        opts = []
+        new_regex = regex[:]
+        negate = False
+        if len(regex) > 2 and regex[:2] == "[^":
+            negate = True
+            new_regex = new_regex.replace("[^", "[")
+
+        dashes = [i for i,c in enumerate(regex) if c == "-"]
+        for d in dashes:
+            if regex[d-1] != "\\" and len(regex) > d:
+                x = ord(regex[d-1])
+                y = ord(regex[d+1])
+                opts.append([x, y])
+                new_regex = new_regex.replace(regex[d-1:d+2], "")
+        
+        vals = []
+        if new_regex != "[]":
+            vals = [ord(x) for x in re.findall(new_regex, all_bytes, re.DOTALL)]
+            
+        for b in bv:
+            or_vals = []
+            for val in vals:
+                or_vals.append(b == val)
+
+            for opt in opts:
+                or_vals.append(solver.And(b >= opt[0], b <= opt[1]))
+
+            if negate:
+                self.constrain(solver.Not(solver.Or(*or_vals)))
+            else:
+                self.constrain(solver.Or(*or_vals))
+
     def constrain_register(self, name, val):
         reg = self.registers[name]
-        self.solver.add(reg == val)
+        self.constrain(reg == val)
 
     def evaluate_register(self, name, eval_type="eval"):
         val = self.registers[name]
@@ -154,8 +201,8 @@ class ESILStateManager:
         if len(self.active) > self.cutoff:
             state = max(self.active, key=lambda s: s.steps)
         else:
-            #state = min(self.active, key=lambda s: s.steps)
-            state = min(self.active, key=lambda s: s.distance) 
+            state = min(self.active, key=lambda s: s.steps)
+            #state = min(self.active, key=lambda s: s.distance) 
 
         self.active.discard(state)
         return state

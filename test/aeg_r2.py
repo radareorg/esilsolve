@@ -20,7 +20,7 @@ def esilsolve_execution(targets):
     b = [solver.BitVec("b%d" % x, 8) for x in range(buf_len)]
     buf = solver.Concat(*b)
 
-    state.memory.write_bv(targets["buf_addr"], buf, buf_len)
+    state.memory[targets["buf_addr"]] = buf
 
     def constrain_jump(instr, newstate):
         # never take jumps for failed solutions

@@ -27,10 +27,9 @@ def esilsolve_execution(targets):
     buf_addr = targets["buf_addr"]
     buf_len = 48
     b = [solver.BitVec("b%d" % x, 8) for x in range(buf_len)]
-
     buf = solver.Concat(*b)
 
-    state.memory.write_bv(buf_addr, buf, buf_len)
+    state.memory[buf_addr] = buf
 
     def constrain_jump(instr, newstate):
         # never take jumps for failed solutions
@@ -42,14 +41,10 @@ def esilsolve_execution(targets):
     final = esilsolver.run(targets["goal"], avoid=[targets["check_start"]+39])
     
     if final.solver.check() == solver.sat:
-        m = final.solver.model()
-        c = m.eval(buf, True)
-
         end = time.time()
         log.info("EXEC TIME: %f" % (end-start))
 
-        magic = list(solver.BV2Bytes(c))
-        return magic
+        return list(solver.BV2Bytes(final.evaluate(buf)))
     else:
         return []
 
@@ -187,6 +182,8 @@ if __name__ == "__main__":
 
     exploit = generate_exploit(magic, targets, elf)
     log.info("EXPLOIT: %s" % exploit)
+
+    #exit()
 
     x = process([path, exploit])
     x.read()

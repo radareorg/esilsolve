@@ -89,3 +89,12 @@ class R2API:
 
     def emustep(self):
         self.r2p.cmd("aes")
+
+    def function_info(self, func):
+        return self.r2p.cmdj("afij %s" % str(func))[0]
+
+    def get_address(self, func):
+        return self.r2p.cmdj("pdj 1 @ %s" % str(func))[0]["offset"]
+
+    def analyze(self, level=3): # level 7 solves ctfs automatically
+        self.r2p.cmd("a"*level)
