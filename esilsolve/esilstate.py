@@ -19,7 +19,7 @@ class ESILState:
         else:
             self.solver = solver.SimpleSolver()
 
-        self.constraints = []
+        #self.constraints = []
         self.model = None
 
         self.esil = {"cur":0, "old":0, "stack":[]}
@@ -75,16 +75,16 @@ class ESILState:
         size = self.registers[name].size()
         self.registers[name] = solver.BitVec(name, size)
 
-    def constrain(self, constraint):
-        self.constraints.append(constraint)
-        self.solver.add(constraint)
+    def constrain(self, *constraints):
+        #self.constraints.extend(constraints)
+        self.solver.add(*constraints)
 
     # this bizarre function takes a regular expression like [A-Z 123]
     # and constrains all the bytes in the bv to fit the expression
     def constrain_bytes(self, bv, regex):
         if solver.is_bv(bv):
             bv = [solver.Extract(b*8+7, b*8, bv) for b in range(int(bv.size()/8))]
-            
+
         # this is gross and could probably break
         opts = []
         new_regex = regex[:]
@@ -168,12 +168,11 @@ class ESILState:
 
     def clone(self):
         clone = self.__class__(self.r2api, init=False, sym=self.pure_symbolic, debug=self.debug, trace=self.trace)
-        clone.stack = deepcopy(self.stack)
-        clone.solver = self.solver.__deepcopy__()
+        clone.stack = self.stack[:]
+        clone.constrain(*self.solver.assertions())
+
         clone.proc = self.proc.clone()
         clone.steps = self.steps
-        clone.bits = self.bits
-        clone.aliases = self.aliases
         clone.registers = self.registers.clone()
         clone.memory = self.memory.clone()
         clone.memory.solver = clone.solver

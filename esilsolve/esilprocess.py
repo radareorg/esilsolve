@@ -116,7 +116,7 @@ class ESILProcess:
             for addr in state.memory.concrete_addrs:
                 for val in addr["values"]:
                     new_state = og_state.clone()
-                    new_state.solver.add(addr["bv"] == val)
+                    new_state.constrain(addr["bv"] == val)
 
                     states.extend(self.execute_instruction(new_state, instr))
 
@@ -147,7 +147,7 @@ class ESILProcess:
                 else:
                     new_state = state
 
-                new_state.solver.add(pc == possible_pc)
+                new_state.constrain(pc == possible_pc)
                 new_state.registers["PC"] = possible_pc
 
                 states.append(new_state)

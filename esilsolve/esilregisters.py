@@ -8,18 +8,14 @@ class ESILRegisters(dict):
         self.reg_info = reg_array
         self._registers = {}
         self.offset_dictionary = {}
+        self._register_values = {}
         self.aliases = aliases
         self._refs = {"count": 1}
 
-        self.parent_dict = {}
         self.pure_symbolic = sym
 
-        # sort reg array, this is important?
-        reg_array.sort(key=lambda x: x["size"], reverse=True)
-        #print(reg_array)
-
-
     def init_registers(self):
+        self.reg_info.sort(key=lambda x: x["size"], reverse=True)
         for reg in self.reg_info:
             self.add_register(reg)
 
@@ -42,6 +38,7 @@ class ESILRegisters(dict):
         reg_value = self.get_register_from_bounds(reg)
 
         if reg_value != None:
+            # this shouldnt happen idk
             if reg_value["size"] < size:
                 reg_value["size"] = size
                 reg_value["start"] = start
@@ -53,7 +50,10 @@ class ESILRegisters(dict):
                 else:
                     reg_value["bv"] = solver.BitVecVal(reg.pop("value"), size)
 
+                reg_value["bounds"] = key
                 self.offset_dictionary[key] = reg_value
+
+            reg["bounds"] = reg_value["bounds"]
 
         else:
             reg_value = {"type": reg["type"], "size": size, "start": start, "end": end}
@@ -63,9 +63,16 @@ class ESILRegisters(dict):
                 reg.pop("value")
                 reg_value["bv"] = solver.BitVec(reg["name"], size) 
 
+            reg_value["bounds"] = key
             self.offset_dictionary[key] = reg_value
+
+            reg["bounds"] = key
             
     def get_register_from_bounds(self, reg):
+
+        if "bounds" in reg and reg["bounds"] in self.offset_dictionary:
+            return self.offset_dictionary[reg["bounds"]]
+
         start = reg["offset"]
         end = reg["offset"] + reg["size"]
         size = reg["size"]
@@ -107,7 +114,7 @@ class ESILRegisters(dict):
     def __setitem__(self, key, val):
 
         if self._refs["count"] > 1:
-            self.full_clone()
+            self.finish_clone()
 
         if key in self.aliases:
             key = self.aliases[key]["reg"]
@@ -118,17 +125,12 @@ class ESILRegisters(dict):
 
         zero = solver.BitVecVal(0, reg_value["size"])
         new_reg = self.set_register_bits(register, reg_value, zero, val)
-
-        # added the simplify here... 
-        # idk if this actually will create any performance improvements
-        # but it will be better for debugging output maybe?
-        # or it will be worse?
         reg_value["bv"] = solver.simplify(new_reg)
-        
+
     def weak_set(self, key, val):
         
         if self._refs["count"] > 1:
-            self.full_clone()
+            self.finish_clone()
 
         if key in self.aliases:
             key = self.aliases[key]["reg"]
@@ -195,12 +197,15 @@ class ESILRegisters(dict):
         clone._registers = self._registers
         #clone._registers = deepcopy(self._registers)
         clone.offset_dictionary = self.offset_dictionary
-        clone.parent_dict = self.parent_dict
 
         return clone
 
-    def full_clone(self):
+    def finish_clone(self):
         #self._registers = deepcopy(self._registers)
-        self.offset_dictionary = deepcopy(self.offset_dictionary)
+        #self.offset_dictionary = deepcopy(self.offset_dictionary)
+        self.offset_dictionary = self.offset_dictionary.copy()
+        for x in self.offset_dictionary:
+            self.offset_dictionary[x] = self.offset_dictionary[x].copy()
+
         self._refs["count"] -= 1
         self._refs = {"count": 1}

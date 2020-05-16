@@ -53,7 +53,7 @@ class ESILMemory(dict):
                             self.concrete_addrs.append({"bv": bv, "values": vals})
                         self.solver.pop()
 
-                    self.solver.add(bv == val)
+                    self.constrain(bv == val)
                     return val
                 except:
                     # idk man i need a default value in case
@@ -93,7 +93,7 @@ class ESILMemory(dict):
     def write(self, addr, data):
 
         if self._refs["count"] > 1:
-            self.full_clone()
+            self.finish_clone()
 
         if type(addr) != int:
             addr = self.bv_to_int(addr)
@@ -204,7 +204,8 @@ class ESILMemory(dict):
 
         return clone
 
-    def full_clone(self):
-        self._memory = deepcopy(self._memory)
+    def finish_clone(self):
+        # we can do a shallow copy instead of deep
+        self._memory = self._memory.copy()
         self._refs["count"] -= 1
         self._refs = {"count": 1}
