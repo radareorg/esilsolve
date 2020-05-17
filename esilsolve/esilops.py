@@ -1,6 +1,5 @@
 from .esilclasses import *
 from .esilregisters import *
-#from . import solver
 import z3
 
 SIZE = 64

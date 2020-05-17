@@ -35,8 +35,8 @@ def esilsolve_execution(targets):
         # never take jumps for failed solutions
         newstate.constrain(newstate.registers["zf"] == 1) 
 
-    #for jne_addr in targets["jnes"]:
-    #    esilsolver.register_hook(jne_addr, constrain_jump)
+    for jne_addr in targets["jnes"]:
+        esilsolver.register_hook(jne_addr, constrain_jump)
 
     avoid_addr = targets["check_start"]+39
     final = esilsolver.run(targets["goal"], avoid=[avoid_addr])

@@ -33,7 +33,7 @@ def esilsolve_execution(targets):
     final = esilsolver.run(targets["goal"], avoid=[avoid_addr])
     
     if final.solver.check() == z3.sat:
-        return list(z3.BV2Bytes(final.evaluate(buf)))
+        return list(final.evaluate_buffer(buf))
     else:
         return []
 

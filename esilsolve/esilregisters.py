@@ -1,6 +1,5 @@
 
 from .esilclasses import *
-#from . import solver
 import z3
 
 class ESILRegisters:

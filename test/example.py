@@ -10,7 +10,7 @@ state.set_symbolic_register("rdi")
 rdi = state.registers["rdi"]
 
 # hook callback
-def success(instr, state):
+def success(state):
     print("ARG1: %d" % state.evaluate(rdi).as_long())
 
 # hook any address to manipulate states

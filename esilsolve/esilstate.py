@@ -1,10 +1,8 @@
-#from . import solver
 import z3
 from .esilclasses import *
 from .esilregisters import *
 from .esilmemory import *
 from .esilprocess import *
-import binascii
 
 import re # for buffer constraint
 all_bytes = "".join([chr(x) for x in range(256)])
@@ -186,7 +184,7 @@ class ESILState:
         buf = self.evaluate(bv)
         val = buf.as_long()
         length = int(bv.size()/8)
-        return binascii.unhexlify(("%x"%val).ljust(length,"0"))[::-1]
+        return bytes([(val >> (8*i)) & 0xff for i in range(length)])
         
     def step(self):
         pc = self.registers["PC"].as_long() 
