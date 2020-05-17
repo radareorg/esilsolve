@@ -49,20 +49,20 @@ validate = esilsolver.r2pipe.cmdj("pdj 1")[0]["offset"]
 # initialize symbolic bytes of solution
 # and constrain them to be /[a-z ]/
 b = [z3.BitVec("b%d" % x, 8) for x in range(buf_len)]
-for x in b:
-    state.solver.add(z3.Or(z3.And(x >= 0x61, x <= 0x7a), x == 0x20))
+state.constrain_bytes(b, "[a-z ]") 
 
-# concat the bytes and write the BV to memory 
+# concat the bytes and write them to memory 
 code = z3.Concat(*b)
-state.memory[buf_addr] = code
+state.memory[buf_addr] = b
 
 # success hook callback
 def success(state):
-    cs = z3.BV2Bytes(state.evaluate(code))
+    cs = state.evaluate_buffer(code)
     # gives an answer with lots of spaces but it works
     print("CODE: '%s'" % cs.decode())
+    esilsolver.terminate()
 
 # set the hooks and run
 esilsolver.register_hook(validate+0x210, success)
-esilsolver.run(target=validate+0x210, avoid=[validate+0x218, validate+0x3c])
+esilsolver.run(avoid=[validate+0x218, validate+0x3c])
 ```
