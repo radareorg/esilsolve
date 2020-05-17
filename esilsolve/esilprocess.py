@@ -126,6 +126,9 @@ class ESILProcess:
         if solver.is_bv_value(pc):
             new_pc = pc.as_long()
 
+            if state.target != None:
+                state.distance = min(state.distance, abs(state.target-new_pc))
+
             if self.trace:
                 self.r2api.emustep()
                 self.trace_registers(state)

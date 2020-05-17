@@ -9,7 +9,7 @@ class R2API:
             self.r2p = r2pipe.open(filename, flags=flags)
 
         self.instruction_cache = {}
-        self.cache_num = 32
+        self.cache_num = 64
 
         self.get_register_info()
         self.info = None

@@ -27,7 +27,7 @@ class ESILState:
         self.info = self.r2api.get_info()
         self.debug = debug
         self.trace = trace
-        self.proc = ESILProcess(r2api, debug=debug, trace=trace)
+
         self.memory = {}
         self.registers = {}
         self.aliases = {}
@@ -43,6 +43,7 @@ class ESILState:
             self.bits = 64
 
         if init:
+            self.proc = ESILProcess(r2api, debug=debug, trace=trace)
             self.init_state()
 
     def init_state(self):
@@ -171,7 +172,7 @@ class ESILState:
         clone.stack = self.stack[:]
         clone.constrain(*self.solver.assertions())
 
-        clone.proc = self.proc.clone()
+        clone.proc = self.proc #.clone()
         clone.steps = self.steps
         clone.registers = self.registers.clone()
         clone.memory = self.memory.clone()
@@ -194,15 +195,17 @@ class ESILStateManager:
         self.cutoff = 32
 
     def next(self):
-        #print(self.active)
-        #print(self.inactive)
+        #print(self.active, self.inactive)
 
-        if len(self.active) > self.cutoff:
+        if len(self.active) == 0:
+            return
+        elif len(self.active) > self.cutoff:
             state = max(self.active, key=lambda s: s.steps)
         else:
-            state = min(self.active, key=lambda s: s.steps)
-            #state = min(self.active, key=lambda s: s.distance) 
+            #state = min(self.active, key=lambda s: s.steps)
+            state = min(self.active, key=lambda s: s.distance) 
 
+        #print(state.distance)
         self.active.discard(state)
         return state
 

@@ -1,8 +1,3 @@
-from copy import deepcopy
-
-class ESILRegister(str):
-    pass
-    
 class ESILTrapException(Exception):
     pass
 

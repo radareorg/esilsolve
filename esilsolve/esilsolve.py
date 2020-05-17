@@ -4,7 +4,6 @@ from .esilclasses import *
 from .esilstate import ESILState, ESILStateManager
 from .esilprocess import ESILProcess
 
-import multiprocessing
 import logging
 
 class ESILSolver:
@@ -34,7 +33,7 @@ class ESILSolver:
         
         self.did_init_vm = False
         self.info = self.r2api.get_info()
-        self.processes = []
+        self.stop = False
 
         if init:
             self.init_state()
@@ -44,34 +43,39 @@ class ESILSolver:
         self.r2api.init_vm()
         self.did_init_vm = True
 
-    def run(self, target=None, avoid=[], procs=1):
-        self.r2api.disass(instrs=128) # cache instrs for performance
-
-        found = False
+    def run(self, target=None, avoid=[]):
+        self.stop = False
         self.state_manager.avoid = avoid
 
-        while not found:
+        if type(target) == str:
+            target = self.r2api.get_address(target)
+
+        while not self.stop:
             state = self.state_manager.next()
+            if state == None:
+                return
 
+            state.target = target
             pc = state.registers["PC"].as_long() 
-
-            if target != None: 
-                state.distance = abs(target-pc) # useless?
-
-            instr = self.r2api.disass(pc)
+            #instr = self.r2api.disass(pc)
             found = pc == target
+            if found:
+                self.terminate()
         
             if pc in self.hooks:
                 for hook in self.hooks[pc]:
-                    hook(instr, state)
+                    hook(state)
 
-            if not found:
-                new_states = state.proc.execute_instruction(state, instr)
+            if not self.stop:
+                new_states = state.step()
                 for new_state in new_states:
                     self.state_manager.add(new_state)
             else:
                 self.state_manager.add(state)
                 return state
+
+    def terminate(self):
+        self.stop = True
 
     def register_hook(self, addr, func):
         if addr in self.hooks:
