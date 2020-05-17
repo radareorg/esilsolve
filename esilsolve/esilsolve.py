@@ -1,5 +1,6 @@
 from .r2api import R2API
-from . import solver
+#from . import solver
+import z3
 from .esilclasses import * 
 from .esilstate import ESILState, ESILStateManager
 from .esilprocess import ESILProcess
@@ -29,7 +30,7 @@ class ESILSolver:
 
         self.r2api = r2api
         self.r2pipe = r2api.r2p
-        self.smt = solver
+        self.z3 = z3
         
         self.did_init_vm = False
         self.info = self.r2api.get_info()
@@ -97,5 +98,5 @@ class ESILSolver:
     def blank_state(self, addr=0):
         self.state_manager = ESILStateManager([])
         state = self.state_manager.entry_state(self.r2api, self.optimize, True, self.debug, self.trace)
-        state.registers["PC"] = solver.BitVecVal(addr, state.registers["PC"].size())
+        state.registers["PC"] = z3.BitVecVal(addr, state.registers["PC"].size())
         return state

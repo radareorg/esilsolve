@@ -1,9 +1,10 @@
-from . import solver
+#from . import solver
+import z3
 from .esilclasses import *
 from .esilregisters import *
 from .esilmemory import *
 from .esilprocess import *
-import copy
+import binascii
 
 import re # for buffer constraint
 all_bytes = "".join([chr(x) for x in range(256)])
@@ -15,9 +16,9 @@ class ESILState:
         self.pure_symbolic = sym
 
         if opt:
-            self.solver = solver.Optimize()
+            self.solver = z3.Optimize()
         else:
-            self.solver = solver.SimpleSolver()
+            self.solver = z3.SimpleSolver()
 
         #self.constraints = []
         self.model = None
@@ -72,9 +73,12 @@ class ESILState:
         self.registers = ESILRegisters(registers, self.aliases, sym=self.pure_symbolic)
         self.registers.init_registers()
 
-    def set_symbolic_register(self, name):
+    def set_symbolic_register(self, name, var=None):
+        if var == None:
+            var = name
+
         size = self.registers[name].size()
-        self.registers[name] = solver.BitVec(name, size)
+        self.registers[name] = z3.BitVec(var, size)
 
     def constrain(self, *constraints):
         #self.constraints.extend(constraints)
@@ -83,8 +87,8 @@ class ESILState:
     # this bizarre function takes a regular expression like [A-Z 123]
     # and constrains all the bytes in the bv to fit the expression
     def constrain_bytes(self, bv, regex):
-        if solver.is_bv(bv):
-            bv = [solver.Extract(b*8+7, b*8, bv) for b in range(int(bv.size()/8))]
+        if z3.is_bv(bv):
+            bv = [z3.Extract(b*8+7, b*8, bv) for b in range(int(bv.size()/8))]
 
         # this is gross and could probably break
         opts = []
@@ -112,12 +116,12 @@ class ESILState:
                 or_vals.append(b == val)
 
             for opt in opts:
-                or_vals.append(solver.And(b >= opt[0], b <= opt[1]))
+                or_vals.append(z3.And(b >= opt[0], b <= opt[1]))
 
             if negate:
-                self.constrain(solver.Not(solver.Or(*or_vals)))
+                self.constrain(z3.Not(z3.Or(*or_vals)))
             else:
-                self.constrain(solver.Or(*or_vals))
+                self.constrain(z3.Or(*or_vals))
 
     def constrain_register(self, name, val):
         reg = self.registers[name]
@@ -134,7 +138,7 @@ class ESILState:
         if self.model == None:
             sat = self.solver.check()
             
-            if sat == solver.sat:
+            if sat == z3.sat:
                 self.model = self.solver.model()
             else:
                 raise ESILUnsatException
@@ -146,7 +150,7 @@ class ESILState:
     def evaluate(self, val):
         sat = self.solver.check()
         
-        if sat == solver.sat:
+        if sat == z3.sat:
             model = self.solver.model()
         else:
             raise ESILUnsatException
@@ -155,6 +159,35 @@ class ESILState:
 
         return value
 
+    def eval_max(self, sym, n=16):
+        solutions = []
+
+        while len(solutions) < n:
+
+            self.solver.push()
+            for sol in solutions:
+                self.solver.add(sym != sol)
+
+            satisfiable = self.solver.check()
+
+            if satisfiable == z3.sat:
+                m = self.solver.model()
+                solutions.append(m.eval(sym, model_completion=True))
+
+            else:
+                self.solver.pop()
+                break
+
+            self.solver.pop()
+
+        return solutions
+
+    def evaluate_buffer(self, bv):
+        buf = self.evaluate(bv)
+        val = buf.as_long()
+        length = int(bv.size()/8)
+        return binascii.unhexlify(("%x"%val).ljust(length,"0"))[::-1]
+        
     def step(self):
         pc = self.registers["PC"].as_long() 
         instr = self.r2api.disass(pc)
@@ -162,7 +195,7 @@ class ESILState:
         return new_states
 
     def is_sat(self):
-        if self.solver.check() == solver.sat:
+        if self.solver.check() == z3.sat:
             return True
         
         return False
@@ -211,7 +244,7 @@ class ESILStateManager:
 
     def add(self, state):
         pc = state.registers["PC"]
-        if solver.is_bv_value(pc):
+        if z3.is_bv_value(pc):
             if pc.as_long() in self.avoid:
                 self.inactive.add(state)
 

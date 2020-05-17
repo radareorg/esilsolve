@@ -1,6 +1,6 @@
 from esilsolve import ESILSolver
 import r2pipe
-import esilsolve.solver as solver
+import z3
 import binascii
 
 def test_sym():
@@ -14,7 +14,7 @@ def test_sym():
 
     #print(esilsolver.stack)
     #print(esilsolver.evaluateRegister("ah"))
-    print(state.evaluateRegister("rax")) 
+    print(state.evaluate_register("rax")) 
 
 def test_mem():
     esilsolver = ESILSolver()
@@ -33,7 +33,7 @@ def test_flg():
     state = esilsolver.init_state()
     #esilsolver.parseExpression("1,1,==,$z,zf,:=,zf", state)
     state.proc.parse_expression("2147483648,ebx,=,2164261373,eax,=,ebx,eax,-=,31,$o,of,:=,31,$s,sf,:=,$z,zf,:=,$p,pf,:=,32,$b,cf,:=", state)
-    print("%x" % solver.simplify(state.registers["eflags"]).as_long())
+    print("%x" % z3.simplify(state.registers["eflags"]).as_long())
     #print(state.popAndEval())
 
 def test_run():
@@ -133,7 +133,7 @@ def test_multi_hook():
     rdi = state.registers["rdi"]
     state.solver.add(rdi >= 0)
 
-    def success(instr, state):
+    def success(state):
         sat = state.solver.check()
         m = state.solver.model()
         print("ARG1: %d" % m.eval(rdi).as_long())
@@ -190,22 +190,15 @@ def test_arm():
     esilsolver = ESILSolver(r2p, debug=False, trace=False)
     state = esilsolver.init_state()
 
-    b = [solver.BitVec("b%d" % x, 8) for x in range(16)]
+    b = [z3.BitVec("b%d" % x, 8) for x in range(16)]
     for x in range(16):
-        state.solver.add(solver.Or(solver.And(b[x] >= 0x61, b[x] <= 0x7a), b[x] == 0x20))
+        state.constrain(z3.Or(z3.And(b[x] >= 0x61, b[x] <= 0x7a), b[x] == 0x20))
 
-    code = solver.Concat(*b)
+    code = z3.Concat(*b)
     state.memory.write_bv(varaddr, code, 16)
 
-    def success(instr, state):
-        sat = state.solver.check()
-        if sat != solver.sat:
-            return 
-
-        m = state.solver.model()
-        c = m.eval(code, True)
-
-        cs = solver.BV2Bytes(c)
+    def success(state):
+        cs = state.evaluate_buffer(code)
         #print(cs)
         print("CODE: '%s'" % cs.decode())
 

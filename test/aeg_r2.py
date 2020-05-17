@@ -4,7 +4,7 @@
 # so thats cool
 
 from esilsolve import ESILSolver
-import esilsolve.solver as solver
+import z3
 import r2pipe
 from struct import pack, unpack
 
@@ -17,22 +17,23 @@ def esilsolve_execution(targets):
     state = esilsolver.call_state(targets["check_start"])
 
     buf_len = 48
-    b = [solver.BitVec("b%d" % x, 8) for x in range(buf_len)]
-    buf = solver.Concat(*b)
+    b = [z3.BitVec("b%d" % x, 8) for x in range(buf_len)]
+    buf = z3.Concat(*b)
 
     state.memory[targets["buf_addr"]] = buf
 
-    def constrain_jump(instr, newstate):
+    def constrain_jump(newstate):
         # never take jumps for failed solutions
-        newstate.solver.add(newstate.registers["zf"] == 1) 
+        newstate.constrain(newstate.registers["zf"] == 1) 
 
     for jne_addr in targets["jnes"]:
         esilsolver.register_hook(jne_addr, constrain_jump)
 
-    final = esilsolver.run(targets["goal"], avoid=[targets["check_start"]+39])
+    avoid_addr = targets["check_start"]+39
+    final = esilsolver.run(targets["goal"], avoid=[avoid_addr])
     
-    if final.solver.check() == solver.sat:
-        return list(solver.BV2Bytes(final.evaluate(buf)))
+    if final.solver.check() == z3.sat:
+        return list(z3.BV2Bytes(final.evaluate(buf)))
     else:
         return []
 

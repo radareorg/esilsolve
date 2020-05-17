@@ -19,7 +19,7 @@ state.set_symbolic_register("rdi")
 rdi = state.registers["rdi"]
 
 # hook callback
-def success(instr, state):
+def success(state):
     print("ARG1: %d" % state.evaluate(rdi).as_long())
 
 # hook any address to manipulate states
@@ -34,6 +34,7 @@ ESILSolve also easily works with ipa and apk files since they are supported by r
 
 ```python
 from esilsolve import ESILSolver
+import z3 
 
 buf_addr = 0x100000
 buf_len = 16
@@ -44,21 +45,20 @@ state.registers["x0"] = buf_addr
 
 #use r2pipe like normal in context of the app
 validate = esilsolver.r2pipe.cmdj("pdj 1")[0]["offset"]
-smt = esilsolver.smt # just z3 with some extras
 
 # initialize symbolic bytes of solution
 # and constrain them to be /[a-z ]/
-b = [smt.BitVec("b%d" % x, 8) for x in range(buf_len)]
+b = [z3.BitVec("b%d" % x, 8) for x in range(buf_len)]
 for x in b:
-    state.solver.add(smt.Or(smt.And(x >= 0x61, x <= 0x7a), x == 0x20))
+    state.solver.add(z3.Or(z3.And(x >= 0x61, x <= 0x7a), x == 0x20))
 
 # concat the bytes and write the BV to memory 
-code = smt.Concat(*b)
+code = z3.Concat(*b)
 state.memory[buf_addr] = code
 
 # success hook callback
-def success(instr, state):
-    cs = smt.BV2Bytes(state.evaluate(code))
+def success(state):
+    cs = z3.BV2Bytes(state.evaluate(code))
     # gives an answer with lots of spaces but it works
     print("CODE: '%s'" % cs.decode())
 

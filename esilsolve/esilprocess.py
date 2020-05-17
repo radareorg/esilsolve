@@ -1,5 +1,6 @@
 from .r2api import R2API
-from . import solver
+#from . import solver
+import z3
 from . import esilops
 import json
 from .esilclasses import * 
@@ -123,7 +124,7 @@ class ESILProcess:
             state.memory.concrete_addrs = []
 
         pc = state.registers["PC"]
-        if solver.is_bv_value(pc):
+        if z3.is_bv_value(pc):
             new_pc = pc.as_long()
 
             if state.target != None:
@@ -139,7 +140,7 @@ class ESILProcess:
             if self.debug:
                 print("symbolic pc: %s" % str(pc))
 
-            possible_pcs = solver.EvalMax(state.solver, pc)
+            possible_pcs = state.eval_max(pc)
             pc_count = len(possible_pcs)
 
             for possible_pc in possible_pcs:
@@ -176,7 +177,7 @@ class ESILProcess:
                 state.stack = temp_stack1[:]
 
             elif word.is_else():
-                state.condition = solver.Not(state.condition)
+                state.condition = z3.Not(state.condition)
                 exec_type = ELSE
                 temp_stack2 = state.stack
                 state.stack = temp_stack1[:]
@@ -192,8 +193,8 @@ class ESILProcess:
                 while len(state.stack) > 0 and len(new_temp) > 0:
                     else_val = esilops.pop_value(new_temp, state)
                     if_val = esilops.pop_value(state.stack, state)
-                    condval = solver.If(state.condition, if_val, else_val)
-                    new_stack.append(solver.simplify(condval))
+                    condval = z3.If(state.condition, if_val, else_val)
+                    new_stack.append(z3.simplify(condval))
 
                 state.condition = None
                 exec_type = UNCON
@@ -214,10 +215,10 @@ class ESILProcess:
             print("condition val: %s" % val)
 
         zero = 0
-        if solver.is_bv(val):
-            zero = solver.BitVecVal(0, val.size())
+        if z3.is_bv(val):
+            zero = z3.BitVecVal(0, val.size())
 
-        return solver.simplify(val != zero)
+        return z3.simplify(val != zero)
 
     def trace_registers(self, state):
         for regname in state.registers._registers:
@@ -226,7 +227,7 @@ class ESILProcess:
             if register["type_str"] in ["gpr", "flg"]:
                 emureg = self.r2api.get_reg_value(register["name"])
                 try:
-                    reg_value = solver.simplify(state.registers[regname])
+                    reg_value = z3.simplify(state.registers[regname])
                     #print(reg_value)
                     if reg_value.as_long() != emureg:
                         print("%s: %s , %s" % (register["name"], reg_value, emureg))

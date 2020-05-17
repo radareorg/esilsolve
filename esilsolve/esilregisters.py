@@ -1,9 +1,9 @@
 
 from .esilclasses import *
-from . import solver
+#from . import solver
+import z3
 
-
-class ESILRegisters(dict):
+class ESILRegisters:
     def __init__(self, reg_array, aliases={}, sym=False):
         self.reg_info = reg_array
         self._registers = {}
@@ -46,9 +46,9 @@ class ESILRegisters(dict):
 
                 if self.pure_symbolic and reg["name"] != self.aliases["PC"]["reg"] and reg["type_str"] != "flg":
                     reg.pop("value")
-                    reg_value["bv"] = solver.BitVec(reg["name"], size)
+                    reg_value["bv"] = z3.BitVec(reg["name"], size)
                 else:
-                    reg_value["bv"] = solver.BitVecVal(reg.pop("value"), size)
+                    reg_value["bv"] = z3.BitVecVal(reg.pop("value"), size)
 
                 reg_value["bounds"] = key
                 self.offset_dictionary[key] = reg_value
@@ -58,10 +58,10 @@ class ESILRegisters(dict):
         else:
             reg_value = {"type": reg["type"], "size": size, "start": start, "end": end}
             if "value" in reg and (not self.pure_symbolic or reg["name"] == self.aliases["PC"]["reg"] or reg["type_str"] == "flg"):
-                reg_value["bv"] = solver.BitVecVal(reg.pop("value"), size)
+                reg_value["bv"] = z3.BitVecVal(reg.pop("value"), size)
             else:
                 reg.pop("value")
-                reg_value["bv"] = solver.BitVec(reg["name"], size) 
+                reg_value["bv"] = z3.BitVec(reg["name"], size) 
 
             reg_value["bounds"] = key
             self.offset_dictionary[key] = reg_value
@@ -108,7 +108,7 @@ class ESILRegisters(dict):
         else:
             low = register["start"] - reg_value["start"]
             high = low + register["size"]
-            reg = solver.Extract(high-1, low, reg_value["bv"])
+            reg = z3.Extract(high-1, low, reg_value["bv"])
             return reg
 
     def __setitem__(self, key, val):
@@ -120,12 +120,11 @@ class ESILRegisters(dict):
             key = self.aliases[key]["reg"]
 
         register = self._registers[key]
-
         reg_value = self.get_register_from_bounds(register)
 
-        zero = solver.BitVecVal(0, reg_value["size"])
+        zero = z3.BitVecVal(0, reg_value["size"])
         new_reg = self.set_register_bits(register, reg_value, zero, val)
-        reg_value["bv"] = solver.simplify(new_reg)
+        reg_value["bv"] = z3.simplify(new_reg)
 
     def weak_set(self, key, val):
         
@@ -140,22 +139,22 @@ class ESILRegisters(dict):
         # this gets the full register bv not the subreg bv
         reg_value = self.get_register_from_bounds(register)
         new_reg = self.set_register_bits(register, reg_value, reg_value["bv"], val)
-        reg_value["bv"] = solver.simplify(new_reg)
+        reg_value["bv"] = z3.simplify(new_reg)
 
     def val_to_register_bv(self, reg, val):
         new_val = val
 
         if type(val) == int:
-            new_val = solver.BitVecVal(val, reg["size"])
+            new_val = z3.BitVecVal(val, reg["size"])
 
-        elif solver.is_int(val):
-            new_val = solver.Int2BV(val, reg["size"])
+        elif z3.is_int(val):
+            new_val = z3.Int2BV(val, reg["size"])
 
-        elif solver.is_bv(val):
+        elif z3.is_bv(val):
             if val.size() > reg["size"]:
-                new_val = solver.Extract(reg["size"]-1, 0, val)
+                new_val = z3.Extract(reg["size"]-1, 0, val)
             elif val.size() < reg["size"]:
-                new_val = solver.ZeroExt(reg["size"]-val.size(), val)
+                new_val = z3.ZeroExt(reg["size"]-val.size(), val)
             else:
                 new_reg = val
 
@@ -171,17 +170,17 @@ class ESILRegisters(dict):
         bvs = []
 
         if high != reg_value["size"]:
-            upper = solver.Extract(reg_value["size"]-1, high, bv)
+            upper = z3.Extract(reg_value["size"]-1, high, bv)
             bvs.append(upper)
 
         bvs.append(self.val_to_register_bv(register, val))
         
         if low != 0:
-            lower = solver.Extract(low-1, 0, bv)
+            lower = z3.Extract(low-1, 0, bv)
             bvs.append(lower)
 
         if len(bvs) > 1:
-            new_reg = solver.Concat(bvs)
+            new_reg = z3.Concat(bvs)
         else:
             new_reg = bvs[0]
 

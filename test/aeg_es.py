@@ -4,7 +4,7 @@
 # so thats cool
 
 from esilsolve import ESILSolver
-import esilsolve.solver as solver
+import z3
 
 from subprocess import check_output
 import time
@@ -26,25 +26,26 @@ def esilsolve_execution(targets):
 
     buf_addr = targets["buf_addr"]
     buf_len = 48
-    b = [solver.BitVec("b%d" % x, 8) for x in range(buf_len)]
-    buf = solver.Concat(*b)
+    b = [z3.BitVec("b%d" % x, 8) for x in range(buf_len)]
+    buf = z3.Concat(*b)
 
     state.memory[buf_addr] = buf
 
-    def constrain_jump(instr, newstate):
+    def constrain_jump(newstate):
         # never take jumps for failed solutions
-        newstate.solver.add(newstate.registers["zf"] == 1) 
+        newstate.constrain(newstate.registers["zf"] == 1) 
 
-    for jne_addr in targets["jnes"]:
-        esilsolver.register_hook(jne_addr, constrain_jump)
+    #for jne_addr in targets["jnes"]:
+    #    esilsolver.register_hook(jne_addr, constrain_jump)
 
-    final = esilsolver.run(targets["goal"], avoid=[targets["check_start"]+39])
+    avoid_addr = targets["check_start"]+39
+    final = esilsolver.run(targets["goal"], avoid=[avoid_addr])
     
-    if final.solver.check() == solver.sat:
+    if final.solver.check() == z3.sat:
         end = time.time()
         log.info("EXEC TIME: %f" % (end-start))
 
-        return list(solver.BV2Bytes(final.evaluate(buf)))
+        return list(final.evaluate_buffer(buf))
     else:
         return []
 
@@ -116,7 +117,7 @@ def download_program(f):
     #f.close()
 
 def parse_disassembly():
-    r2p.cmd("aa")
+    r2p.cmd("aaa")
     main_instrs = r2p.cmdj("s main; pdfj")
 
     r2xors = []
@@ -134,7 +135,7 @@ def parse_disassembly():
             r2buf = int(instr["disasm"].split("[")[1][:-1], 16)
 
     r2jnes = [x["addr"] for x in r2p.cmdj("/amj jne")]
-    r2goal = r2p.cmdj("pdj 1 @ sym.imp.memcpy")[0]["offset"]
+    r2goal = r2p.cmdj("axtj sym.imp.memcpy")[0]["from"]
     r2mprotect = r2p.cmdj("pdj 1 @ sym.imp.mprotect")[0]["offset"]
     r2movs = [x["addr"] for x in r2p.cmdj("/amj movzx edx, byte") if "- 4" in x["opstr"]]
 

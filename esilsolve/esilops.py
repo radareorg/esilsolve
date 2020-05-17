@@ -1,10 +1,11 @@
 from .esilclasses import *
 from .esilregisters import *
-from . import solver
+#from . import solver
+import z3
 
 SIZE = 64
-ONE = solver.BitVecVal(1, SIZE)
-ZERO = solver.BitVecVal(0, SIZE)
+ONE = z3.BitVecVal(1, SIZE)
+ZERO = z3.BitVecVal(0, SIZE)
 
 def pop_value(stack, state):
     val = stack.pop()
@@ -19,32 +20,32 @@ def get_value(val, state):
         return prepare(val)
 
 def prepare(val):
-    if solver.is_bv(val):
+    if z3.is_bv(val):
         #print(val)
         szdiff = SIZE-val.size()
         #print(szdiff, val.size())
         if szdiff > 0:
-            return solver.ZeroExt(szdiff, val)
+            return z3.ZeroExt(szdiff, val)
         else:
             return val
-    elif solver.is_int(val):
-        return solver.Int2BV(val, SIZE)
+    elif z3.is_int(val):
+        return z3.Int2BV(val, SIZE)
     else:
-        return solver.BitVecVal(val, SIZE)
+        return z3.BitVecVal(val, SIZE)
 
 def pop_int_value(stack, state):
     val = get_value(stack.pop(), state)
     
-    if solver.is_bv(val):
-        return solver.BV2Int(val)
+    if z3.is_bv(val):
+        return z3.BV2Int(val)
     else:
         return val
 
 def pop_ext_value(stack, state):
     val = get_value(stack.pop(), state)
     
-    if solver.is_bv(val):
-        tmp = solver.Concat(solver.BitVecVal(0, val.size()), val)
+    if z3.is_bv(val):
+        tmp = z3.Concat(z3.BitVecVal(0, val.size()), val)
         return tmp
     else:
         return val
@@ -120,19 +121,19 @@ def do_LRS(op, stack, state):
     arg1 = pop_value(stack, state)
     arg2 = pop_value(stack, state)
 
-    stack.append(solver.LShR(arg1, arg2))
+    stack.append(z3.LShR(arg1, arg2))
 
 def do_LR(op, stack, state):
     arg1 = pop_value(stack, state)
     arg2 = pop_value(stack, state)
 
-    stack.append(solver.RotateLeft(arg1, arg2))
+    stack.append(z3.RotateLeft(arg1, arg2))
 
 def do_RR(op, stack, state):
     arg1 = pop_value(stack, state)
     arg2 = pop_value(stack, state)
 
-    stack.append(solver.RotateRight(arg1, arg2))
+    stack.append(z3.RotateRight(arg1, arg2))
 
 def do_AND(op, stack, state):
     arg1 = pop_value(stack, state)
@@ -175,18 +176,18 @@ def do_DIV(op, stack, state):
     arg1 = pop_value(stack, state)
     arg2 = pop_value(stack, state)
 
-    stack.append(solver.If(arg1 == 0, 0, arg1/arg2))
+    stack.append(z3.If(arg1 == 0, 0, arg1/arg2))
 
 def do_MOD(op, stack, state):
     arg1 = pop_value(stack, state)
     arg2 = pop_value(stack, state)
 
-    stack.append(solver.URem(arg1, arg2))
+    stack.append(z3.URem(arg1, arg2))
 
 def do_NOT(op, stack, state):
     arg1 = pop_value(stack, state)
     #print(~arg1)
-    stack.append(solver.If(arg1 == 0, ONE, ZERO))
+    stack.append(z3.If(arg1 == 0, ONE, ZERO))
 
 def do_INC(op, stack, state):
     arg1 = pop_value(stack, state)
@@ -202,7 +203,7 @@ def do_EQU(op, stack, state):
     tmp = get_value(reg, state)
 
     if state.condition != None:
-        val = solver.If(state.condition, val, tmp)
+        val = z3.If(state.condition, val, tmp)
 
     #setRegisterValue(reg, val, state)
     state.registers[reg] = val
@@ -219,7 +220,7 @@ def do_WEQ(op, stack, state):
     tmp = prepare(state.registers[reg])
 
     if state.condition != None:
-        val = solver.If(state.condition, val, tmp)
+        val = z3.If(state.condition, val, tmp)
 
     #setRegisterValue(reg, val, state)
     state.registers.weak_set(reg, val)
@@ -279,7 +280,7 @@ def do_POKE(op, stack, state):
 
     if state.condition != None:
         tmp = state.memory.read_bv(addr, length)
-        data = solver.If(state.condition, data, tmp)
+        data = z3.If(state.condition, data, tmp)
 
     state.memory.write_bv(addr, data, length)
     state.esil["old"] = addr
@@ -308,7 +309,7 @@ def do_OPPOKE(op, stack, state):
 
     if state.condition != None:
         tmp = state.memory.read_bv(addr, length)
-        data = solver.If(state.condition, data, tmp)
+        data = z3.If(state.condition, data, tmp)
 
     state.memory.write_bv(addr, data, length)
     state.esil["old"] = addr
@@ -322,8 +323,8 @@ def do_NOP(op, stack, state):
 def genmask(bits):
     
     if type(bits) != int:
-        bits = solver.simplify(bits)
-        if solver.is_bv(bits):
+        bits = z3.simplify(bits)
+        if z3.is_bv(bits):
             bits = bits.as_long()
 
     m = (2 << 63) - 1
@@ -343,25 +344,25 @@ def lastsz(state):
 # these are essentially taken from esil.c
 def do_ZF(op, stack, state):
     eq = ((state.esil["cur"] & genmask(lastsz(state)-1)) == ZERO) # 
-    stack.append(solver.If(eq, ONE, ZERO))
+    stack.append(z3.If(eq, ONE, ZERO))
     
 def do_CF(op, stack, state):
     bits = pop_value(stack, state)
     mask = genmask(bits & 0x3f)
     old = state.esil["old"]
     cur = state.esil["cur"]
-    cf = solver.ULT((cur & mask), (old & mask))
-    stack.append(solver.If(cf, ONE, ZERO))
+    cf = z3.ULT((cur & mask), (old & mask))
+    stack.append(z3.If(cf, ONE, ZERO))
 
 def do_B(op, stack, state):
     bits = pop_value(stack, state)
     mask = genmask(bits & 0x3f)
     old = state.esil["old"]
     cur = state.esil["cur"]
-    bf = solver.ULT((old & mask), (cur & mask))
+    bf = z3.ULT((old & mask), (cur & mask))
 
-    #print(bits, mask, solver.simplify(bf))
-    stack.append(solver.If(bf, ONE, ZERO))
+    #print(bits, mask, z3.simplify(bf))
+    stack.append(z3.If(bf, ONE, ZERO))
 
 '''
 	// Set if the number of set bits in the least significant _byte_ is a multiple of 2.
@@ -374,60 +375,60 @@ def do_B(op, stack, state):
 	return r_anal_esil_pushnum (esil, !((((lsb * c1) & c2) % c3) & 1));
 '''
 def do_P(op, stack, state):
-    c1 = solver.BitVecVal(0x0101010101010101, SIZE)
-    c2 = solver.BitVecVal(0x8040201008040201, SIZE)
-    c3 = solver.BitVecVal(0x1FF, SIZE)
+    c1 = z3.BitVecVal(0x0101010101010101, SIZE)
+    c2 = z3.BitVecVal(0x8040201008040201, SIZE)
+    c3 = z3.BitVecVal(0x1FF, SIZE)
 
     cur = state.esil["cur"]
 
     if type(cur) == int:
-        cur = solver.BitVecVal(cur, SIZE)
+        cur = z3.BitVecVal(cur, SIZE)
         sz = SIZE
     else:
         sz = cur.size()
         if sz < SIZE:
-            cur = solver.ZeroExt(SIZE-sz, cur)
+            cur = z3.ZeroExt(SIZE-sz, cur)
 
-    lsb = cur & solver.BitVecVal(0xff, SIZE)
+    lsb = cur & z3.BitVecVal(0xff, SIZE)
     #pf = (((((lsb * c1) & c2) % c3) & ONE) != 1)
-    pf = ((solver.URem(((lsb * c1) & c2), c3) & ONE) != ONE)
-    stack.append(solver.If(pf, ONE, ZERO))
+    pf = ((z3.URem(((lsb * c1) & c2), c3) & ONE) != ONE)
+    stack.append(z3.If(pf, ONE, ZERO))
 
 def do_O(op, stack, state):
     bit = pop_value(stack, state)
     old = state.esil["old"]
     cur = state.esil["cur"]
     m = [genmask (bit & 0x3f), genmask ((bit + 0x3f) & 0x3f)]
-    c_in = solver.If(solver.ULT((cur & m[0]), (old & m[0])), ONE, ZERO)
-    c_out = solver.If(solver.ULT((cur & m[1]), (old & m[1])), ONE, ZERO)
-    #print(solver.simplify(c_in))
-    #print(solver.simplify(c_out))
+    c_in = z3.If(z3.ULT((cur & m[0]), (old & m[0])), ONE, ZERO)
+    c_out = z3.If(z3.ULT((cur & m[1]), (old & m[1])), ONE, ZERO)
+    #print(z3.simplify(c_in))
+    #print(z3.simplify(c_out))
     of = ((c_in ^ c_out) == 1)
 
-    stack.append(solver.If(of, ONE, ZERO))
+    stack.append(z3.If(of, ONE, ZERO))
 
 def do_SO(op, stack, state):
     bit = pop_value(stack, state)
     old = state.esil["old"]
     cur = state.esil["cur"]
     m = [genmask (bit & 0x3f), genmask ((bit + 0x3f) & 0x3f)]
-    c_0 = solver.If(((old-cur) & m[0]) == (1<<bit), ONE, ZERO)
-    c_in = solver.If(solver.ULT((cur & m[0]), (old & m[0])), ONE, ZERO)
-    c_out = solver.If(solver.ULT((cur & m[1]), (old & m[1])), ONE, ZERO)
-    #print(solver.simplify(c_in))
-    #print(solver.simplify(c_out))
+    c_0 = z3.If(((old-cur) & m[0]) == (1<<bit), ONE, ZERO)
+    c_in = z3.If(z3.ULT((cur & m[0]), (old & m[0])), ONE, ZERO)
+    c_out = z3.If(z3.ULT((cur & m[1]), (old & m[1])), ONE, ZERO)
+    #print(z3.simplify(c_in))
+    #print(z3.simplify(c_out))
     of = ((c_0 ^ c_in) ^ c_out == 1)
 
-    stack.append(solver.If(of, ONE, ZERO))
+    stack.append(z3.If(of, ONE, ZERO))
 
 def do_DS(op, stack, state):
     ds = ((state.esil["cur"] >> (lastsz(state) - 1)) & ONE) == ONE
-    stack.append(solver.If(ds, ONE, ZERO))
+    stack.append(z3.If(ds, ONE, ZERO))
 
 def do_S(op, stack, state):
     size = pop_value(stack, state)
     s = ((state.esil["cur"] >> size) & ONE) == ONE
-    stack.append(solver.If(s, ONE, ZERO))
+    stack.append(z3.If(s, ONE, ZERO))
 
 # jump target??
 def do_JT(op, stack, state):
