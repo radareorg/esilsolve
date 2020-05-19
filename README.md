@@ -53,7 +53,7 @@ state.constrain_bytes(b, "[a-z ]")
 
 # concat the bytes and write them to memory 
 code = z3.Concat(*b)
-state.memory[buf_addr] = b
+state.memory[buf_addr] = code
 
 # success hook callback
 def success(state):

@@ -190,8 +190,8 @@ class ESILProcess:
                     new_temp = temp_stack2
 
                 while len(state.stack) > 0 and len(new_temp) > 0:
-                    else_val = esilops.pop_value(new_temp, state)
-                    if_val = esilops.pop_value(state.stack, state)
+                    else_val, = esilops.pop_values(new_temp, state)
+                    if_val, = esilops.pop_values(state.stack, state)
                     condval = z3.If(state.condition, if_val, else_val)
                     new_stack.append(z3.simplify(condval))
 
@@ -209,7 +209,7 @@ class ESILProcess:
 
         
     def do_if(self, word, state):
-        val = esilops.pop_value(state.stack, state)
+        val, = esilops.pop_values(state.stack, state)
         if self.debug:
             print("condition val: %s" % val)
 
