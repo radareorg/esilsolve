@@ -2,7 +2,6 @@ from .r2api import R2API
 import z3
 from .esilclasses import * 
 from .esilstate import ESILState, ESILStateManager
-from .esilprocess import ESILProcess
 
 import logging
 

@@ -1,5 +1,4 @@
 from .esilclasses import *
-from .esilregisters import *
 import z3
 
 SIZE = 64
@@ -130,7 +129,6 @@ def do_MOD(op, stack, state):
 
 def do_NOT(op, stack, state):
     arg1, = pop_values(stack, state)
-    #print(~arg1)
     stack.append(z3.If(arg1 == 0, ONE, ZERO))
 
 def do_INC(op, stack, state):
@@ -149,14 +147,11 @@ def do_EQU(op, stack, state):
     if state.condition != None:
         val = z3.If(state.condition, val, tmp)
 
-    #setRegisterValue(reg, val, state)
     state.registers[reg] = val
-    #print(reg, val)
     state.esil["old"] = tmp
     state.esil["cur"] = val
 
     state.esil["lastsz"] = state.registers[reg].size()
-
 
 def do_WEQ(op, stack, state):
     reg = stack.pop()
@@ -166,14 +161,12 @@ def do_WEQ(op, stack, state):
     if state.condition != None:
         val = z3.If(state.condition, val, tmp)
 
-    #setRegisterValue(reg, val, state)
     state.registers.weak_set(reg, val)
 
 def do_OPEQ(op, stack, state):
     reg = stack.pop()
     regval = state.registers[reg]
     newop = op.split("=")[0]
-    #val = pop_value(stack, state)
 
     stack.append(regval)
     opcodes[newop](newop, stack, state)
@@ -281,7 +274,7 @@ def lastsz(state):
         return state.esil["lastsz"]
     except:
         #print(state.info)
-        return state.info["info"]["bits"]
+        return state.bits
 
 # flag op functions
 # these are essentially taken from esil.c
@@ -382,7 +375,7 @@ def do_JS(op, stack, state):
 
 # da fuq
 def do_R(op, stack, state):
-    stack.append(state.info["bits"] >> 3)
+    stack.append(state.bits >> 3)
 
 opcodes = {
     "TRAP": do_TRAP,

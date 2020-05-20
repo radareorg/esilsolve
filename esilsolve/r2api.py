@@ -11,20 +11,21 @@ class R2API:
         self.instruction_cache = {}
         self.cache_num = 64
 
+        self.register_info = None
         self.get_register_info()
         self.info = None
 
     def get_info(self):
-        if self.info != None:
-            return self.info
-        else:
+        if self.info == None:
             self.info = self.r2p.cmdj("iaj")
-            return self.info
+
+        return self.info
 
     def get_register_info(self):
-        self.register_info = self.r2p.cmdj("aerpj")
-        
-        self.all_regs = [r["name"] for r in self.register_info["reg_info"]] 
+        if self.register_info == None:
+            self.register_info = self.r2p.cmdj("aerpj")
+            self.all_regs = [r["name"] for r in self.register_info["reg_info"]] 
+
         return self.register_info
 
     def get_reg_value(self, reg):

@@ -38,8 +38,10 @@ class ESILState:
 
         if "info" in self.info:
             self.bits = self.info["info"]["bits"]
+            self.endian = self.info["info"]["endian"]
         else:
             self.bits = 64
+            self.endian = "little"
 
         if init:
             self.proc = ESILProcess(r2api, debug=debug, trace=trace)
@@ -154,7 +156,6 @@ class ESILState:
             raise ESILUnsatException
 
         value = model.eval(val, True)
-
         return value
 
     def eval_max(self, sym, n=16):
@@ -171,7 +172,6 @@ class ESILState:
             if satisfiable == z3.sat:
                 m = self.solver.model()
                 solutions.append(m.eval(sym, model_completion=True))
-
             else:
                 self.solver.pop()
                 break
@@ -203,8 +203,9 @@ class ESILState:
         clone.stack = self.stack[:]
         clone.constrain(*self.solver.assertions())
 
-        clone.proc = self.proc #.clone()
+        clone.proc = self.proc #.clone() no need to clone this it has no state
         clone.steps = self.steps
+        clone.distance = self.distance
         clone.registers = self.registers.clone()
         clone.memory = self.memory.clone()
         clone.memory.solver = clone.solver
@@ -245,10 +246,8 @@ class ESILStateManager:
         if z3.is_bv_value(pc):
             if pc.as_long() in self.avoid:
                 self.inactive.add(state)
-
             else:
                 self.active.add(state)
-
         elif state.is_sat():
             self.active.add(state)
 

@@ -193,14 +193,11 @@ class ESILRegisters:
         self._refs["count"] += 1
         clone._refs = self._refs
         clone._registers = self._registers
-        #clone._registers = deepcopy(self._registers)
         clone.offset_dictionary = self.offset_dictionary
 
         return clone
 
     def finish_clone(self):
-        #self._registers = deepcopy(self._registers)
-        #self.offset_dictionary = deepcopy(self.offset_dictionary)
         self.offset_dictionary = self.offset_dictionary.copy()
         for x in self.offset_dictionary:
             self.offset_dictionary[x] = self.offset_dictionary[x].copy()
