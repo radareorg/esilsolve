@@ -2,7 +2,7 @@ from esilsolve import ESILSolver
 
 # start the ESILSolver instance
 # and init state with r2 symbol for check function
-esilsolver = ESILSolver("tests/multibranch", debug=False)
+esilsolver = ESILSolver("test/tests/multibranch", debug=False)
 state = esilsolver.call_state("sym.check")
 
 # make rdi (arg1) symbolic

@@ -1,7 +1,7 @@
 from esilsolve import ESILSolver
 import angr
 import claripy
-import solver
+import z3
 import r2pipe
 from binascii import hexlify, unhexlify
 import re
@@ -14,6 +14,11 @@ mem_pattern = re.compile('^mem_([a-f0-9]+)_\\d+_(\\d+)$')
 arch_dict = {
     64: {"arm": "aarch64", "x86": "amd64"}
 }
+
+# the whole idea of this script is in jeopardy
+# since the flags do not seem to get set properly by angr
+# it could be because of the "lazy" setting but i dont know
+# the results don't seem consistent but esil is not wrong
 class ESILCheck:
     def __init__(self, arch, bits=64):
         self.arch = arch
@@ -66,6 +71,8 @@ class ESILCheck:
             try:
                 regv = getattr(successor.regs, regn)
                 esregv = essuccessor.registers[regn]
+                convregv = self.converter.convert(regv)
+                #basesolver.add(convregv > 0)
                 print("[+]\tangr %s: %s" % (regn, trunc(regv)),)
                 print("[+]\t ES  %s: %s" % (regn, trunc(esregv)),)
             except Exception as e:
@@ -78,11 +85,13 @@ class ESILCheck:
 
             regn = insn.reg_name(reg)
             try:
+            #if True:
                 regv = getattr(successor.regs, regn)
 
                 esregv = essuccessor.registers[regn]
                 regv = getattr(successor.regs, regn)
                 convregv = self.converter.convert(regv)
+                #basesolver.add(convregv > 0)
                 basesolver.add(esregv != convregv)
 
                 print("[+]\tangr %s: %s" % (regn, trunc(regv)),)
@@ -91,16 +100,18 @@ class ESILCheck:
                 self.equate_regs(basesolver, convregv, esstate, essuccessor, equated)
 
                 #if "flags" in regn:
-                    #basesolver.add(convregv & 0x10 == 0)
-                    #basesolver.add(convregv & 0x800 == 0)
-                    #basesolver.add(esregv & 0x800 == 0)
+
+                #    basesolver.add(convregv & 0x4 == 0)
+                #    basesolver.add(convregv & 0x10 == 0)
+                #    basesolver.add(esregv & 0x10 == 0)
 
             except Exception as e:
                 print("[!] error with write reg %s: %s" % (regn, str(e)))
+                continue
 
             #basesolver.add(essuccessor.registers["af"] == 1)
             satisfiable = basesolver.check()
-            if satisfiable == solver.sat:
+            if satisfiable == z3.sat:
                 model = basesolver.model()
                 print("[!]\tunequal model: %s" % str(model).replace("\n", ""))
                 print("[*]\t\tangr %s: %x" % (regn, model.eval(convregv).as_long()))
@@ -168,20 +179,22 @@ def trunc(s, maxlen=64):
 
 if __name__ == "__main__":
 
-    esilcheck = ESILCheck("x86", bits=32)
+    esilcheck = ESILCheck("x86", bits=64)
     #esilcheck.check("or eax, ebx")
-    #esilcheck.check("add eax, ebx")
-    #esilcheck.check("sub eax, ebx") # error in angr when ebx=0x80000000
-    esilcheck.check("imul ecx") # edx not equivalent
-    quit()
+    esilcheck.check(code=b"\x48\x63\xff")
+    esilcheck.check("cmp eax, ebx") 
+    esilcheck.check("imul ebx") # edx not equivalent
+    exit()
 
     esilcheck = ESILCheck("arm", bits=32)
     esilcheck.check("add r0, r0, r1")
-    esilcheck.check("sub r0, r0, r1")
+    esilcheck.check("cmp r0, r1")
 
     esilcheck = ESILCheck("arm", bits=64)
     esilcheck.check("add x0, x0, x1")
-    esilcheck.check("sub x0, x0, x1")
+    esilcheck.check("cmp x0, x1")
+
+    exit()
 
     esilcheck = ESILCheck("amd64", bits=64)
     esilcheck.check("add rax, rbx")
@@ -189,4 +202,4 @@ if __name__ == "__main__":
 
     esilcheck = ESILCheck("x86", bits=32)
     esilcheck.check("add eax, [ebx]")
-    esilcheck.check("sub eax, [ebx]") # error in angr when [ebx]=0x80000000
+    esilcheck.check("sub eax, [ebx]") 

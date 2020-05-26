@@ -4,6 +4,7 @@ import z3
 SIZE = 64
 ONE = z3.BitVecVal(1, SIZE)
 ZERO = z3.BitVecVal(0, SIZE)
+NEGONE = z3.BitVecVal(-1, SIZE)
 
 def pop_values(stack, state, num=1):
     return [get_value(stack.pop(), state) for i in range(num)]
@@ -47,9 +48,9 @@ def do_PCADDR(op, stack, state):
 
 def do_CMP(op, stack, state):
     arg1, arg2 = pop_values(stack, state, 2)
-    stack.append(arg1-arg2)
+    #stack.append(arg1-arg2)
     state.esil["old"] = arg1
-    state.esil["cur"] = stack[-1]
+    state.esil["cur"] = arg1-arg2
 
 def do_LT(op, stack, state):
     arg1, arg2 = pop_values(stack, state, 2)
@@ -121,7 +122,12 @@ def do_MUL(op, stack, state):
 
 def do_DIV(op, stack, state):
     arg1, arg2 = pop_values(stack, state, 2)
-    stack.append(z3.If(arg1 == 0, 0, arg1/arg2))
+    stack.append(z3.If(arg2 == ZERO, NEGONE, z3.UDiv(arg1,arg2)))
+
+def do_SIGN(op, stack, state):
+    arg1, arg2 = pop_values(stack, state, 2)
+    size = arg1.as_long()
+    stack.append(z3.SignExt(SIZE-size, z3.Extract(size-1, 0, arg2)))
 
 def do_MOD(op, stack, state):
     arg1, arg2 = pop_values(stack, state, 2)
@@ -129,7 +135,7 @@ def do_MOD(op, stack, state):
 
 def do_NOT(op, stack, state):
     arg1, = pop_values(stack, state)
-    stack.append(z3.If(arg1 == 0, ONE, ZERO))
+    stack.append(z3.If(arg1 == ZERO, ONE, ZERO))
 
 def do_INC(op, stack, state):
     arg1, = pop_values(stack, state)
@@ -391,6 +397,7 @@ opcodes = {
     ">>>>": do_RS,
     "<<<": do_LR,
     ">>>": do_RR,
+    "~": do_SIGN,
     "&": do_AND,
     "|": do_OR,
     "^": do_XOR,

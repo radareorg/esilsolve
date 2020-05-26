@@ -35,6 +35,7 @@ class ESILState:
         # steps executed and distance from goal
         self.steps = 0
         self.distance = 0xffffffff
+        self.target = None
 
         if "info" in self.info:
             self.bits = self.info["info"]["bits"]
