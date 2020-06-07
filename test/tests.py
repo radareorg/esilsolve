@@ -37,7 +37,7 @@ def test_flg():
     #print(state.popAndEval())
 
 def test_run():
-    r2p = r2pipe.open("tests/simplish", flags=["-2"])
+    r2p = r2pipe.open("test/tests/simplish", flags=["-2"])
     r2p.cmd("s sym.check; aei; aeim; aer rdi=12605")
 
     esilsolver = ESILSolver(r2p, debug=False, trace=False)
@@ -95,7 +95,7 @@ def test_cond():
     print(state.registers["rax"])
 
 def test_multi():
-    r2p = r2pipe.open("tests/multibranch", flags=["-2"])
+    r2p = r2pipe.open("test/tests/multibranch", flags=["-2"])
     r2p.cmd("aa; s sym.check; aei; aeim; aer rdi=22021")
 
     esilsolver = ESILSolver(r2p, optimize=False, debug=False, trace=False)
@@ -122,7 +122,7 @@ def test_multi():
     print(m.eval(rdi))
 
 def test_multi_hook():
-    r2p = r2pipe.open("tests/multibranch", flags=["-2"])
+    r2p = r2pipe.open("test/tests/multibranch", flags=["-2"])
     r2p.cmd("s sym.check; aei; aeim; aer rdi=22021")
 
     esilsolver = ESILSolver(r2p, debug=False, trace=False)
@@ -143,7 +143,7 @@ def test_multi_hook():
     esilsolver.run(target=0x000006a1, avoid=[0x000006a8])
 
 def test_multi32():
-    r2p = r2pipe.open("tests/multi32", flags=["-2"])
+    r2p = r2pipe.open("test/tests/multi32", flags=["-2"])
     r2p.cmd("s sym.check; aei; aeim; wv 162517261 @ 0x00178004")
 
     esilsolver = ESILSolver(r2p, debug=False, trace=False)
@@ -168,6 +168,27 @@ def test_multi32():
     m = state.solver.model()
     print(m.eval(eax))
 
+def test_sim():
+    esilsolver = ESILSolver("test/tests/multibranch")
+    esilsolver.r2api.analyze()
+    state = esilsolver.call_state("main")
+    
+    argv = 0x100000
+    argv0 = 0x200000
+    state.registers["A0"] = 2
+    state.registers["A1"] = argv
+    state.memory[argv] = argv0
+    state.memory[argv0] = 0x00313233
+
+    def atoi_hook(state, args):
+        print(args[0])
+        print(state.memory[args[0]])
+
+        return 42
+
+    esilsolver.register_sim("sym.imp.atoi", atoi_hook)
+    state = esilsolver.run()
+    
 def test_arm():
     local = True
 
@@ -175,7 +196,7 @@ def test_arm():
     varaddr = 0x100000
     stackaddr = 0x200000
     if local:
-        r2p = r2pipe.open("ipa://tests/crackme-level0-symbols.ipa", flags=["-2"])
+        r2p = r2pipe.open("ipa://test/tests/crackme-level0-symbols.ipa", flags=["-2"])
         # w ewmfpkzbjowr hvb @ 0x100000
         r2p.cmd("s sym._validate; aei; aeim; aer x0 = 0x100000;")
         funcaddr = int(r2p.cmd("s"), 16)
@@ -195,7 +216,7 @@ def test_arm():
         state.constrain(z3.Or(z3.And(b[x] >= 0x61, b[x] <= 0x7a), b[x] == 0x20))
 
     code = z3.Concat(*b)
-    state.memory.write_bv(varaddr, code, 16)
+    state.memory[varaddr] = code
 
     def success(state):
         cs = state.evaluate_buffer(code)
@@ -215,5 +236,6 @@ if __name__ == "__main__":
     #test_multi()
     #test_multi_hook()
     #test_multi32()
-    test_arm()
+    #test_arm()
+    test_sim()
     #test_multi_addr()

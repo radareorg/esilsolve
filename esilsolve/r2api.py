@@ -57,6 +57,17 @@ class R2API:
 
         return result[:instrs]
 
+    def disass_function(self, addr=None):
+        cmd = "pdfj"
+        if addr != None:
+            cmd += " @ %d" % addr
+
+        result = self.r2p.cmdj(cmd)
+        for instr in result["ops"]:
+            self.instruction_cache[instr["offset"]] = instr
+
+        return result["ops"]
+
     def read(self, addr, length):
         return self.r2p.cmdj("xj %d @ %d" % (length, addr))
 
@@ -97,7 +108,11 @@ class R2API:
         self.r2p.cmd("aes")
 
     def function_info(self, func):
-        return self.r2p.cmdj("afij %s" % str(func))[0]
+        return self.r2p.cmdj("af %s; afij %s" % (str(func), str(func)))[0]
+
+    # get calling convention for sims
+    def calling_convention(self, func):
+        return self.r2p.cmdj("afcrj @ %s" % str(func))
 
     def get_address(self, func):
         return self.r2p.cmdj("pdj 1 @ %s" % str(func))[0]["offset"]

@@ -14,7 +14,6 @@ def get_value(val, state):
         register = state.registers[val]
         return prepare(register)
     else:
-        #state.esil["lastsz"] = SIZE
         return prepare(val)
 
 def prepare(val):
@@ -236,7 +235,7 @@ def do_PEEK(op, stack, state):
     data = state.memory.read_bv(addr, length)
     stack.append(data)
     state.esil["old"] = addr
-    state.esil["cur"] = stack[-1]
+    state.esil["cur"] = prepare(stack[-1])
     state.esil["lastsz"] = length*8
 
 def do_OPPOKE(op, stack, state):

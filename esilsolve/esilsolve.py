@@ -11,6 +11,7 @@ class ESILSolver:
         self.trace = trace
         self.states = []
         self.hooks = {}
+        self.sims = {}
         self.state_manager = None
         self.pure_symbolic = sym
 
@@ -44,6 +45,10 @@ class ESILSolver:
 
     def run(self, target=None, avoid=[]):
         self.stop = False
+
+        state = self.state_manager.next()
+        avoid = avoid[:] + self.get_rets(state)
+        self.state_manager.add(state)
         self.state_manager.avoid = avoid
 
         if type(target) == str:
@@ -54,9 +59,10 @@ class ESILSolver:
             if state == None:
                 return
 
-            state.target = target
             pc = state.registers["PC"].as_long() 
-            #instr = self.r2api.disass(pc)
+
+            state.target = target
+            instr = self.r2api.disass(pc)
             found = pc == target
             if found:
                 self.terminate()
@@ -64,6 +70,10 @@ class ESILSolver:
             if pc in self.hooks:
                 for hook in self.hooks[pc]:
                     hook(state)
+
+            if instr["type"] == "call":
+                if instr["jump"] in self.sims:
+                    self.call_sim(state, instr)
 
             if not self.stop:
                 new_states = state.step()
@@ -76,12 +86,43 @@ class ESILSolver:
     def terminate(self):
         self.stop = True
 
+    # get rets from initial state to stop at
+    def get_rets(self, state):
+        pc = state.registers["PC"].as_long() 
+        func = self.r2api.function_info(pc)
+        instrs = self.r2api.disass_function(pc)
+
+        rets = []
+        for instr in instrs:
+            if instr["type"] == "ret":
+                rets.append(instr["offset"])
+
+        return rets
+
     def register_hook(self, addr, func):
         if addr in self.hooks:
             self.hooks[addr].append(func)
         else:
             self.hooks[addr] = [func]
 
+    def register_sim(self, func, hook):
+        addr = self.r2api.get_address(func)
+        self.sims[addr] = hook
+
+    def call_sim(self, state, instr):
+        target = instr["jump"]
+        hook = self.sims[target]
+
+        cc = self.r2api.calling_convention(target)
+        args = []
+        if "args" in cc:
+            for arg in cc["args"]:
+                if arg in state.registers:
+                    args.append(state.registers[arg])
+
+        state.registers[cc["ret"]] = hook(state, args)
+        state.registers["PC"] = instr["fail"]
+        
     def call_state(self, function):
         # seek to function and init vm
         self.r2api.seek(function)

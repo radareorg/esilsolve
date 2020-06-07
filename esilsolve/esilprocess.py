@@ -99,7 +99,7 @@ class ESILProcess:
         # clone the original state if theres a peek
         # this is so terrible 
         og_state = None
-        if "[" in instr["esil"] and state.memory.multi_concretize:
+        if instr["refptr"] and state.memory.multi_concretize:
             og_state = state.clone()
 
         # old pc should never be anything other than a BitVecVal        
