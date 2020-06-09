@@ -31,6 +31,9 @@ class R2API:
     def get_reg_value(self, reg):
         return int(self.r2p.cmd("aer %s" % reg), 16)
 
+    def set_reg_value(self, reg, value):
+        self.r2p.cmd("aer %s=%d" % (reg, value))
+
     def get_gpr_values(self):
         return self.r2p.cmdj("aerj")
 
@@ -74,7 +77,10 @@ class R2API:
     def write(self, addr, value, length=None, fill="0"):
         val = value
         if type(value) == int:
-            return self.r2p.cmd("wv %d @ %d" % (value, addr))
+            if length == None:
+                length = int(self.info["info"]["bits"]/8)
+
+            return self.r2p.cmd("wv%d %d @ %d" % (length, value, addr))
 
         elif type(value) == bytes:
             val = binascii.hexlify(value).decode()
@@ -82,7 +88,9 @@ class R2API:
         if length != None:
             val = val.rjust(length, str(fill))
 
-        return self.r2p.cmd("wx %s @ %d" % (val, addr))
+        cmd = "wx %s @ %d" % (val, addr)
+        #print(cmd)
+        return self.r2p.cmd(cmd)
 
     # theres no arj all function to get all the regs as json so i made this
     # i should just make a pull request for r2

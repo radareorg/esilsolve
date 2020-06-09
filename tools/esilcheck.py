@@ -183,6 +183,7 @@ if __name__ == "__main__":
     #esilcheck.check("or eax, ebx")
     esilcheck.check(code=b"\x48\x63\xff")
     esilcheck.check("cmp eax, ebx") 
+    esilcheck.check("imul eax, edx") 
     esilcheck.check("imul ebx") # edx not equivalent
     exit()
 

@@ -207,7 +207,6 @@ class ESILProcess:
                     val = word.get_push_value()
                     state.stack.append(val)
 
-        
     def do_if(self, word, state):
         val, = esilops.pop_values(state.stack, state)
         if self.debug:

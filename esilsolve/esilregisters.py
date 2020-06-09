@@ -53,6 +53,7 @@ class ESILRegisters:
                 self.offset_dictionary[key] = reg_value
 
             reg["bounds"] = reg_value["bounds"]
+            reg["sub"] = True
 
         else:
             reg_value = {"type": reg["type"], "size": size, "start": start, "end": end}
@@ -66,6 +67,7 @@ class ESILRegisters:
             self.offset_dictionary[key] = reg_value
 
             reg["bounds"] = key
+            reg["sub"] = False
             
     def get_register_from_bounds(self, reg):
 

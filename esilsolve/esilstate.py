@@ -199,6 +199,26 @@ class ESILState:
         
         return False
 
+    # apply the ES state to the r2pipe ESIL VM
+    def apply(self):
+        # apply registers
+        for reg in self.registers._registers:
+            if not self.registers._registers[reg]["sub"]:
+                register = self.registers[reg]
+                value = self.evaluate(register)
+                self.constrain(register == value)
+                self.r2api.set_reg_value(reg, value.as_long())
+
+        # apply memory
+        for addr in self.memory._memory:
+            value_bv = self.evaluate(self.memory[addr])
+            self.constrain(self.memory[addr] == value_bv)
+
+            value = self.evaluate_buffer(self.memory[addr])
+            length = int(self.memory[addr].size()/8)
+
+            self.r2api.write(addr, value, length)
+
     def clone(self):
         clone = self.__class__(self.r2api, init=False, sym=self.pure_symbolic, debug=self.debug, trace=self.trace)
         clone.stack = self.stack[:]

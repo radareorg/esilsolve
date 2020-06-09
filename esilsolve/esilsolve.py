@@ -46,9 +46,11 @@ class ESILSolver:
     def run(self, target=None, avoid=[]):
         self.stop = False
 
-        state = self.state_manager.next()
-        avoid = avoid[:] + self.get_rets(state)
-        self.state_manager.add(state)
+        if avoid == [] and len(self.state_manager.avoid) == 0:
+            state = self.state_manager.next()
+            avoid = self.default_avoid(state)
+            self.state_manager.add(state)
+
         self.state_manager.avoid = avoid
 
         if type(target) == str:
@@ -87,7 +89,7 @@ class ESILSolver:
         self.stop = True
 
     # get rets from initial state to stop at
-    def get_rets(self, state):
+    def default_avoid(self, state):
         pc = state.registers["PC"].as_long() 
         func = self.r2api.function_info(pc)
         instrs = self.r2api.disass_function(pc)
@@ -121,6 +123,7 @@ class ESILSolver:
                     args.append(state.registers[arg])
 
         state.registers[cc["ret"]] = hook(state, args)
+        # fail contains next instr addr
         state.registers["PC"] = instr["fail"]
         
     def call_state(self, function):

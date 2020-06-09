@@ -53,25 +53,25 @@ def do_CMP(op, stack, state):
 
 def do_LT(op, stack, state):
     arg1, arg2 = pop_values(stack, state, 2)
-    stack.append(arg1<arg2)
+    stack.append(z3.If(z3.ULT(arg1, arg2), ONE, ZERO))
     state.esil["old"] = arg1
     state.esil["cur"] = stack[-1]
 
 def do_LTE(op, stack, state):
     arg1, arg2 = pop_values(stack, state, 2)
-    stack.append(arg1<=arg2)
+    stack.append(z3.If(z3.ULE(arg1, arg2), ONE, ZERO))
     state.esil["old"] = arg1
     state.esil["cur"] = stack[-1]
 
 def do_GT(op, stack, state):
     arg1, arg2 = pop_values(stack, state, 2)
-    stack.append(arg1>arg2)
+    stack.append(z3.If(z3.UGT(arg1, arg2), ONE, ZERO))
     state.esil["old"] = arg1
     state.esil["cur"] = stack[-1]
 
 def do_GTE(op, stack, state):
     arg1, arg2 = pop_values(stack, state, 2)
-    stack.append(arg1>=arg2)
+    stack.append(z3.If(z3.UGE(arg1, arg2), ONE, ZERO))
     state.esil["old"] = arg1
     state.esil["cur"] = stack[-1]
 

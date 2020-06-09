@@ -1,19 +1,35 @@
 import r2lang
 import esilsolve
 import r2pipe
-import solver 
+import z3
+import json
+import shlex
+import colorama
 
 class ESILSolvePlugin:
 
-    def __init__(self):
+    def __init__(self, r2p):
+        self.r2p = r2p
+        
         self.commands = {
+            # aesx - Analysis: Emulation / Symbolic eXecution
+            "aesx?": self.print_help,
             "aesxi": self.handle_init,
-            "aesxs": self.handle_sym,
+            "aesxs": self.handle_set_symbolic,
             "aesxc": self.handle_constrain,
+            "aesxx": self.handle_execute_constrain,
+            "aesxxc": self.handle_execute_constrain,
+            "aesxxe": self.handle_execute_constrain,
             "aesxr": self.handle_run,
+            "aesxra": self.handle_run,
             #"aesxm": self.handle_model,
             "aesxe": self.handle_eval,
-            "aesxd": self.handle_dump
+            "aesxej": self.handle_eval,
+            "aesxb": self.handle_eval_buffer,
+            "aesxbj": self.handle_eval_buffer,
+            "aesxd": self.handle_dump,
+            "aesxdj": self.handle_dump,
+            "aesxa": self.handle_apply
         }
 
         self.symbols = {}
@@ -25,121 +41,242 @@ class ESILSolvePlugin:
         cmd = args[0]
         self.commands[cmd](args)
 
-    def handle_init(self, args):
-        self.r2p = r2pipe.open()
-        self.r2p.cmd("aei; aeim")
-        self.esinstance = esilsolve.ESILSolver(self.r2p)
-        self.initialized = True
+    def print_help(self, args):
 
-    def handle_sym(self, args):
+        def print_help_lines(line):
+            usage = lines[0]
+            print("%s%s%s %s%s" % \
+                (colorama.Fore.YELLOW, usage[0], usage[1], usage[2], colorama.Style.RESET_ALL))
+            for line in lines[1:]:
+                print("| %s%s%-30s%s%s" % (
+                    line[0], 
+                    colorama.Fore.YELLOW, line[1], colorama.Style.RESET_ALL, 
+                    line[2]
+                ))
+
+
+        usage = ["Usage: aesx[iscxrebda]", "", "# Core plugin for ESILSolve"]
+
+        lines = [
+            usage,
+            ["aesxi", "", "Initialize the ESILSolve instance and VM"],
+            ["aesxs", " [reg|addr] [name] [length]", "Set symbolic value in register or memory"],
+            ["aesxc", " sym value", "Constrain symbol to be value, min, max, regex"],
+            ["aesxx", "[ec] expr value", "Execute ESIL expression and evaluate/constrain the result"],
+            ["aesxr", "[a] target [avoid x,y,z]", "Run symbolic execution until target address, avoiding x,y,z"],
+            ["aesxe", "[j] sym1 [sym2] [...]", "Evaluate symbol in current state"],
+            ["aesxb", "[j] sym1 [sym2] [...]", "Evaluate buffer in current state"],
+            ["aesxd", "[j] [reg1] [reg2] [...]", "Dump register values / ASTs"],
+            ["aesxa", "", "Apply the current state, setting registers and memory"]
+        ]
+
+        print_help_lines(lines)
+
+    def handle_init(self, args):
+        self.esinstance = esilsolve.ESILSolver(self.r2p)
+        self.esinstance.r2api.init_vm()
+        self.state = self.esinstance.init_state()
+        self.initialized = True
+        self.symbols = {}
+
+    def handle_apply(self, args):
         if not self.initialized:
             print("error: need to initialize first")
             return
 
-        s = 0
-        if len(args) > 2:
-            s = int(args[2])
+        self.state.apply()
 
-        reg = args[1]
+    def handle_set_symbolic(self, args):
+        if not self.initialized:
+            print("error: need to initialize first")
+            return
 
-        state = self.esinstance.states[s]
-        state.set_symbolic_register(reg)
+        set_val = args[1]
 
-        self.symbols[reg] = state.registers[reg]
+        length = 8
+        name = "%s" % set_val
+        if len(args) > 2 and not is_int(args[2]):
+            name = args[2]
+
+        elif len(args) > 2 and is_int(args[2]):
+            length = to_int(args[2])
+
+        if len(args) > 3:
+            length = to_int(args[3])
+
+
+        sym = z3.BitVec(name, length*8)
+        self.symbols[name] = sym
+
+        # set register
+        if not is_int(set_val):
+            if set_val in self.state.registers:
+                self.state.registers[set_val] = sym
+        # set memory
+        else:
+            self.state.memory[to_int(set_val)] = sym
 
     def handle_constrain(self, args):
         if not self.initialized:
             print("error: need to initialize first")
             return
 
-        s = 0
-        if len(args) > 3:
-            s = int(args[3])
-        state = self.esinstance.states[s]
+        sym = self.get_symbol(args[1])
+        con = args[2]
 
-        reg = args[1]
-
-        if args[2] == "min": 
-            state.solver.minimize(state.registers[reg])
-        elif args[2] == "max":
-            state.solver.maximize(state.registers[reg])
+        if con == "min": 
+            self.state.solver.minimize(sym)
+        elif con == "max":
+            self.state.solver.maximize(sym)
+        elif is_int(con):
+            val = to_int(con)
+            self.state.constrain(sym == val)
         else:
-            val = to_int(args[2])
-            state.constrain_register(reg, val)
+            self.state.constrain_bytes(sym, con)
+
+    def handle_execute_constrain(self, args):
+        if not self.initialized:
+            print("error: need to initialize first")
+            return
+
+        expr = args[1]
+        self.state.proc.parse_expression(expr, self.state)
+
+        if args[0][-1] == "c":
+            sym, = esilsolve.pop_values(self.state.stack, 1)
+
+            con = args[2]
+            if con == "min": 
+                self.state.solver.minimize(sym)
+            elif con == "max":
+                self.state.solver.maximize(sym)
+            elif is_int(con):
+                val = to_int(con)
+                self.state.constrain(sym == val)
+            else:
+                self.state.constrain_bytes(sym, con)
+
+        elif args[0][-1] == "e":
+            sym, = esilsolve.pop_values(self.state.stack, 1)
+
+            val = self.state.evaluate(sym)
+            self.state.constrain(sym == val)
+            print(val.as_long())
 
     def handle_run(self, args):
         if not self.initialized:
             print("error: need to initialize first")
             return
 
-        s = 0
-        if len(args) > 2:
-            s = int(args[2])
-
         target = to_int(args[1])
+        avoid = []
+        if len(args) > 2:
+            avoid = [to_int(x) for x in args[2].split(",")]
 
-        state = self.esinstance.states[s]
-        self.esinstance.run(state, target=target)
+        self.state = self.esinstance.run(target=target, avoid=avoid)
+
+        if args[0][-1] == "a":
+            self.state.apply()
 
     def handle_eval(self, args):
+        is_json = args[0][-1] == "j"
         if not self.initialized:
             print("error: need to initialize first")
             return
 
-        s = 0
-        if len(args) > 2:
-            s = int(args[2])
+        js = {}
+        self.state.solver.push()
+        for arg in args[1:]:
+            sym = self.get_symbol(arg)
+            val = self.state.evaluate(sym)
+            self.state.solver.add(sym == val)
 
-        reg = args[1]
+            if not is_json:
+                print("%s: %d" % (arg, val.as_long()))
+            else:
+                js[arg] = val.as_long()
 
-        state = self.esinstance.states[s]
-        register = self.symbols[reg]
-        sat = state.solver.check()
+        if is_json:
+            print(json.dumps(js))
 
-        if sat != solver.sat:
-            print("error: not sat")
+        self.state.solver.pop()
+
+    def handle_eval_buffer(self, args):
+        is_json = args[0][-1] == "j"
+        if not self.initialized:
+            print("error: need to initialize first")
             return
 
-        model = state.solver.model()
-        v = model.eval(register, True)
+        js = {}
+        for arg in args[1:]:
+            sym = self.get_symbol(arg)
+            v = self.state.evaluate_buffer(sym)
 
-        print("%s: %s" % (reg, v))
+            if not is_json:
+                print("%s: %s" % (arg, str(v)))
+            else:
+                js[arg] = list(v)
+
+        if is_json:
+            print(json.dumps(js))
 
     def handle_dump(self, args):
-        print("registers:")
-        s = 0
+        is_json = args[0][-1] == "j"
+
+        state = self.state
+        js = {}
         if len(args) > 1:
-            s = int(args[1])
-
-        state = self.esinstance.states[s]
-
-        if len(args) > 2:
-            regname = args[2]
+            regname = args[1]
             reg = state.registers._registers[regname]
-            print("%s: %s" % (reg["name"], reg["bv"]))
+            if not is_json:
+                print("%s: %s" % (reg["name"], state.registers[regname]))
+            else:
+                js[reg["name"]] = str(state.registers[regname])
+                print(json.dumps(js))
+
             return
 
         for regname in state.registers._registers:
             reg = state.registers._registers[regname]
-            if reg["parent"] == None:
-                print("%s: %s" % (reg["name"], reg["bv"]))
+            if not reg["sub"]:
+                if not is_json:
+                    print("%s: %s" % (reg["name"], state.registers[regname]))
+                else:
+                    js[reg["name"]] = str(state.registers[regname])
 
-def to_int(v):
-    if len(v) > 2 and v[:2] == "0x":
-        return int(v, 16)
-    
-    return int(v)
+        print(json.dumps(js))
+
+    def get_symbol(self, arg):
+        if arg in self.symbols:
+            return self.symbols[arg]
+        elif arg in self.state.registers:
+            return self.state.registers[arg]
+        elif is_int(arg):
+            return self.state.memory[to_int(arg)]
+
+def to_int(s):
+    if s[:2] == "0x":
+        return int(s, 16)
+
+    return int(s)
+
+def is_int(s):
+    if s.isdigit() or s[:2] == "0x":
+        return True
+
+    return False
 
 def esplugin(a):
 
     def _call(s):
         #print(s)
-        args = s.split(" ")
+        args = shlex.split(s)
         if args[0] in es.commands:
             try:
                 es.command(args)
             except Exception as e:
-                print(e)
+                print("error: %s" % str(e))
+
             return 1
 
         return 0
@@ -150,6 +287,10 @@ def esplugin(a):
         "desc": "plugin for esil-based symbolic execution",
         "call": _call,
     }
-es = ESILSolvePlugin()
-#print("Registering ESILSolve plugin...")
+
+r2p = r2pipe.open()
+es = ESILSolvePlugin(r2p)
+#print(" -- registering ESILSolve plugin... enter %saesx?%s for help" % \
+#    (colorama.Fore.YELLOW, colorama.Style.RESET_ALL))
+
 r2lang.plugin("core", esplugin)

@@ -191,7 +191,7 @@ class ESILMemory:
 
     def __getitem__(self, addr):
         if type(addr) == int:
-            length = int(self.bits/8)
+            length = self.chunklen
             return self.read_bv(addr, length)
         elif type(addr) == slice:
             length = int(addr.stop-addr.start)
