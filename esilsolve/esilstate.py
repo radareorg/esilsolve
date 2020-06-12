@@ -159,6 +159,12 @@ class ESILState:
         value = model.eval(val, True)
         return value
 
+    # shortcut to eval + constrain
+    def evalcon(self, val):
+        eval_val = self.evaluate(val)
+        self.constrain(val == eval_val)
+        return eval_val
+
     def eval_max(self, sym, n=16):
         solutions = []
 
@@ -186,6 +192,14 @@ class ESILState:
         val = buf.as_long()
         length = int(bv.size()/8)
         return bytes([(val >> (8*i)) & 0xff for i in range(length)])
+
+    def evaluate_string(self, bv):
+        b = self.evaluate_buffer(bv)
+        if b"\x00" in b:
+            null_ind = b.index(b"\x00")
+            b = b[:null_ind]
+
+        return b.decode()
         
     def step(self):
         pc = self.registers["PC"].as_long() 

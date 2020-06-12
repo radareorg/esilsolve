@@ -10,6 +10,7 @@ class R2API:
 
         self.instruction_cache = {}
         self.cache_num = 64
+        self.ccs = {}
 
         self.register_info = None
         self.get_register_info()
@@ -120,7 +121,11 @@ class R2API:
 
     # get calling convention for sims
     def calling_convention(self, func):
-        return self.r2p.cmdj("afcrj @ %s" % str(func))
+        if func in self.ccs:
+            return self.ccs[func]
+        else:
+            self.ccs[func] = self.r2p.cmdj("afcrj @ %s" % str(func))
+            return self.ccs[func]
 
     def get_address(self, func):
         return self.r2p.cmdj("pdj 1 @ %s" % str(func))[0]["offset"]

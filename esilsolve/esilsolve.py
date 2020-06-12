@@ -2,7 +2,7 @@ from .r2api import R2API
 import z3
 from .esilclasses import * 
 from .esilstate import ESILState, ESILStateManager
-
+from .esilsim import ESILSim
 import logging
 
 class ESILSolver:
@@ -46,9 +46,17 @@ class ESILSolver:
     def run(self, target=None, avoid=[]):
         self.stop = False
 
+        # try to avoid leaving valid context when nothing is set
         if avoid == [] and len(self.state_manager.avoid) == 0:
             state = self.state_manager.next()
             avoid = self.default_avoid(state)
+
+            # no target or hooks, target is last ret
+            if target == None and len(avoid) > 0:
+                if len(self.hooks.keys()) == 0:
+                    target = avoid[-1]
+                    avoid = avoid[:-1]
+
             self.state_manager.add(state)
 
         self.state_manager.avoid = avoid
@@ -113,16 +121,27 @@ class ESILSolver:
 
     def call_sim(self, state, instr):
         target = instr["jump"]
-        hook = self.sims[target]
+        sim = self.sims[target](state)
+        arg_count = sim.arg_count()
+        bits = state.bits
 
         cc = self.r2api.calling_convention(target)
         args = []
         if "args" in cc:
-            for arg in cc["args"]:
+            # register args
+            for i in range(arg_count):
+                arg = cc["args"][i]
                 if arg in state.registers:
                     args.append(state.registers[arg])
+        else:
+            # read from stack
+            sp = state.registers["SP"].as_long()
+            for i in range(arg_count):
+                addr = sp + int(i*bits/8)
+                args.append(state.memory[addr])
 
-        state.registers[cc["ret"]] = hook(state, args)
+
+        state.registers[cc["ret"]] = sim(*args)
         # fail contains next instr addr
         state.registers["PC"] = instr["fail"]
         

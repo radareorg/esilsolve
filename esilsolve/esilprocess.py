@@ -29,6 +29,9 @@ class ESILWord:
     def is_end_if(self):
         return (self.word == "}")
 
+    def is_goto(self):
+        return (self.word == "GOTO")
+
     def is_operator(self):
         return (self.word in esilops.opcodes)
 
@@ -90,6 +93,10 @@ class ESILProcess:
 
         self.r2api = r2api
         self.info = self.r2api.get_info()
+
+        # this depth limit is maybe already too high
+        # condition "size" scales like 2**limit
+        self.goto_depth_limit = 16
     
     def execute_instruction(self, state, instr):
         if self.debug:
@@ -164,10 +171,17 @@ class ESILProcess:
         exec_type = UNCON
         expression = expression.replace("|=}", "|=,}") # typo fix
         words = expression.split(",")
+        word_ind = 0
 
-        for word_str in words:
-            #print(word_str, temp_stack1, state.stack)
-            word = ESILWord(word_str, state)
+        # ahhhhh 
+        goto = None
+        goto_condition = None
+        goto_depth = 0
+        
+        while word_ind < len(words):
+            #print(words[word_ind], temp_stack1, state.stack)
+            word = ESILWord(words[word_ind], state)
+            word_ind += 1
 
             if word.is_if():
                 state.condition = self.do_if(word, state)
@@ -200,6 +214,37 @@ class ESILProcess:
                 new_stack.reverse()
                 state.stack = new_stack
 
+                if goto != None:
+                    word_ind = goto
+                    state.condition = goto_condition
+                    goto = None
+
+            elif word.is_goto():
+                # goto makes things a bit wild
+                goto, = esilops.pop_values(state.stack, state)
+                goto_depth += 1
+
+                if z3.is_bv_value(goto):
+                    goto = goto.as_long()
+
+                if goto_depth > self.goto_depth_limit:
+                    # constrain the current condition to not be true
+                    # effectively cutting off the nested gotos
+                    state.constrain(z3.Not(state.condition))
+                    goto = None
+            
+                elif self.check_condition(state.condition, state):
+                    goto_condition = state.condition
+
+                    # there should be nothing between GOTO and else/endif
+                    word_str = words[word_ind]
+                    while word_str not in ("}", "}{"):
+                        word_ind += 1
+                        word_str = words[word_ind]
+                    
+                else:
+                    goto = None
+
             else:
                 if word.is_operator():
                     word.do_op(state.stack)
@@ -216,7 +261,21 @@ class ESILProcess:
         if z3.is_bv(val):
             zero = z3.BitVecVal(0, val.size())
 
-        return z3.simplify(val != zero)
+        if state.condition == None:
+            return z3.simplify(val != zero)
+        else:
+            return z3.simplify(z3.And(val != zero, state.condition))
+
+    def check_condition(self, condition, state):
+        if condition == None:
+            return True
+
+        state.solver.push()
+        state.solver.add(condition)
+        is_sat = state.is_sat()
+        state.solver.pop()
+
+        return is_sat
 
     def trace_registers(self, state):
         for regname in state.registers._registers:

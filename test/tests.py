@@ -1,4 +1,4 @@
-from esilsolve import ESILSolver
+from esilsolve import ESILSolver, ESILSim
 import r2pipe
 import z3
 import binascii
@@ -94,6 +94,17 @@ def test_cond():
     print(state.stack)
     print(state.registers["rax"])
 
+def test_goto():
+    esilsolver = ESILSolver(debug=False)
+    state = esilsolver.init_state()
+    state.set_symbolic_register("rax")
+    rax = state.registers["rax"]
+    state.constrain(rax > 0, rax < 16)
+    state.proc.parse_expression("16,rax,-,?{,1,rax,+=,0,GOTO,}", state)
+    #print(state.stack)
+    #print(state.registers["rax"])
+    print(state.evaluate(rax))
+
 def test_multi():
     r2p = r2pipe.open("test/tests/multibranch", flags=["-2"])
     r2p.cmd("aa; s sym.check; aei; aeim; aer rdi=22021")
@@ -149,7 +160,7 @@ def test_multi32():
     esilsolver = ESILSolver(r2p, debug=False, trace=False)
     #esilsolver.initVM()
     state = esilsolver.init_state()
-    state.memory.write_bv(0x00178004, solver.BitVec("arg1", 32), 4)
+    state.memory.write_bv(0x00178004, z3.BitVec("arg1", 32), 4)
 
     state = esilsolver.run(target=0x0000052d)
     eax = state.registers["eax"]
@@ -169,25 +180,29 @@ def test_multi32():
     print(m.eval(eax))
 
 def test_sim():
-    esilsolver = ESILSolver("test/tests/multibranch")
+    esilsolver = ESILSolver("test/tests/multibranch", debug=False)
     esilsolver.r2api.analyze()
     state = esilsolver.call_state("main")
+    p_len = int(state.bits/8)
     
     argv = 0x100000
     argv0 = 0x200000
     state.registers["A0"] = 2
     state.registers["A1"] = argv
-    state.memory[argv] = argv0
-    state.memory[argv0] = 0x00313233
+    state.memory[argv+p_len] = argv0
+    state.memory[argv0] = "57005"
 
-    def atoi_hook(state, args):
-        print(args[0])
-        print(state.memory[args[0]])
+    class atoi(ESILSim):
+        def __call__(self, p_string):
+            string_bv = self.memory[p_string.as_long()]
+            string = self.state.evaluate_string(string_bv)
+            print(string)
+            return int(string)
 
-        return 42
-
-    esilsolver.register_sim("sym.imp.atoi", atoi_hook)
+    esilsolver.register_sim("sym.imp.atoi", atoi)
     state = esilsolver.run()
+
+    print(state.registers["SN"])
     
 def test_arm():
     local = True
@@ -238,4 +253,5 @@ if __name__ == "__main__":
     #test_multi32()
     #test_arm()
     test_sim()
+    #test_goto()
     #test_multi_addr()

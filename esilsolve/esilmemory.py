@@ -104,7 +104,7 @@ class ESILMemory:
         elif type(data) == bytes:
             data = list(data)
         elif type(data) == str:
-            data = list(data.encode())
+            data = list(data.encode())+[0] # add null byte
         elif type(data) == int:
             data = self.unpack_bv(data, int(self.bits/8))
 

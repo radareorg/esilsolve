@@ -180,32 +180,41 @@ def do_OPEQ(op, stack, state):
     do_EQU(op, stack, state)
 
 def do_SWAP(op, stack, state):
-    reg1 = stack.pop()
-    reg2 = stack.pop()
+    v1 = stack.pop()
+    v2 = stack.pop()
+    stack.append(v1)
+    stack.append(v2)
 
-    tmp = state.registers[reg1]
-    state.registers[reg1] = state.registers[reg2]
-    state.registers[reg2] = tmp
-
+# picks will fail for symbolic n
+# i hope those dont occur
 def do_PICK(op, stack, state):
-    raise ESILUnimplementedException
+    n, = pop_values(stack, state)
+    if z3.is_bv_value(n):
+        n = n.as_long()
+    
+    stack.append(stack[-1*(n+1)])
 
 def do_RPICK(op, stack, state):
-    raise ESILUnimplementedException
+    n, = pop_values(stack, state)
+    if z3.is_bv_value(n):
+        n = n.as_long()
+    
+    stack.append(stack[n])
 
 def do_DUP(op, stack, state):
     stack.append(stack[-1])
 
 # idk if this is relevant to how we are doing things?
 def do_NUM(op, stack, state):
-    #raise ESILUnimplementedException
-    pass
+    val, = pop_values(stack, state)
+    stack.append(val)
 
 def do_CLEAR(op, stack, state):
     stack.clear()
 
 def do_GOTO(op, stack, state):
-    raise ESILUnimplementedException
+    # this gets implemented in esilprocess
+    pass
 
 def memlen(op, state):
     b1 = op.index("[")
@@ -226,7 +235,6 @@ def do_POKE(op, stack, state):
     state.memory.write_bv(addr, data, length)
     state.esil["old"] = addr
     state.esil["lastsz"] = length*8
-
 
 def do_PEEK(op, stack, state):
     length = memlen(op, state)
