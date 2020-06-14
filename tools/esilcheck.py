@@ -30,7 +30,7 @@ class ESILCheck:
 
         self.converter = claripy.backends.z3
 
-    def check(self, instruction=None, code=None):
+    def check(self, instruction=None, code=None, esil=None):
         r2p = r2pipe.open("-", ["-a", self.arch, "-b", str(self.bits), "-2"])
 
         if instruction == None:
@@ -39,6 +39,10 @@ class ESILCheck:
             r2p.cmd("wa %s" % instruction)
 
         instr = r2p.cmdj("pdj 1")[0]
+
+        if esil != None:
+            instr["esil"] = esil
+
         code = unhexlify(instr["bytes"])
         if all([x == 0 for x in code]):
             print("[!] failed to assemble instruction")
@@ -56,7 +60,7 @@ class ESILCheck:
         block = proj.factory.block(proj.entry)
 
         successor = state.step()[0]
-        essuccessor = esclone.step()[0]
+        essuccessor = esclone.proc.execute_instruction(esclone, instr)[0]
         basesolver = self.converter.solver()
 
         #basesolver.add(esstate.registers["ebx"] != 2147483648)
@@ -179,7 +183,7 @@ def trunc(s, maxlen=64):
 
 if __name__ == "__main__":
 
-    esilcheck = ESILCheck("x86", bits=64)
+    '''esilcheck = ESILCheck("x86", bits=64)
     #esilcheck.check("or eax, ebx")
     esilcheck.check(code=b"\x48\x63\xff")
     esilcheck.check("cmp eax, ebx") 
@@ -189,11 +193,11 @@ if __name__ == "__main__":
 
     esilcheck = ESILCheck("arm", bits=32)
     esilcheck.check("add r0, r0, r1")
-    esilcheck.check("cmp r0, r1")
+    esilcheck.check("cmp r0, r1")'''
 
     esilcheck = ESILCheck("arm", bits=64)
     esilcheck.check("add x0, x0, x1")
-    esilcheck.check("cmp x0, x1")
+    esilcheck.check(code=b"\x84\x10\xc0\xda")
 
     exit()
 

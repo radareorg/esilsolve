@@ -93,8 +93,7 @@ class ESILSolvePlugin:
 
         # constrain these first so the user gets the "expected" result
         for sym in self.symbols:
-            value = self.state.evaluate(self.symbols[sym])
-            self.state.constrain(self.symbols[sym] == value.as_long())
+            value = self.state.evalcon(self.symbols[sym])
 
         self.state.apply()
 

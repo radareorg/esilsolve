@@ -178,7 +178,7 @@ class ESILState:
 
             if satisfiable == z3.sat:
                 m = self.solver.model()
-                solutions.append(m.eval(sym, model_completion=True))
+                solutions.append(m.eval(sym, True))
             else:
                 self.solver.pop()
                 break
