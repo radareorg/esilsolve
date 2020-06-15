@@ -97,6 +97,17 @@ class ESILProcess:
         # this depth limit is maybe already too high
         # condition "size" scales like 2**limit
         self.goto_depth_limit = 16
+
+        # try to init vexit, an optional module that uses vex
+        # if an esil expression is not available
+        # its not pretty but it (sort of) works (sometimes)
+        try:
+            from .vexit import VexIt
+            self.vexit = VexIt(
+                self.info["info"]["arch"], 
+                self.info["info"]["bits"])
+        except:
+            self.vexit = None
     
     def execute_instruction(self, state, instr):
         if self.debug:
@@ -104,7 +115,6 @@ class ESILProcess:
             print("%016x: %s" % (instr["offset"], instr["opcode"]))
 
         # clone the original state if theres a peek
-        # this is so terrible 
         og_state = None
         if instr["refptr"] and state.memory.multi_concretize:
             og_state = state.clone()
@@ -112,7 +122,17 @@ class ESILProcess:
         # old pc should never be anything other than a BitVecVal        
         old_pc = state.registers["PC"].as_long() + instr["size"]
         state.registers["PC"] = old_pc
-        self.parse_expression(instr["esil"], state)
+
+        esil = instr["esil"]
+        if esil == "" and instr["type"] != "nop":
+            if self.vexit != None:
+                try:
+                    print("taking vexit for %s" % str(instr))
+                    esil = self.vexit.convert(instr)
+                except:
+                    pass
+
+        self.parse_expression(esil, state)
         state.steps += 1
         states = []
 
@@ -281,7 +301,7 @@ class ESILProcess:
         for regname in state.registers._registers:
             register = state.registers._registers[regname]
             #print(regname, reg_value)
-            if register["type_str"] in ["gpr", "flg"]:
+            if register["type_str"] in ("gpr", "flg"):
                 emureg = self.r2api.get_reg_value(register["name"])
                 try:
                     reg_value = z3.simplify(state.registers[regname])
