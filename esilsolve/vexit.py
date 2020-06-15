@@ -8,8 +8,6 @@ import capstone
 import r2pipe
 from binascii import hexlify, unhexlify
 
-from esilcheck import ESILCheck
-
 arch_dict = {
     64: {"arm": "aarch64", "x86": "amd64"}
 }
@@ -71,7 +69,7 @@ for bit in bits:
 
 # Automatically translate vex into truly terrible esil expressions
 # do not look directly at the results
-class Vex2Esil:
+class VexIt:
 
     def __init__(self, arch, bits=64):
         self.arch = arch
@@ -84,20 +82,9 @@ class Vex2Esil:
         self.arch_class = archinfo_dict[self.aarch]()
         self.vex_addr = 0x400400
 
-    def convert(self, instruction=None, code=None):
-        r2p = r2pipe.open("-", ["-a", self.arch, "-b", str(self.bits), "-2"])
+    def convert(self, instr):
 
-        if instruction == None:
-            r2p.cmd("wx %s" % hexlify(code).decode())
-        else:
-            r2p.cmd("wa %s" % instruction)
-
-        instr = r2p.cmdj("pdj 1")[0]
         code = unhexlify(instr["bytes"])
-        print(instr["esil"])
-        if all([x == 0 for x in code]):
-            print("[!] failed to assemble instruction")
-            return 
 
         self.irsb = lift(code, self.vex_addr, self.arch_class)
         self.irsb.pp()
@@ -134,10 +121,6 @@ class Vex2Esil:
 
         #print(self.exprs)
         esilex = ",".join(self.exprs)
-
-        esilchecker = ESILCheck(self.arch, bits=self.bits)
-        esilchecker.check(instr["disasm"], esil=esilex)
-
         return esilex
 
     def offset_to_reg(self, stmt, data=False):
@@ -159,6 +142,7 @@ class Vex2Esil:
         elif dtype == RdTmp:
             temp = self.temp_to_stack[data.tmp]
             exprs += ["%d" % temp, "RPICK"]
+            # this is the secret, instead of temp regs we use RPICKS
 
         elif dtype in (Get, GetI):
             src = self.offset_to_reg(data, True)
@@ -199,7 +183,7 @@ class Vex2Esil:
                     if sign != "S":
                         final_exprs += val
                     else:
-                        final_exprs += val # + [""] # handle this later im tired
+                        final_exprs += val # + ["%"] # handle this later im tired
                 elif expr == "$sz":
                     final_exprs += ["%d" % to_size]
                 else:
@@ -235,8 +219,4 @@ class VexException(Exception):
     pass
 
 if __name__ == "__main__":
-
-    vexconv = Vex2Esil("x86", bits=64)
-    #vexconv.convert("xor rax, rbx")
-    #vexconv.convert("mov rax, [rbx]")
-    vexconv.convert("imul ebx")
+    pass
