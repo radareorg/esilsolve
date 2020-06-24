@@ -83,6 +83,7 @@ class Vex2Esil:
 
         self.arch_class = archinfo_dict[self.aarch]()
         self.vex_addr = 0x400400
+        self.ops = [Unop, Binop, Triop, Qop]
 
     def convert(self, instruction=None, code=None):
         r2p = r2pipe.open("-", ["-a", self.arch, "-b", str(self.bits), "-2"])
@@ -105,7 +106,6 @@ class Vex2Esil:
         self.exprs = []
         self.stacklen = 0
         self.temp_to_stack = {}
-        self.ops = [Unop, Binop, Triop, Qop]
 
         for statement in self.irsb.statements:
             #print(statement)

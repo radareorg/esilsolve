@@ -19,6 +19,8 @@ class ESILSolver:
         self.cond_count = 0
         self.optimize = optimize
 
+        # use r2api which caches some data
+        # to increase speed
         if r2p == None:
             r2api = R2API()
         else:
@@ -34,6 +36,11 @@ class ESILSolver:
         self.did_init_vm = False
         self.info = self.r2api.get_info()
         self.stop = False
+
+        # context for hook variables
+        # not really necessary yet since its single threaded
+        # but we must look to the future
+        self.context = {}
 
         if init:
             self.init_state()

@@ -23,6 +23,7 @@ class ESILSolvePlugin:
             "aesxxe": self.handle_execute_constrain,
             "aesxr": self.handle_run,
             "aesxra": self.handle_run,
+            "aesxrc": self.handle_run,
             "aesxe": self.handle_eval,
             "aesxej": self.handle_eval,
             "aesxb": self.handle_eval_buffer,
@@ -63,7 +64,7 @@ class ESILSolvePlugin:
             ["aesxv", " reg|addr value", "Set concrete value in register or memory"],
             ["aesxc", " sym value", "Constrain symbol to be value, min, max, regex"],
             ["aesxx", "[ec] expr value", "Execute ESIL expression and evaluate/constrain the result"],
-            ["aesxr", "[a] target [avoid x,y,z]", "Run symbolic execution until target address, avoiding x,y,z"],
+            ["aesxr", "[ac] target [avoid x,y,z]", "Run symbolic execution until target address, avoiding x,y,z"],
             ["aesxe", "[j] sym1 [sym2] [...]", "Evaluate symbol in current state"],
             ["aesxb", "[j] sym1 [sym2] [...]", "Evaluate buffer in current state"],
             ["aesxd", "[j] [reg1] [reg2] [...]", "Dump register values / ASTs"],
@@ -209,6 +210,48 @@ class ESILSolvePlugin:
 
         if args[0][-1] == "a":
             self.handle_apply(args)
+        elif args[0][-1] == "c":
+
+            state_mgr = self.esinstance.state_manager
+
+            state_dict = {
+                "active": [state_mgr.active, colorama.Fore.LIGHTGREEN_EX],
+                "inactive": [state_mgr.inactive, colorama.Fore.LIGHTRED_EX],
+                "unsat": [state_mgr.unsat, colorama.Fore.RED]
+            }
+
+            pcs = {}
+            for state_type in state_dict:
+                for state in state_dict[state_type][0]:
+                    pc = state.registers["PC"].as_long()
+                    comment = "%s%s%s%s: " % (
+                        colorama.Style.RESET_ALL,
+                        state_dict[state_type][1],
+                        state_type,
+                        colorama.Style.RESET_ALL
+                    )
+
+                    if pc == target:
+                        comment = "%s%starget%s: " % (
+                            colorama.Style.RESET_ALL,
+                            colorama.Fore.GREEN,
+                            colorama.Style.RESET_ALL
+                        )
+                    
+                    if pc not in pcs:
+                        pcs[pc] = True
+                        state.solver.push()
+                        sym_cmts = []
+                        for sym_name in self.symbols:
+                            sym = self.symbols[sym_name]
+                            sym_val = state.evalcon(sym).as_long()
+                            sym_cmts.append("%s = 0x%08x" % (
+                                sym_name,
+                                sym_val))
+
+                        state.solver.pop()
+                        comment += ", ".join(sym_cmts)
+                        self.r2p.cmd("CC %s @ %d" % (comment, pc))
 
     def handle_eval(self, args):
         is_json = args[0][-1] == "j"

@@ -81,6 +81,7 @@ class VexIt:
 
         self.arch_class = archinfo_dict[self.aarch]()
         self.vex_addr = 0x400400
+        self.ops = [Unop, Binop, Triop, Qop]
 
     def convert(self, instr):
 
@@ -92,7 +93,6 @@ class VexIt:
         self.exprs = []
         self.stacklen = 0
         self.temp_to_stack = {}
-        self.ops = [Unop, Binop, Triop, Qop]
 
         for statement in self.irsb.statements:
             #print(statement)
