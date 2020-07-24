@@ -1,10 +1,17 @@
 import r2lang
-import esilsolve
-import r2pipe
-import z3
-import json
-import shlex
-import colorama
+r2p = None
+
+try:
+    import esilsolve
+    import r2pipe
+    import z3
+    import json
+    import shlex
+    import colorama
+
+    r2p = r2pipe.open()
+except ImportError:
+    print("esplugin could not be loaded")
 
 class ESILSolvePlugin:
 
@@ -373,8 +380,6 @@ def esplugin(a):
         "call": _call,
     }
 
-
-r2p = r2pipe.open()
 es = ESILSolvePlugin(r2p)
 #r2print(r2p, " -- registering ESILSolve plugin... enter %saesx?%s for help" % \
 #    (colorama.Fore.YELLOW, colorama.Style.RESET_ALL))

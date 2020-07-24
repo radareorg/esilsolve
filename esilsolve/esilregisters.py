@@ -90,8 +90,8 @@ class ESILRegisters:
                 if old_reg["type"] != reg["type"]:
                     continue
 
-                above_start = (bounds[0] <= start and start <= bounds[1])
-                below_end = (bounds[0] <= end and end <= bounds[1])
+                above_start = (bounds[0] <= start <= bounds[1])
+                below_end = (bounds[0] <= end <= bounds[1])
 
                 if above_start and below_end:
                     return old_reg
@@ -123,9 +123,14 @@ class ESILRegisters:
         register = self._registers[key]
         reg_value = self.get_register_from_bounds(register)
 
-        zero = z3.BitVecVal(0, reg_value["size"])
-        new_reg = self.set_register_bits(register, reg_value, zero, val)
-        reg_value["bv"] = z3.simplify(new_reg)
+        # idk this should be fine and its faster but gives complex answers
+        if False and z3.is_bv(val) and val.size() == reg_value["size"]:
+            reg_value["bv"] = z3.simplify(val)
+
+        else:
+            zero = z3.BitVecVal(0, reg_value["size"])
+            new_reg = self.set_register_bits(register, reg_value, zero, val)
+            reg_value["bv"] = z3.simplify(new_reg)
 
     def weak_set(self, key, val):
         
@@ -166,7 +171,7 @@ class ESILRegisters:
 
     def set_register_bits(self, register, reg_value, bv, val):
         low = register["start"] - reg_value["start"]
-        high = low + register["size"]
+        high = low + register["size"]        
 
         bvs = []
 

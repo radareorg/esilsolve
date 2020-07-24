@@ -12,6 +12,7 @@ def pop_values(stack, state, num=1):
 def get_value(val, state):
     if type(val) == str:
         register = state.registers[val]
+        state.esil["popsz"] = register.size()
         return prepare(register)
     else:
         return prepare(val)
@@ -53,25 +54,25 @@ def do_CMP(op, stack, state):
 
 def do_LT(op, stack, state):
     arg1, arg2 = pop_values(stack, state, 2)
-    stack.append(z3.If(z3.ULT(arg1, arg2), ONE, ZERO))
+    stack.append(z3.If(arg1 < arg2, ONE, ZERO))
     state.esil["old"] = arg1
     state.esil["cur"] = stack[-1]
 
 def do_LTE(op, stack, state):
     arg1, arg2 = pop_values(stack, state, 2)
-    stack.append(z3.If(z3.ULE(arg1, arg2), ONE, ZERO))
+    stack.append(z3.If(arg1 <= arg2, ONE, ZERO))
     state.esil["old"] = arg1
     state.esil["cur"] = stack[-1]
 
 def do_GT(op, stack, state):
     arg1, arg2 = pop_values(stack, state, 2)
-    stack.append(z3.If(z3.UGT(arg1, arg2), ONE, ZERO))
+    stack.append(z3.If(arg1 > arg2, ONE, ZERO))
     state.esil["old"] = arg1
     state.esil["cur"] = stack[-1]
 
 def do_GTE(op, stack, state):
     arg1, arg2 = pop_values(stack, state, 2)
-    stack.append(z3.If(z3.UGE(arg1, arg2), ONE, ZERO))
+    stack.append(z3.If(arg1 >= arg2, ONE, ZERO))
     state.esil["old"] = arg1
     state.esil["cur"] = stack[-1]
 
@@ -80,7 +81,11 @@ def do_LS(op, stack, state):
     stack.append(arg1<<arg2)
 
 def do_RS(op, stack, state):
-    arg1, arg2 = pop_values(stack, state, 2)
+    arg1, = pop_values(stack, state, 1)
+    high = state.esil["popsz"]-1
+    arg1 = z3.Extract(high, 0, arg1)
+    arg2, = pop_values(stack, state, 1)
+    arg2 = z3.Extract(high, 0, arg2)
     stack.append(arg1>>arg2)
 
 def do_LRS(op, stack, state):
@@ -123,14 +128,29 @@ def do_DIV(op, stack, state):
     arg1, arg2 = pop_values(stack, state, 2)
     stack.append(z3.If(arg2 == ZERO, NEGONE, z3.UDiv(arg1,arg2)))
 
+def do_SDIV(op, stack, state):
+    arg1, arg2 = pop_values(stack, state, 2)
+    stack.append(z3.If(arg2 == ZERO, NEGONE, arg1/arg2))
+
 def do_SIGN(op, stack, state):
     arg1, arg2 = pop_values(stack, state, 2)
-    size = arg1.as_long()
-    stack.append(z3.SignExt(SIZE-size, z3.Extract(size-1, 0, arg2)))
+    size = arg2
+    
+    if z3.is_bv(size):
+        size = size.as_long()
+
+    if not z3.is_bv(arg1):
+        arg1 = z3.BitVecVal(arg1, SIZE)
+
+    stack.append(z3.SignExt(SIZE-size, z3.Extract(size-1, 0, arg1)))
 
 def do_MOD(op, stack, state):
     arg1, arg2 = pop_values(stack, state, 2)
     stack.append(z3.URem(arg1, arg2))
+
+def do_SMOD(op, stack, state):
+    arg1, arg2 = pop_values(stack, state, 2)
+    stack.append(arg1 % arg2)
 
 def do_NOT(op, stack, state):
     arg1, = pop_values(stack, state)
@@ -205,6 +225,7 @@ def do_DUP(op, stack, state):
     stack.append(stack[-1])
 
 # idk if this is relevant to how we are doing things?
+# nvmd it is still relevant
 def do_NUM(op, stack, state):
     val, = pop_values(stack, state)
     stack.append(val)
@@ -245,6 +266,7 @@ def do_PEEK(op, stack, state):
     state.esil["old"] = addr
     state.esil["cur"] = prepare(stack[-1])
     state.esil["lastsz"] = length*8
+    state.esil["popsz"] = length*8
 
 def do_OPPOKE(op, stack, state):
     length = memlen(op, state)
@@ -413,6 +435,8 @@ opcodes = {
     "*": do_MUL,
     "/": do_DIV,
     "%": do_MOD,
+    "~/": do_SDIV,
+    "~%": do_SMOD,
     "!": do_NOT,
     "++": do_INC,
     "--": do_DEC,

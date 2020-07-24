@@ -1,77 +1,8 @@
-from .r2api import R2API
 import z3
+from .r2api import R2API
 from . import esilops
-import json
 from .esilclasses import * 
 from .esilstate import *
-import re
-
-import logging
-
-class ESILWord:
-    def __init__(self, word=None, state=None):
-        self.word = word
-        self.len = len(word)
-
-        if state != None:
-            self.state = state
-            self.bits = state.info["info"]["bits"]
-
-            self.registers = state.registers
-            self.memory = state.memory
-    
-    def is_if(self):
-        return (self.word == "?{")
-
-    def is_else(self):
-        return (self.word == "}{")
-
-    def is_end_if(self):
-        return (self.word == "}")
-
-    def is_goto(self):
-        return (self.word == "GOTO")
-
-    def is_operator(self):
-        return (self.word in esilops.opcodes)
-
-    def is_literal(self):
-        if (self.word.isdigit() or (self.len > 2 and self.word[:2] == "0x")):
-            return True
-        elif self.len > 1 and self.word[0] == "-" and self.word[1:].isdigit():
-            return True
-        else: 
-            return False
-
-    def is_register(self):
-        return (self.word in self.registers)
-
-    def get_register(self):
-        #register = self.registers[self.word]
-        return self.word
-
-    def get_literal_value(self):
-        if(self.word.isdigit()):
-            return int(self.word)
-        elif self.len > 2 and self.word[:2] == "0x":
-            return int(self.word, 16)
-        elif self.len > 1 and self.word[0] == "-" and self.word[1:].isdigit():
-            return int(self.word)
-
-    def get_push_value(self):
-        if(self.is_literal()):
-            val = self.get_literal_value()
-            return val
-
-        elif(self.is_register()):
-            return self.get_register()
-
-        else:
-            raise esilops.ESILUnimplementedException
-
-    def do_op(self, stack):
-        op = esilops.opcodes[self.word]
-        op(self.word, stack, self.state)
 
 # some constants for exec type idk
 UNCON = 0
@@ -115,9 +46,9 @@ class ESILProcess:
             print("%016x: %s" % (instr["offset"], instr["opcode"]))
 
         # clone the original state if theres a peek
-        og_state = None
-        if instr["refptr"] and state.memory.multi_concretize:
-            og_state = state.clone()
+        #og_state = None
+        #if instr["refptr"] and state.memory.multi_concretize:
+        #    og_state = state.clone()
 
         # old pc should never be anything other than a BitVecVal        
         old_pc = state.registers["PC"].as_long() + instr["size"]
@@ -137,7 +68,7 @@ class ESILProcess:
         states = []
 
         # christ this is getting convoluted
-        if state.memory.hit_symbolic_addr and og_state != None: 
+        '''if state.memory.hit_symbolic_addr and og_state != None: 
             state.memory.hit_symbolic_addr = False
             
             for addr in state.memory.concrete_addrs:
@@ -147,7 +78,7 @@ class ESILProcess:
 
                     states.extend(self.execute_instruction(new_state, instr))
 
-            state.memory.concrete_addrs = []
+            state.memory.concrete_addrs = []'''
 
         pc = state.registers["PC"]
         if z3.is_bv_value(pc):
@@ -189,7 +120,7 @@ class ESILProcess:
         temp_stack1 = []
         temp_stack2 = []
         exec_type = UNCON
-        expression = expression.replace("|=}", "|=,}") # typo fix
+        #expression = expression.replace("|=}", "|=,}") # typo fix
         words = expression.split(",")
         word_ind = 0
 
@@ -200,24 +131,22 @@ class ESILProcess:
         
         while word_ind < len(words):
             #print(words[word_ind], temp_stack1, state.stack)
-            word = ESILWord(words[word_ind], state)
+            word = words[word_ind]
             word_ind += 1
 
-            if word.is_if():
-                state.condition = self.do_if(word, state)
+            if word == "?{":
+                state.condition = self.do_if(state)
                 exec_type = IF
                 temp_stack1 = state.stack
                 state.stack = temp_stack1[:]
 
-            elif word.is_else():
+            elif word == "}{":
                 state.condition = z3.Not(state.condition)
                 exec_type = ELSE
                 temp_stack2 = state.stack
                 state.stack = temp_stack1[:]
                 
-            elif word.is_end_if():
-                # this code is weird and i dont like it
-                # but its just necessary to do in some way
+            elif word == "}":
                 new_stack = []
                 new_temp = temp_stack1
                 if exec_type == ELSE:
@@ -239,7 +168,7 @@ class ESILProcess:
                     state.condition = goto_condition
                     goto = None
 
-            elif word.is_goto():
+            elif word == "GOTO":
                 # goto makes things a bit wild
                 goto, = esilops.pop_values(state.stack, state)
                 goto_depth += 1
@@ -257,6 +186,7 @@ class ESILProcess:
                     goto_condition = state.condition
 
                     # there should be nothing between GOTO and else/endif
+                    # but we will enforce this anyway
                     word_str = words[word_ind]
                     while word_str not in ("}", "}{"):
                         word_ind += 1
@@ -266,13 +196,15 @@ class ESILProcess:
                     goto = None
 
             else:
-                if word.is_operator():
-                    word.do_op(state.stack)
+                if word in esilops.opcodes:
+                    op = esilops.opcodes[word]
+                    op(word, state.stack, state)
+
                 else:
-                    val = word.get_push_value()
+                    val = get_push_value(word)
                     state.stack.append(val)
 
-    def do_if(self, word, state):
+    def do_if(self, state):
         val, = esilops.pop_values(state.stack, state)
         if self.debug:
             print("condition val: %s" % val)
@@ -315,3 +247,20 @@ class ESILProcess:
     def clone(self):
         clone = self.__class__(self.r2api, debug=self.debug, trace=self.trace)
         return clone
+
+
+def get_literal_value(word):
+    if(word.isdigit()):
+        return int(word)
+    elif word.startswith("0x"):
+        return int(word, 16)
+    elif word.startswith("-") and word[1:].isdigit():
+        return int(word)
+
+def get_push_value(word):
+    literal = get_literal_value(word)
+    if literal != None:
+        return literal
+
+    else:
+        return word

@@ -1,6 +1,5 @@
 import z3
 from .esilclasses import *
-import struct
 
 BYTE = 8
 
@@ -170,13 +169,13 @@ class ESILMemory:
     def unpack_bv(self, val, length):
         data = []
         if type(val) == int:
-            for i in range(length):
-                data.append((val >> i*BYTE) & 0xff)
+            #for i in range(length):
+            [data.append((val >> i*BYTE) & 0xff) for i in range(length)]
 
         else:
             val = z3.simplify(val) # useless?
-            for i in range(length):
-                data.append(z3.simplify(z3.Extract((i+1)*BYTE-1, i*BYTE, val)))
+            #for i in range(length):
+            [data.append(z3.Extract((i+1)*BYTE-1, i*BYTE, val)) for i in range(length)]
 
         if self.endian == "big":
             data.reverse()

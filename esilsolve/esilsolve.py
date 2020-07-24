@@ -1,9 +1,8 @@
-from .r2api import R2API
 import z3
+from .r2api import R2API
 from .esilclasses import * 
 from .esilstate import ESILState, ESILStateManager
 from .esilsim import ESILSim
-import logging
 
 class ESILSolver:
     def __init__(self, r2p=None, init=False, optimize=False, debug=False, trace=False, sym=False):
@@ -157,6 +156,14 @@ class ESILSolver:
         self.r2api.seek(function)
         self.init_vm()
         return self.init_state()
+
+    def reset(self, state):
+        self.state_manager = ESILStateManager([])
+        
+        if state == None:
+            state = self.state_manager.entry_state(self.r2api, self.optimize, self.pure_symbolic, self.debug, self.trace)
+        else:
+            self.state_manager.add(state)
 
     def init_state(self):
         self.state_manager = ESILStateManager([])

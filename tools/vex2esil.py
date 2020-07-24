@@ -23,50 +23,90 @@ archinfo_dict = {
     "mips64": archinfo.ArchMIPS64
 }
 
-op_dict = {
-    # ints reference arguments
-    "Iop_Add": [0, 1, "+"],
-    "Iop_Sub": [0, 1, "-"],
-    "Iop_Mul": [0, 1, "*"],
-    "Iop_MullU": [0, 1, "*"],
-    "Iop_MullS": [0, "$sz", "~", 1, "$sz", "~", "*"],
-    "Iop_Div": [0, 1, "/"],
-    "Iop_DivU": [0, 1, "/"],
-    "Iop_DivS": [0, "$sz", "~", 1, "$sz", "~", "/"],
-    "Iop_Or": [0, 1, "|"],
-    "Iop_Xor": [0, 1, "^"],
-    "Iop_And": [0, 1, "&"],
-    "Iop_Shl": [0, 1, "<<"],
-    "Iop_Shr": [0, 1, ">>"],
-    "Iop_Sar": [0, 1, ">>>>"],
-    "Iop_CmpEQ": [0, 1, "-", "!"],
-    "Iop_CmpNE": [0, 1, "-"],
-    "Iop_CmpLT": [0, 1, "<"],
-    "Iop_CmpLTE": [0, 1, "<="],
-    "Iop_Not": [0, "!"],
-}
-
-# i was drunk when i wrote all of this
-# so take that into consideration pls
-bits = [1, 8, 16, 32, 64] #, 128] 128 is not supported
+op_dict = {}
+bits = [8, 16, 32, 64] #, 128] 128 is not supported
 
 for bit in bits:
     for sign in ("", "U", "S"):
+        for bit2 in bits:
+            op_key = "Iop_%d%sto%d" % (bit, sign, bit2)
+            if bit == bit2:
+                continue
+
+            elif bit2 < bit:
+                if sign != "S":
+                    op_dict[op_key] = [0, hex((1<<bit2)-1), "&"]
+                else:
+                    op_dict[op_key] = [str(bit), 0, hex((1<<bit)-1), "&", "~", hex((1<<bit2)-1), "&"]
+            else:
+                if sign != "S":
+                    if bit == 64:
+                        op_dict[op_key] = [0]
+                    else:
+                        op_dict[op_key] = [0, hex((1<<bit)-1), "&"]
+                else:
+                    op_dict[op_key] = [str(bit), 0, hex((1<<bit)-1), "&", "~", hex((1<<bit2)-1), "&"]
+
+            op_key = "Iop_%dHIto%d" % (bit, bit2)
+            op_dict[op_key] = [str(bit-bit2), 0, ">>", hex((1<<bit2)-1), "&"]
+
+            op_key = "Iop_%dHLto%d" % (bit, bit2)
+            op_dict[op_key] = [str(bit2-bit), 1, "<<", 0, "+"]
+
+        op_key = "Iop_Add%s%d" % (sign, bit)
+        op_dict[op_key] = [0, 1, "+"]
+
+        op_key = "Iop_Sub%s%d" % (sign, bit)
+        op_dict[op_key] = [0, 1, "-"]
+
+        op_key = "Iop_Mul%s%d" % (sign, bit)
+        op_dict[op_key] = [0, 1, "*"]
+
+        op_key = "Iop_Or%s%d" % (sign, bit)
+        op_dict[op_key] = [0, 1, "|"]
+
+        op_key = "Iop_Xor%s%d" % (sign, bit)
+        op_dict[op_key] = [0, 1, "^"]
+
+        op_key = "Iop_And%s%d" % (sign, bit)
+        op_dict[op_key] = [0, 1, "&"]
+
+        op_key = "Iop_Shl%s%d" % (sign, bit)
+        op_dict[op_key] = [0, 1, "<<"]
+
+        op_key = "Iop_Shr%s%d" % (sign, bit)
+        op_dict[op_key] = [0, 1, ">>"]
+
+        op_key = "Iop_Sar%s%d" % (sign, bit)
+        op_dict[op_key] = [0, 1, ">>>>"]
+
+        op_key = "Iop_CmpEQ%s%d" % (sign, bit)
+        op_dict[op_key] = [0, 1, "-", "!"]
+
+        op_key = "Iop_CmpNE%s%d" % (sign, bit)
+        op_dict[op_key] = [0, 1, "-", "!", "!"]
+
+        op_key = "Iop_CmpLT%s%d" % (sign, bit)
+        op_dict[op_key] = [0, 1, "<"]
+
+        op_key = "Iop_CmpLTE%s%d" % (sign, bit)
+        op_dict[op_key] = [0, 1, "<="]
+
+        op_key = "Iop_Not%s%d" % (sign, bit)
+        op_dict[op_key] = [0, "!"]
+
+        op_key = "Iop_Mull%s%d" % (sign, bit)
+        sbit = str(bit)
         if sign != "S":
-            op_key = "Iop_%d%sto" % (bit, sign)
-            op_dict[op_key] = [0, "1", "$sz", "1", "<<", "-", "&"]
+            op_dict[op_key] = [0, 1, "*"]
         else:
-            op_key = "Iop_%d%sto" % (bit, sign)
-            op_dict[op_key] = [0, "%d" % bit, "~", "1", "$sz", "1", "<<", "-", "&"]
+            op_dict[op_key] = [sbit, 0, "~", sbit, 1, "~", "*"]
 
-        op_key = "Iop_DivMod%s%dto" % (sign, bit)
-        op_dict[op_key] = [0, 1, "/", "%d" % int(bit/2),  0, 1, "%", "<<", "+"]
-
-    op_key = "Iop_%dHIto" % bit
-    op_dict[op_key] = ["$sz", "%d" % bit, "-", 0, ">>"]
-
-    op_key = "Iop_%dHLto" % bit
-    op_dict[op_key] = ["$sz", "%d" % bit, "-", 0, ">>", 1, "+"]
+        op_key = "Iop_Div%s%d" % (sign, bit)
+        if sign != "S":
+            op_dict[op_key] = [0, 1, "/"]
+        else:
+            op_dict[op_key] = [sbit, 0, "~", sbit, 1, "~", "~/"]
 
 
 # Automatically translate vex into truly terrible esil expressions
@@ -85,8 +125,11 @@ class Vex2Esil:
         self.vex_addr = 0x400400
         self.ops = [Unop, Binop, Triop, Qop]
 
-    def convert(self, instruction=None, code=None):
+        self.do_lookahead = True
+
+    def convert_str(self, instruction=None, code=None):
         r2p = r2pipe.open("-", ["-a", self.arch, "-b", str(self.bits), "-2"])
+        self.r2p = r2p
 
         if instruction == None:
             r2p.cmd("wx %s" % hexlify(code).decode())
@@ -94,8 +137,18 @@ class Vex2Esil:
             r2p.cmd("wa %s" % instruction)
 
         instr = r2p.cmdj("pdj 1")[0]
-        code = unhexlify(instr["bytes"])
-        print(instr["esil"])
+
+        return self.convert(instr, code=code)
+
+    def convert_c(self, instruction=None, code=None):
+        esilex = self.convert_str(instruction, code)
+        return self.replace_regs(instruction, esilex)
+
+    def convert(self, instr, code=None):
+        if code == None:
+            code = unhexlify(instr["bytes"])
+
+        #print(instr["esil"])
         if all([x == 0 for x in code]):
             print("[!] failed to assemble instruction")
             return 
@@ -106,48 +159,125 @@ class Vex2Esil:
         self.exprs = []
         self.stacklen = 0
         self.temp_to_stack = {}
+        self.temp_to_exprs = {}
+        self.skip_next = False
 
-        for statement in self.irsb.statements:
+        for ind, statement in enumerate(self.irsb.statements):
+            if self.skip_next:
+                self.skip_next = False
+                continue
+
             #print(statement)
             #print(dir(statement))
             #print(dir(statement.data))
             stmt_type = type(statement)
+            next_stmt = None
+            if len(self.irsb.statements) > ind+1:
+                next_stmt = self.irsb.statements[ind+1]
+
             if stmt_type == WrTmp:
                 #print(dir(statement.data))
-                self.temp_to_stack[statement.tmp] = self.stacklen
-                self.stacklen += 1
-                self.exprs += self.data_to_esil(statement.data)
+                
+                # look ahead to see if the stmt is a reg get
+                # and the next stmt is a conv
+                if self.do_lookahead:
+                    if type(statement.data) in (Get, GetI):
+                        src, size = self.offset_to_reg(statement.data, True)
+                        conv_op = "%dto" % (size*8)
+
+                        if type(next_stmt.data) in self.ops and conv_op in next_stmt.data.op:
+                            to_size = next_stmt.data.op[4+len(conv_op):]
+
+                            if to_size.isdigit():
+                                new_size = int(to_size)//8
+                                new_offset = statement.data.offset
+
+                                if (new_offset, new_size) in self.arch_class.register_size_names:
+                                    new_exprs = [self.arch_class.register_size_names[(new_offset, new_size)]]
+                                    self.temp_to_exprs[next_stmt.tmp] = new_exprs
+                                    self.skip_next = True
+                                    continue
+
+                    elif type(next_stmt) in (Put, PutI):
+                        dst, size = self.offset_to_reg(next_stmt)
+                        conv_op = "to%d" % (size*8)
+
+                        if type(statement.data) in self.ops and conv_op in statement.data.op:
+                            to_size = statement.data.op[4:statement.data.op.index(conv_op)][:2]
+                            if to_size[0] == "8":
+                                to_size = "8"
+
+                            if to_size.isdigit():
+                                new_size = int(to_size)//8
+                                new_offset = next_stmt.offset
+
+                                if (new_offset, new_size) in self.arch_class.register_size_names:
+                                    new_dst = self.arch_class.register_size_names[(new_offset, new_size)]
+                                    self.exprs += self.temp_to_exprs[statement.data.args[0].tmp] + [new_dst, "="]
+                                    self.skip_next = True
+                                    continue
+
+                new_exprs = self.data_to_esil(statement.data)
+                self.temp_to_exprs[statement.tmp] = new_exprs
 
             elif stmt_type in (Put, PutI):
-                dst = self.offset_to_reg(statement)
+                dst, size = self.offset_to_reg(statement)
                 if "cc_" not in dst: # skip flags for now
                     self.exprs += self.data_to_esil(statement.data, dst=dst)
 
             elif stmt_type in (Store, StoreG):
                 size = int(statement.data.result_size(self.irsb.tyenv)/8)
-                temp = self.temp_to_stack[statement.addr.tmp]
                 self.exprs += self.data_to_esil(statement.data)
-                self.exprs += ["%d" % temp, "RPICK", "=[%d]" % size]
+                self.exprs += self.temp_to_exprs[statement.addr.tmp]
+                self.exprs += ["=[%d]" % size]
 
             elif stmt_type == Exit:
                 pass
 
-        #print(self.exprs)
+        #print(self.exprs) 
         esilex = ",".join(self.exprs)
 
         esilchecker = ESILCheck(self.arch, bits=self.bits)
-        esilchecker.check(instr["disasm"], esil=esilex)
+        esilchecker.check(code=code, check_flags=False)
+        esilchecker.check(code=code, esil=esilex, check_flags=False)
 
+        #print(esilex)
         return esilex
 
-    def offset_to_reg(self, stmt, data=False):
+    def replace_regs(self, instr, esilex):
+        regs = dict([(reg["name"], reg) for reg in self.r2p.cmdj("aerpj")["reg_info"]])
+        new_esilex = []
+        arg_strs = []
+        args = []
+        if " " in instr:
+            args = " ".join(instr.split(" ")[1:]).split(", ")
+
+        def arg_index(word):
+            for ind, arg in enumerate(args):
+                if word in arg:
+                    return ind
+
+            return -1
+
+        for word in esilex.split(","):
+            if word in regs and arg_index(word) != -1:
+                new_esilex.append("%s")
+                arg_strs.append("ARGS(%d)" % arg_index(word))
+            else:
+                new_esilex.append(word)
+
+        replaced = ",".join(new_esilex)
+        c_code = 'esilprintf("%s", %s)' % (replaced, ", ".join(arg_strs))
+        return c_code
+
+    def offset_to_reg(self, stmt, is_data=False):
         offset = stmt.offset
-        if data:
+        if is_data:
             size = int(stmt.result_size(self.irsb.tyenv)/8)
         else:
             size = int(stmt.data.result_size(self.irsb.tyenv)/8)
 
-        return self.arch_class.register_size_names[(offset, size)]
+        return self.arch_class.register_size_names[(offset, size)], size
 
     def data_to_esil(self, data, dst=None, flag=False):
         exprs = []
@@ -157,28 +287,20 @@ class Vex2Esil:
             exprs.append("%d" % data.con.value)
 
         elif dtype == RdTmp:
-            temp = self.temp_to_stack[data.tmp]
-            exprs += ["%d" % temp, "RPICK"]
+            exprs += self.temp_to_exprs[data.tmp] #["%d" % temp, "RPICK"]
 
         elif dtype in (Get, GetI):
-            src = self.offset_to_reg(data, True)
+            src, size = self.offset_to_reg(data, True)
             exprs += [src]
 
         elif dtype in self.ops:
             args = data.args[::-1]
-            self.stacklen += len(args)
-
-            # push args in do_op 
-            # for arg in args:
-            #     exprs += self.data_to_esil(arg)
-
             exprs += self.do_op(data.op, args)
-            self.stacklen -= len(args)
 
         elif dtype == Load:
             size = int(data.result_size(self.irsb.tyenv)/8)
-            temp = self.temp_to_stack[data.addr.tmp]
-            exprs += ["%d" % temp, "RPICK", "[%d]" % size]
+            exprs += self.temp_to_exprs[data.addr.tmp]
+            exprs += ["[%d]" % size]
             
         if dst != None:
             eq = "="
@@ -189,47 +311,22 @@ class Vex2Esil:
 
     def do_op(self, op, args):
         final_exprs = []
-        to_size, op_key, sign = self.get_op_size(op)
-        #print(to_size, op_key, sign)
+        op_key = op
+
         if op_key in op_dict:
             exprs = op_dict[op_key]
             for expr in exprs:
                 if type(expr) == int:
                     val = self.data_to_esil(args[expr])
-                    if sign != "S":
-                        final_exprs += val
-                    else:
-                        final_exprs += val # + [""] # handle this later im tired
-                elif expr == "$sz":
-                    final_exprs += ["%d" % to_size]
+                    final_exprs += val
                 else:
                     final_exprs += [expr]
 
             return final_exprs
 
         else:
-            print("op %s not found" % op_key)
-            raise VexException
+            raise VexException("op %s not found" % op_key)
             #return []
-
-    def get_op_size(self, op):
-        s = 0
-        sign = ""
-        for i in range(1, 4):
-            if op[-i:].isdigit():
-                s += 1
-            elif op[-i:] == "S":
-                sign = "S"
-                s += 1
-            elif op[-i:] == "U":
-                sign = "U"
-                s += 1
-
-        c = None
-        if op[-1] == sign:
-            c = -1
-
-        return (int(op[-s:c]), op[:-s], c)
 
 class VexException(Exception):
     pass
@@ -237,6 +334,7 @@ class VexException(Exception):
 if __name__ == "__main__":
 
     vexconv = Vex2Esil("x86", bits=64)
-    #vexconv.convert("xor rax, rbx")
-    #vexconv.convert("mov rax, [rbx]")
-    vexconv.convert("imul ebx")
+    #print(vexconv.convert("cdq"))
+    #print(vexconv.convert("mov [rax], rbx"))
+    print(vexconv.convert_c("imul ebx"))
+    #vexconv.convert(code=b"\x20\xc0\x1f\x38")
