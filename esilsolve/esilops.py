@@ -6,24 +6,26 @@ ONE = z3.BitVecVal(1, SIZE)
 ZERO = z3.BitVecVal(0, SIZE)
 NEGONE = z3.BitVecVal(-1, SIZE)
 
-def pop_values(stack, state, num=1):
-    return [get_value(stack.pop(), state) for i in range(num)]
+def pop_values(stack, state, num=1, signext=False):
+    return [get_value(stack.pop(), state, signext) for i in range(num)]
 
-def get_value(val, state):
+def get_value(val, state, signext=False):
     if type(val) == str:
         register = state.registers[val]
-        state.esil["popsz"] = register.size()
-        return prepare(register)
+        return prepare(register, signext)
     else:
         return prepare(val)
 
-def prepare(val):
+def prepare(val, signext=False):
     if z3.is_bv(val):
         #print(val)
         szdiff = SIZE-val.size()
         #print(szdiff, val.size())
         if szdiff > 0:
-            return z3.ZeroExt(szdiff, val)
+            if signext:
+                return z3.SignExt(szdiff, val)
+            else:
+                return z3.ZeroExt(szdiff, val)
         else:
             return val
     elif z3.is_int(val):
@@ -53,25 +55,25 @@ def do_CMP(op, stack, state):
     state.esil["cur"] = arg1-arg2
 
 def do_LT(op, stack, state):
-    arg1, arg2 = pop_values(stack, state, 2)
+    arg1, arg2 = pop_values(stack, state, 2, signext=True)
     stack.append(z3.If(arg1 < arg2, ONE, ZERO))
     state.esil["old"] = arg1
     state.esil["cur"] = stack[-1]
 
 def do_LTE(op, stack, state):
-    arg1, arg2 = pop_values(stack, state, 2)
+    arg1, arg2 = pop_values(stack, state, 2, signext=True)
     stack.append(z3.If(arg1 <= arg2, ONE, ZERO))
     state.esil["old"] = arg1
     state.esil["cur"] = stack[-1]
 
 def do_GT(op, stack, state):
-    arg1, arg2 = pop_values(stack, state, 2)
+    arg1, arg2 = pop_values(stack, state, 2, signext=True)
     stack.append(z3.If(arg1 > arg2, ONE, ZERO))
     state.esil["old"] = arg1
     state.esil["cur"] = stack[-1]
 
 def do_GTE(op, stack, state):
-    arg1, arg2 = pop_values(stack, state, 2)
+    arg1, arg2 = pop_values(stack, state, 2, signext=True)
     stack.append(z3.If(arg1 >= arg2, ONE, ZERO))
     state.esil["old"] = arg1
     state.esil["cur"] = stack[-1]
@@ -81,11 +83,7 @@ def do_LS(op, stack, state):
     stack.append(arg1<<arg2)
 
 def do_RS(op, stack, state):
-    arg1, = pop_values(stack, state, 1)
-    high = state.esil["popsz"]-1
-    arg1 = z3.Extract(high, 0, arg1)
-    arg2, = pop_values(stack, state, 1)
-    arg2 = z3.Extract(high, 0, arg2)
+    arg1, arg2 = pop_values(stack, state, 2, signext=True)
     stack.append(arg1>>arg2)
 
 def do_LRS(op, stack, state):
@@ -266,7 +264,6 @@ def do_PEEK(op, stack, state):
     state.esil["old"] = addr
     state.esil["cur"] = prepare(stack[-1])
     state.esil["lastsz"] = length*8
-    state.esil["popsz"] = length*8
 
 def do_OPPOKE(op, stack, state):
     length = memlen(op, state)
