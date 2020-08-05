@@ -24,7 +24,7 @@ archinfo_dict = {
 }
 
 op_dict = {}
-bits = [8, 16, 32, 64] #, 128] 128 is not supported
+bits = [1, 8, 16, 32, 64] #, 128] 128 is not supported
 
 for bit in bits:
     for sign in ("", "U", "S"):
@@ -146,9 +146,10 @@ class Vex2Esil:
 
     def convert(self, instr, code=None):
         if code == None:
+            print(instr["bytes"])
             code = unhexlify(instr["bytes"])
 
-        #print(instr["esil"])
+        print(instr["esil"])
         if all([x == 0 for x in code]):
             print("[!] failed to assemble instruction")
             return 
@@ -167,7 +168,7 @@ class Vex2Esil:
                 self.skip_next = False
                 continue
 
-            #print(statement)
+            #print(type(statement))
             #print(dir(statement))
             #print(dir(statement.data))
             stmt_type = type(statement)
@@ -185,7 +186,7 @@ class Vex2Esil:
                         src, size = self.offset_to_reg(statement.data, True)
                         conv_op = "%dto" % (size*8)
 
-                        if type(next_stmt.data) in self.ops and conv_op in next_stmt.data.op:
+                        if type(next_stmt) == Unop and type(next_stmt.data) in self.ops and conv_op in next_stmt.data.op:
                             to_size = next_stmt.data.op[4+len(conv_op):]
 
                             if to_size.isdigit():
@@ -238,7 +239,7 @@ class Vex2Esil:
         esilex = ",".join(self.exprs)
 
         esilchecker = ESILCheck(self.arch, bits=self.bits)
-        esilchecker.check(code=code, check_flags=False)
+        #esilchecker.check(code=code, check_flags=False)
         esilchecker.check(code=code, esil=esilex, check_flags=False)
 
         #print(esilex)
@@ -257,12 +258,21 @@ class Vex2Esil:
                 if word in arg:
                     return ind
 
+                elif word.isdigit() and "0x"+word in arg:
+                    return ind
+                
+                elif word[:2] == "0x" and str(int(word, 16)) in arg:
+                    return ind
+
             return -1
 
         for word in esilex.split(","):
             if word in regs and arg_index(word) != -1:
-                new_esilex.append("%s")
-                arg_strs.append("ARGS(%d)" % arg_index(word))
+                new_esilex.append("%1$s")
+                arg_strs.append("REG(%d)" % arg_index(word))
+            elif word.isdigit() or word[:2] == "0x" and arg_index(word) != -1:
+                new_esilex.append("%d")
+                arg_strs.append("IMM(%d)" % arg_index(word))
             else:
                 new_esilex.append(word)
 
@@ -284,7 +294,7 @@ class Vex2Esil:
         dtype = type(data)
 
         if dtype == Const:
-            exprs.append("%d" % data.con.value)
+            exprs.append("0x%x" % data.con.value)
 
         elif dtype == RdTmp:
             exprs += self.temp_to_exprs[data.tmp] #["%d" % temp, "RPICK"]
@@ -333,8 +343,8 @@ class VexException(Exception):
 
 if __name__ == "__main__":
 
-    vexconv = Vex2Esil("x86", bits=64)
+    vexconv = Vex2Esil("arm", bits=64)
     #print(vexconv.convert("cdq"))
     #print(vexconv.convert("mov [rax], rbx"))
-    print(vexconv.convert_c("imul ebx"))
+    print(vexconv.convert_str(code=unhexlify("88cf1fb8")))
     #vexconv.convert(code=b"\x20\xc0\x1f\x38")

@@ -27,10 +27,11 @@ op_dict = {
     "Iop_Sub": [0, 1, "-"],
     "Iop_Mul": [0, 1, "*"],
     "Iop_MullU": [0, 1, "*"],
-    "Iop_MullS": [0, "$sz", "~", 1, "$sz", "~", "*"],
+    "Iop_MullS": ["$sz", 0, "~", "$sz", 1, "~", "*"],
     "Iop_Div": [0, 1, "/"],
     "Iop_DivU": [0, 1, "/"],
-    "Iop_DivS": [0, "$sz", "~", 1, "$sz", "~", "/"],
+    "Iop_DivS": ["$sz", 0, "~", "$sz", 1, "~", "~/"],
+
     "Iop_Or": [0, 1, "|"],
     "Iop_Xor": [0, 1, "^"],
     "Iop_And": [0, 1, "&"],
@@ -38,7 +39,7 @@ op_dict = {
     "Iop_Shr": [0, 1, ">>"],
     "Iop_Sar": [0, 1, ">>>>"],
     "Iop_CmpEQ": [0, 1, "-", "!"],
-    "Iop_CmpNE": [0, 1, "-"],
+    "Iop_CmpNE": [0, 1, "-", "!", "!"],
     "Iop_CmpLT": [0, 1, "<"],
     "Iop_CmpLTE": [0, 1, "<="],
     "Iop_Not": [0, "!"],
@@ -52,19 +53,22 @@ for bit in bits:
     for sign in ("", "U", "S"):
         if sign != "S":
             op_key = "Iop_%d%sto" % (bit, sign)
-            op_dict[op_key] = [0, "1", "$sz", "1", "<<", "-", "&"]
+            op_dict[op_key] = [0, hex((1<<bit)-1), "&", "1", "$sz", "1", "<<", "-", "&"]
+
+            op_key = "Iop_DivMod%s%dto" % (sign, bit)
+            op_dict[op_key] = [0, 1, "/", "%d" % int(bit/2),  0, 1, "%", "<<", "+"]
         else:
             op_key = "Iop_%d%sto" % (bit, sign)
-            op_dict[op_key] = [0, "%d" % bit, "~", "1", "$sz", "1", "<<", "-", "&"]
+            op_dict[op_key] = ["%d" % bit, 0, "~", "1", "$sz", "1", "<<", "-", "&"]
 
-        op_key = "Iop_DivMod%s%dto" % (sign, bit)
-        op_dict[op_key] = [0, 1, "/", "%d" % int(bit/2),  0, 1, "%", "<<", "+"]
+            op_key = "Iop_DivMod%s%dto" % (sign, bit)
+            op_dict[op_key] = ["$sz", 0, "~", 1, "~/", "%d" % int(bit/2), "$sz", 0, "~", 1, "~%", "<<", "+"]
 
     op_key = "Iop_%dHIto" % bit
-    op_dict[op_key] = ["$sz", "%d" % bit, "-", 0, ">>"]
+    op_dict[op_key] = ["$sz", "%d" % bit, "-", 0, ">>", "1", "$sz", "1", "<<", "-", "&"]
 
     op_key = "Iop_%dHLto" % bit
-    op_dict[op_key] = ["$sz", "%d" % bit, "-", 0, ">>", 1, "+"]
+    op_dict[op_key] = ["%d" % bit, "$sz", "-", 1, "<<", 0, "+"]
 
 
 # Automatically translate vex into truly terrible esil expressions
@@ -83,9 +87,15 @@ class VexIt:
         self.vex_addr = 0x400400
         self.ops = [Unop, Binop, Triop, Qop]
 
-    def convert(self, instr):
+    def convert(self, instr, code=None):
 
-        code = unhexlify(instr["bytes"])
+        if code == None:
+            code = unhexlify(instr["bytes"])
+
+        #print(instr["esil"])
+        if all([x == 0 for x in code]):
+            #print("[!] failed to assemble instruction")
+            return 
 
         self.irsb = lift(code, self.vex_addr, self.arch_class)
         self.irsb.pp()
@@ -93,44 +103,74 @@ class VexIt:
         self.exprs = []
         self.stacklen = 0
         self.temp_to_stack = {}
+        self.temp_to_exprs = {}
+        self.skip_next = False
 
-        for statement in self.irsb.statements:
+        for ind, statement in enumerate(self.irsb.statements):
+            if self.skip_next:
+                self.skip_next = False
+                continue
+
             #print(statement)
             #print(dir(statement))
             #print(dir(statement.data))
             stmt_type = type(statement)
+            next_stmt = None
+            if len(self.irsb.statements) > ind+1:
+                next_stmt = self.irsb.statements[ind+1]
+
             if stmt_type == WrTmp:
                 #print(dir(statement.data))
-                self.temp_to_stack[statement.tmp] = self.stacklen
-                self.stacklen += 1
-                self.exprs += self.data_to_esil(statement.data)
+                
+                # look ahead to see if the stmt is a reg get
+                # and the next stmt is a conv
+                if type(statement.data) in (Get, GetI):
+                    src, size = self.offset_to_reg(statement.data, True)
+                    conv_op = "%dto" % (size*8)
+
+                    if type(next_stmt.data) in self.ops and conv_op in next_stmt.data.op:
+                        to_size = next_stmt.data.op[4+len(conv_op):]
+
+                        if to_size.isdigit():
+                            new_size = int(to_size)//8
+                            new_offset = statement.data.offset
+
+                            if (new_offset, new_size) in self.arch_class.register_size_names:
+                                new_exprs = [self.arch_class.register_size_names[(new_offset, new_size)]]
+                                self.temp_to_exprs[next_stmt.tmp] = new_exprs
+                                self.skip_next = True
+                                continue
+
+                new_exprs = self.data_to_esil(statement.data)
+                self.temp_to_exprs[statement.tmp] = new_exprs
 
             elif stmt_type in (Put, PutI):
-                dst = self.offset_to_reg(statement)
+                dst, size = self.offset_to_reg(statement)
                 if "cc_" not in dst: # skip flags for now
                     self.exprs += self.data_to_esil(statement.data, dst=dst)
 
             elif stmt_type in (Store, StoreG):
                 size = int(statement.data.result_size(self.irsb.tyenv)/8)
-                temp = self.temp_to_stack[statement.addr.tmp]
                 self.exprs += self.data_to_esil(statement.data)
-                self.exprs += ["%d" % temp, "RPICK", "=[%d]" % size]
+                self.exprs += self.temp_to_exprs[statement.addr.tmp]
+                self.exprs += ["=[%d]" % size]
 
             elif stmt_type == Exit:
                 pass
 
         #print(self.exprs)
         esilex = ",".join(self.exprs)
+
         return esilex
 
-    def offset_to_reg(self, stmt, data=False):
+    def offset_to_reg(self, stmt, is_data=False):
         offset = stmt.offset
-        if data:
+        if is_data:
             size = int(stmt.result_size(self.irsb.tyenv)/8)
         else:
             size = int(stmt.data.result_size(self.irsb.tyenv)/8)
 
-        return self.arch_class.register_size_names[(offset, size)]
+        return self.arch_class.register_size_names[(offset, size)], size
 
     def data_to_esil(self, data, dst=None, flag=False):
         exprs = []
@@ -140,29 +180,20 @@ class VexIt:
             exprs.append("%d" % data.con.value)
 
         elif dtype == RdTmp:
-            temp = self.temp_to_stack[data.tmp]
-            exprs += ["%d" % temp, "RPICK"]
-            # this is the secret, instead of temp regs we use RPICKS
+            exprs += self.temp_to_exprs[data.tmp] #["%d" % temp, "RPICK"]
 
         elif dtype in (Get, GetI):
-            src = self.offset_to_reg(data, True)
+            src, size = self.offset_to_reg(data, True)
             exprs += [src]
 
         elif dtype in self.ops:
             args = data.args[::-1]
-            self.stacklen += len(args)
-
-            # push args in do_op 
-            # for arg in args:
-            #     exprs += self.data_to_esil(arg)
-
             exprs += self.do_op(data.op, args)
-            self.stacklen -= len(args)
 
         elif dtype == Load:
             size = int(data.result_size(self.irsb.tyenv)/8)
-            temp = self.temp_to_stack[data.addr.tmp]
-            exprs += ["%d" % temp, "RPICK", "[%d]" % size]
+            exprs += self.temp_to_exprs[data.addr.tmp]
+            exprs += ["[%d]" % size]
             
         if dst != None:
             eq = "="
@@ -183,7 +214,7 @@ class VexIt:
                     if sign != "S":
                         final_exprs += val
                     else:
-                        final_exprs += val # + ["%"] # handle this later im tired
+                        final_exprs += val # + [""] # handle this later im tired
                 elif expr == "$sz":
                     final_exprs += ["%d" % to_size]
                 else:

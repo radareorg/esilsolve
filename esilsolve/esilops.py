@@ -91,11 +91,45 @@ def do_LRS(op, stack, state):
     stack.append(z3.LShR(arg1, arg2))
 
 def do_LR(op, stack, state):
-    arg1, arg2 = pop_values(stack, state, 2)
+    #arg1, arg2 = pop_values(stack, state, 2)
+    arg1_val = stack.pop()
+
+    size = SIZE
+    if z3.is_bv(arg1_val):
+        arg1 = arg1_val
+        size = arg1.size()
+    elif type(arg1_val) == str:
+        arg1 =  state.registers[arg1_val]
+        size = arg1.size()
+    else:
+        arg1 = prepare(arg1_val)
+
+    arg2, = pop_values(stack, state, 1)
+
+    if arg2.size() > size:
+        arg2 = z3.Extract(size-1, 0, arg2)
+
     stack.append(z3.RotateLeft(arg1, arg2))
 
 def do_RR(op, stack, state):
-    arg1, arg2 = pop_values(stack, state, 2)
+    #arg1, arg2 = pop_values(stack, state, 2)
+    arg1_val = stack.pop()
+
+    size = SIZE
+    if z3.is_bv(arg1_val):
+        arg1 = arg1_val
+        size = arg1.size()
+    elif type(arg1_val) == str:
+        arg1 =  state.registers[arg1_val]
+        size = arg1.size()
+    else:
+        arg1 = prepare(arg1_val)
+
+    arg2, = pop_values(stack, state, 1)
+
+    if arg2.size() > size:
+        arg2 = z3.Extract(size-1, 0, arg2)
+
     stack.append(z3.RotateRight(arg1, arg2))
 
 def do_AND(op, stack, state):
@@ -191,7 +225,7 @@ def do_OPEQ(op, stack, state):
     regval = state.registers[reg]
     newop = op.split("=")[0]
 
-    stack.append(regval)
+    stack.append(reg)
     opcodes[newop](newop, stack, state)
 
     stack.append(reg)
@@ -222,8 +256,6 @@ def do_RPICK(op, stack, state):
 def do_DUP(op, stack, state):
     stack.append(stack[-1])
 
-# idk if this is relevant to how we are doing things?
-# nvmd it is still relevant
 def do_NUM(op, stack, state):
     val, = pop_values(stack, state)
     stack.append(val)
@@ -347,16 +379,7 @@ def do_P(op, stack, state):
     c2 = z3.BitVecVal(0x8040201008040201, SIZE)
     c3 = z3.BitVecVal(0x1FF, SIZE)
 
-    cur = state.esil["cur"]
-
-    if type(cur) == int:
-        cur = z3.BitVecVal(cur, SIZE)
-        sz = SIZE
-    else:
-        sz = cur.size()
-        if sz < SIZE:
-            cur = z3.ZeroExt(SIZE-sz, cur)
-
+    cur = prepare(state.esil["cur"])
     lsb = cur & z3.BitVecVal(0xff, SIZE)
     #pf = (((((lsb * c1) & c2) % c3) & ONE) != 1)
     pf = ((z3.URem(((lsb * c1) & c2), c3) & ONE) != ONE)
@@ -464,7 +487,7 @@ opcodes = {
     "$r": do_R,
 }
 
-byte_vals = ["", "*", "1", "2", "4", "8"]
+byte_vals = ["", "*", "1", "2", "4", "8", "16"]
 op_vals = ["+", "-", "++", "--", "*", "/", "<<", ">>", "|", "&", "^", "%", "!", ">>>>", ">>>", "<<<"]
 
 for op_val in op_vals:

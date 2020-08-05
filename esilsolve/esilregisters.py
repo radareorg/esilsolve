@@ -10,6 +10,11 @@ class ESILRegisters:
         self._register_values = {}
         self.aliases = aliases
         self._refs = {"count": 1}
+        self.zero_regs = {
+            "xzr": z3.BitVecVal(0, 64), 
+            "wzr": z3.BitVecVal(0, 32),
+            "zero": z3.BitVecVal(0, 64)
+        }
 
         self.pure_symbolic = sym
 
@@ -99,6 +104,9 @@ class ESILRegisters:
     def __getitem__(self, key):
         if key in self.aliases:
             key = self.aliases[key]["reg"]
+
+        if key in self.zero_regs:
+            return self.zero_regs[key]
 
         register = self._registers[key]
         reg_value = self.get_register_from_bounds(register)

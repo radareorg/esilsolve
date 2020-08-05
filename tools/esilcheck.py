@@ -30,7 +30,7 @@ class ESILCheck:
 
         self.converter = claripy.backends.z3
 
-    def check(self, instruction=None, code=None, esil=None):
+    def check(self, instruction=None, code=None, esil=None, check_flags=True):
         r2p = r2pipe.open("-", ["-a", self.arch, "-b", str(self.bits), "-2"])
 
         if instruction == None:
@@ -64,9 +64,11 @@ class ESILCheck:
         basesolver = self.converter.solver()
 
         #basesolver.add(esstate.registers["ebx"] != 2147483648)
+        #basesolver.add(esstate.registers["ebx"] != 0)
 
         insn = block.capstone.insns[0].insn
         regs_read, regs_write = insn.regs_access()
+        equivalent = True
 
         print("[-] read: ")
         for reg in regs_read:
@@ -90,11 +92,13 @@ class ESILCheck:
             regn = insn.reg_name(reg)
             try:
             #if True:
-                regv = getattr(successor.regs, regn)
+                esregv = prepare(essuccessor.registers[regn])
 
-                esregv = essuccessor.registers[regn]
+                if essuccessor.registers._registers[regn]["type_str"] == "flg" and not check_flags:
+                    continue
+                
                 regv = getattr(successor.regs, regn)
-                convregv = self.converter.convert(regv)
+                convregv = prepare(self.converter.convert(regv))
                 #basesolver.add(convregv > 0)
                 basesolver.add(esregv != convregv)
 
@@ -116,6 +120,7 @@ class ESILCheck:
             #basesolver.add(essuccessor.registers["af"] == 1)
             satisfiable = basesolver.check()
             if satisfiable == z3.sat:
+                equivalent = False
                 model = basesolver.model()
                 print("[!]\tunequal model: %s" % str(model).replace("\n", ""))
                 print("[*]\t\tangr %s: %x" % (regn, model.eval(convregv).as_long()))
@@ -125,6 +130,8 @@ class ESILCheck:
                 print("[*]\timplementations are equivalent!\n")
             
             basesolver.pop()
+
+        return equivalent
 
     def equate_regs(self, basesolver, angrstmt, esstate, essuccessor, equated, depth=0):
         esreg = self.stmt_to_reg(angrstmt)
@@ -174,6 +181,21 @@ class ESILCheck:
                 "size": int(matches.group(2))
             }
 
+SIZE = 64
+def prepare(val):
+    if z3.is_bv(val):
+        #print(val)
+        szdiff = SIZE-val.size()
+        #print(szdiff, val.size())
+        if szdiff > 0:
+            return z3.ZeroExt(szdiff, val)
+        else:
+            return val
+    elif z3.is_int(val):
+        return z3.Int2BV(val, SIZE)
+    else:
+        return z3.BitVecVal(val, SIZE)
+
 def trunc(s, maxlen=64):
     s = str(s).replace("\n", " ")
     if len(s) > maxlen:
@@ -185,15 +207,18 @@ if __name__ == "__main__":
 
     '''esilcheck = ESILCheck("x86", bits=64)
     #esilcheck.check("or eax, ebx")
-    esilcheck.check(code=b"\x48\x63\xff")
-    esilcheck.check("cmp eax, ebx") 
+    #esilcheck.check(code=b"\x48\x63\xff")
+    esilcheck.check("idiv ebx") 
+    exit()
     esilcheck.check("imul eax, edx") 
     esilcheck.check("imul ebx") # edx not equivalent
-    exit()
+    exit()'''
 
-    esilcheck = ESILCheck("arm", bits=32)
-    esilcheck.check("add r0, r0, r1")
-    esilcheck.check("cmp r0, r1")'''
+    esilcheck = ESILCheck("arm", bits=64)
+    esilcheck.check(code=unhexlify("602bc01a"))
+    #esilcheck.check("rbit w0, w1")
+    exit()
+    esilcheck.check("cmp r0, r1")
 
     esilcheck = ESILCheck("arm", bits=64)
     esilcheck.check("add x0, x0, x1")
