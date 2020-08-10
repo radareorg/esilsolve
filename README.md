@@ -1,4 +1,4 @@
-## <img src="https://gitlab.com/nowsecure/research/esilsolve/-/raw/master/raphi.svg" alt="logo" width="200"/> ESILSolve - A python symbolic execution framework using r2 and ESIL
+## <img src="https://raw.githubusercontent.com/aemmitt-ns/esilsolve/master/raphi.svg" alt="logo" width="200"/> ESILSolve - A python symbolic execution framework using r2 and ESIL
 
 ESILSolve uses the z3 theorem prover and r2's ESIL intermediate representation to symbolically execute code. 
 
