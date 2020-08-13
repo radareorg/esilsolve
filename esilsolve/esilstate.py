@@ -9,11 +9,12 @@ all_bytes = "".join([chr(x) for x in range(256)])
 
 class ESILState:
     
-    def __init__(self, r2api, opt=False, init=True, debug=False, trace=False, sym=False):
+    def __init__(self, r2api, **kwargs):
+        self.kwargs = kwargs
         self.r2api = r2api
-        self.pure_symbolic = sym
+        self.pure_symbolic = kwargs.get("sym", False)
 
-        if opt:
+        if kwargs.get("opt", False):
             self.solver = z3.Optimize()
         else:
             self.solver = z3.SimpleSolver()
@@ -24,8 +25,8 @@ class ESILState:
         self.esil = {"cur":0, "old":0, "stack":[]}
         self.stack = self.esil["stack"]
         self.info = self.r2api.get_info()
-        self.debug = debug
-        self.trace = trace
+        self.debug = kwargs.get("debug", False)
+        self.trace = kwargs.get("trace", False)
 
         self.memory = {}
         self.registers = {}
@@ -44,8 +45,8 @@ class ESILState:
             self.bits = 64
             self.endian = "little"
 
-        if init:
-            self.proc = ESILProcess(r2api, debug=debug, trace=trace)
+        if kwargs.get("init", True):
+            self.proc = ESILProcess(r2api, debug=self.debug, trace=self.trace)
             self.init_state()
 
     def init_state(self):
@@ -234,7 +235,14 @@ class ESILState:
             self.r2api.write(addr, value, length)
 
     def clone(self):
-        clone = self.__class__(self.r2api, init=False, sym=self.pure_symbolic, debug=self.debug, trace=self.trace)
+        clone = self.__class__(
+            self.r2api, 
+            init=False, 
+            sym=self.pure_symbolic, 
+            debug=self.debug, 
+            trace=self.trace
+        )
+
         clone.stack = self.stack[:]
         clone.constrain(*self.solver.assertions())
 
@@ -289,7 +297,7 @@ class ESILStateManager:
         else:
             self.unsat.add(state)
 
-    def entry_state(self, r2api, optimize=False, sym=False, debug=False, trace=False):
-        state = ESILState(r2api, opt=optimize, sym=sym, debug=debug, trace=trace)
+    def entry_state(self, r2api, **kwargs):
+        state = ESILState(r2api, **kwargs)
         self.add(state)
         return state

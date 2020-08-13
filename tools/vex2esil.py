@@ -346,5 +346,5 @@ if __name__ == "__main__":
     vexconv = Vex2Esil("arm", bits=64)
     #print(vexconv.convert("cdq"))
     #print(vexconv.convert("mov [rax], rbx"))
-    print(vexconv.convert_str(code=unhexlify("88cf1fb8")))
+    print(vexconv.convert_str(code=unhexlify("a0cc208b")))
     #vexconv.convert(code=b"\x20\xc0\x1f\x38")

@@ -8,7 +8,7 @@ import z3
 import r2pipe
 from struct import pack, unpack
 
-path = "tests/aeg_program"
+path = "test/tests/aeg_program"
 r2p = None
 
 def esilsolve_execution(targets):
@@ -32,10 +32,7 @@ def esilsolve_execution(targets):
     avoid_addr = targets["check_start"]+39
     final = esilsolver.run(targets["goal"], avoid=[avoid_addr])
     
-    if final.solver.check() == z3.sat:
-        return list(final.evaluate_buffer(buf))
-    else:
-        return []
+    return list(final.evaluate_buffer(buf))
 
 def generate_exploit(magic, targets):
 

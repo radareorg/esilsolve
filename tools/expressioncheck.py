@@ -4,7 +4,7 @@ import sys
 from esilcheck import ESILCheck
 from binascii import unhexlify
 
-# identify structurally different instrs, jankily
+# identify structurally different (arm) instrs, jankily
 def get_op_key(instr):
     parts = instr["opcode"].split(" ")
     op = parts[0]
@@ -19,6 +19,12 @@ def get_op_key(instr):
                 args.append(0)
             elif "[" in arg:
                 args.append(1)
+            elif "lsl" in arg:
+                args.append(5)
+            elif "sxt" in arg:
+                args.append(6)
+            elif "uxt" in arg:
+                args.append(7)
             elif "x" in arg:
                 args.append(2)
             elif "w" in arg:

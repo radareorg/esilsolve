@@ -5,18 +5,19 @@ from .esilstate import ESILState, ESILStateManager
 from .esilsim import ESILSim
 
 class ESILSolver:
-    def __init__(self, r2p=None, init=False, optimize=False, debug=False, trace=False, sym=False):
-        self.debug = debug
-        self.trace = trace
+    def __init__(self, r2p=None, **kwargs):
+        self.kwargs = kwargs
+        self.debug = kwargs.get("debug", False)
+        self.trace = kwargs.get("trace", False)
         self.states = []
         self.hooks = {}
         self.sims = {}
         self.state_manager = None
-        self.pure_symbolic = sym
+        self.pure_symbolic = kwargs.get("sym", False)
 
         self.conditionals = {}
         self.cond_count = 0
-        self.optimize = optimize
+        self.optimize = kwargs.get("optimize", False)
 
         # use r2api which caches some data
         # to increase speed
@@ -41,7 +42,7 @@ class ESILSolver:
         # but we must look to the future
         self.context = {}
 
-        if init:
+        if kwargs.get("init", False):
             self.init_state()
 
     # initialize the ESIL VM
@@ -161,17 +162,17 @@ class ESILSolver:
         self.state_manager = ESILStateManager([])
         
         if state == None:
-            state = self.state_manager.entry_state(self.r2api, self.optimize, self.pure_symbolic, self.debug, self.trace)
+            state = self.state_manager.entry_state(self.r2api, **self.kwargs)
         else:
             self.state_manager.add(state)
 
     def init_state(self):
         self.state_manager = ESILStateManager([])
-        state = self.state_manager.entry_state(self.r2api, self.optimize, self.pure_symbolic, self.debug, self.trace)
+        state = self.state_manager.entry_state(self.r2api, **self.kwargs)
         return state
 
     def blank_state(self, addr=0):
         self.state_manager = ESILStateManager([])
-        state = self.state_manager.entry_state(self.r2api, self.optimize, True, self.debug, self.trace)
+        state = self.state_manager.entry_state(self.r2api, **self.kwargs)
         state.registers["PC"] = z3.BitVecVal(addr, state.registers["PC"].size())
         return state

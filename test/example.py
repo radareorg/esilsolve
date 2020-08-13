@@ -9,11 +9,7 @@ state = esilsolver.call_state("sym.check")
 state.set_symbolic_register("rdi")
 rdi = state.registers["rdi"]
 
-# hook callback
-def success(state):
-    print("ARG1: %d" % state.evaluate(rdi).as_long())
-
-# hook any address to manipulate states
-# and set targets and avoided addresses
-esilsolver.register_hook(0x6a1, success)
-esilsolver.run(target=0x6a1, avoid=[0x6a8])
+# set targets and avoided addresses
+# state will contain a state at the target pc addr
+state = esilsolver.run(target=0x6a1, avoid=[0x6a8])
+print("ARG1: %d " % state.evaluate(rdi).as_long())

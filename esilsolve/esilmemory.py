@@ -10,7 +10,7 @@ class ESILMemory:
         self.r2api = r2api
         self.info = info
         self.pure_symbolic = sym
-        self.default_addr = 0x100000
+        self.default_addr = 0x000000
 
         self.multi_concretize = False # True destroys performance
         self.hit_symbolic_addr = False
