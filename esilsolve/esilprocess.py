@@ -8,11 +8,14 @@ from .esilstate import *
 UNCON = 0
 IF = 1 
 ELSE = 2
+EXEC = 3
+NO_EXEC = 4
 
 class ESILProcess:
-    def __init__(self, r2p=None, debug=False, trace=False):
+    def __init__(self, r2p=None, debug=False, trace=False, lazy=False):
         self.debug = debug
         self.trace = trace
+        self._expr_cache = {}
 
         self.conditionals = {}
         self.cond_count = 0
@@ -28,6 +31,7 @@ class ESILProcess:
         # this depth limit is maybe already too high
         # condition "size" scales like 2**limit
         self.goto_depth_limit = 16
+        self.lazy = lazy
 
         # try to init vexit, an optional module that uses vex
         # if an esil expression is not available
@@ -41,51 +45,42 @@ class ESILProcess:
             self.vexit = None
     
     def execute_instruction(self, state, instr):
+        offset = instr["offset"]
+
         if self.debug:
             print("\nexpr: %s" % instr["esil"])
-            print("%016x: %s" % (instr["offset"], instr["opcode"]))
+            print("%016x: %s" % (offset, instr["opcode"]))
 
-        # clone the original state if theres a peek
-        #og_state = None
-        #if instr["refptr"] and state.memory.multi_concretize:
-        #    og_state = state.clone()
+        # old pc should never be anything other than a BitVecVal  
+        #old_pc = state.registers["PC"].as_long() + instr["size"]
+        old_pc = offset + instr["size"]
 
-        # old pc should never be anything other than a BitVecVal        
-        old_pc = state.registers["PC"].as_long() + instr["size"]
         state.registers["PC"] = old_pc
 
-        esil = instr["esil"]
-        if esil == "" and instr["type"] != "nop":
-            if self.vexit != None:
-                try:
-                    print("taking vexit for %s" % str(instr))
-                    esil = self.vexit.convert(instr)
-                except:
-                    pass
+        if offset in self._expr_cache:
+            esil = self._expr_cache[offset]
+        else:
+            esil = instr["esil"]
+            if esil == "" and instr["type"] != "nop":
+                if self.vexit != None:
+                    try:
+                        print("taking vexit for %s" % str(instr))
+                        esil = self.vexit.convert(instr)
+                    except:
+                        pass
+
+            self._expr_cache[offset] = esil.split(",")
 
         self.parse_expression(esil, state)
         state.steps += 1
         states = []
 
-        # christ this is getting convoluted
-        '''if state.memory.hit_symbolic_addr and og_state != None: 
-            state.memory.hit_symbolic_addr = False
-            
-            for addr in state.memory.concrete_addrs:
-                for val in addr["values"]:
-                    new_state = og_state.clone()
-                    new_state.constrain(addr["bv"] == val)
-
-                    states.extend(self.execute_instruction(new_state, instr))
-
-            state.memory.concrete_addrs = []'''
-
         pc = state.registers["PC"]
         if z3.is_bv_value(pc):
             new_pc = pc.as_long()
 
-            if state.target != None:
-                state.distance = min(state.distance, abs(state.target-new_pc))
+            #if state.target != None:
+            #    state.distance = min(state.distance, abs(state.target-new_pc))
 
             if self.trace:
                 self.r2api.emustep()
@@ -97,13 +92,25 @@ class ESILProcess:
             if self.debug:
                 print("symbolic pc: %s" % str(pc))
 
-            possible_pcs = state.eval_max(pc)
-            pc_count = len(possible_pcs)
+            possible_pcs = []
+
+            # if lazy don't eval, just try both If addresses
+            if self.lazy and pc.decl().name() == "if":
+                arg1 = z3.simplify(pc.arg(1))
+                arg2 = z3.simplify(pc.arg(2))
+
+                if z3.is_bv_value(arg1) and z3.is_bv_value(arg2):
+                    possible_pcs = [arg1.as_long(), arg2.as_long()]
+            
+            if possible_pcs == []:
+                possible_pcs = state.eval_max(pc)
+
+            do_clone = len(possible_pcs) > 1
 
             for possible_pc in possible_pcs:
 
                 # this is the secret to speed, dont always clone states
-                if pc_count > 1:
+                if do_clone:
                     new_state = state.clone()
                 else:
                     new_state = state
@@ -120,11 +127,14 @@ class ESILProcess:
         temp_stack1 = []
         temp_stack2 = []
         exec_type = UNCON
-        #expression = expression.replace("|=}", "|=,}") # typo fix
-        words = expression.split(",")
+
+        if type(expression) == str:
+            words = expression.split(",")
+        else:
+            words = expression
+
         word_ind = 0
 
-        # ahhhhh 
         goto = None
         goto_condition = None
         goto_depth = 0
@@ -136,42 +146,61 @@ class ESILProcess:
 
             if word == "?{":
                 state.condition = self.do_if(state)
-                exec_type = IF
-                temp_stack1 = state.stack
-                state.stack = temp_stack1[:]
+
+                if type(state.condition) == bool:
+                    if state.condition == True:
+                        exec_type = EXEC
+                    else:
+                        exec_type = NO_EXEC
+
+                    state.condition = None
+                else:
+                    exec_type = IF
+                    temp_stack1 = state.stack
+                    state.stack = temp_stack1[:]
 
             elif word == "}{":
-                state.condition = z3.Not(state.condition)
-                exec_type = ELSE
-                temp_stack2 = state.stack
-                state.stack = temp_stack1[:]
+                if exec_type == NO_EXEC:
+                    exec_type = EXEC
+                elif exec_type == EXEC:
+                    exec_type = NO_EXEC
+                else:
+                    state.condition = z3.Not(state.condition)
+                    exec_type = ELSE
+                    temp_stack2 = state.stack
+                    state.stack = temp_stack1[:]
                 
             elif word == "}":
-                new_stack = []
-                new_temp = temp_stack1
-                if exec_type == ELSE:
-                    new_temp = temp_stack2
+                if NO_EXEC != exec_type != EXEC:
+                    new_stack = []
+                    new_temp = temp_stack1
+                    if exec_type == ELSE:
+                        new_temp = temp_stack2
 
-                while len(state.stack) > 0 and len(new_temp) > 0:
-                    else_val, = esilops.pop_values(new_temp, state)
-                    if_val, = esilops.pop_values(state.stack, state)
-                    condval = z3.If(state.condition, if_val, else_val)
-                    new_stack.append(z3.simplify(condval))
+                    while state.stack != [] and new_temp != []:
+                        else_val, = esilops.pop_values(new_temp, state)
+                        if_val, = esilops.pop_values(state.stack, state)
+                        condval = z3.If(state.condition, if_val, else_val)
+                        new_stack.append(z3.simplify(condval))
 
-                state.condition = None
+                    state.condition = None
+                    new_stack.reverse()
+                    state.stack = new_stack
+
                 exec_type = UNCON
-                new_stack.reverse()
-                state.stack = new_stack
 
-                if goto != None:
+                if goto != None and exec_type != NO_EXEC:
                     word_ind = goto
                     state.condition = goto_condition
                     goto = None
 
-            elif word == "GOTO":
+            elif word == "GOTO" and exec_type != NO_EXEC:
                 # goto makes things a bit wild
                 goto, = esilops.pop_values(state.stack, state)
-                goto_depth += 1
+
+                if state.condition != None:
+                    #print(state.condition)
+                    goto_depth += 1
 
                 if z3.is_bv_value(goto):
                     goto = goto.as_long()
@@ -195,22 +224,41 @@ class ESILProcess:
                 else:
                     goto = None
 
-            else:
+            elif exec_type != NO_EXEC:
+
+                #if word in state.registers:
+                #    state.stack.append(word)
+
                 if word in esilops.opcodes:
                     op = esilops.opcodes[word]
                     op(word, state.stack, state)
 
                 else:
-                    val = get_push_value(word)
+                    val = self.get_push_value(word)
                     state.stack.append(val)
+
+    def get_push_value(self, word):
+        if(word.isdigit()):
+            return int(word)
+        elif word[:2] == "0x" or word[:3] == "-0x":
+            return int(word, 16)
+        elif word[:1] == "-" and word[1:].isdigit():
+            return int(word)
+        else:
+            return word
 
     def do_if(self, state):
         val, = esilops.pop_values(state.stack, state)
+        val = z3.simplify(val)
+
         if self.debug:
             print("condition val: %s" % val)
 
         zero = 0
-        if z3.is_bv(val):
+        if z3.is_bv_value(val):
+            return val.as_long() != zero
+                
+        elif z3.is_bv(val):
             zero = z3.BitVecVal(0, val.size())
 
         if state.condition == None:
@@ -247,20 +295,3 @@ class ESILProcess:
     def clone(self):
         clone = self.__class__(self.r2api, debug=self.debug, trace=self.trace)
         return clone
-
-
-def get_literal_value(word):
-    if(word.isdigit()):
-        return int(word)
-    elif word.startswith("0x"):
-        return int(word, 16)
-    elif word.startswith("-") and word[1:].isdigit():
-        return int(word)
-
-def get_push_value(word):
-    literal = get_literal_value(word)
-    if literal != None:
-        return literal
-
-    else:
-        return word

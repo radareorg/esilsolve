@@ -4,11 +4,14 @@ from .esilclasses import *
 from .esilstate import ESILState, ESILStateManager
 from .esilsim import ESILSim
 
+from typing import Union, List
+
 class ESILSolver:
     def __init__(self, r2p=None, **kwargs):
         self.kwargs = kwargs
         self.debug = kwargs.get("debug", False)
         self.trace = kwargs.get("trace", False)
+        self.lazy = kwargs.get("lazy", False)
         self.states = []
         self.hooks = {}
         self.sims = {}
@@ -54,13 +57,13 @@ class ESILSolver:
         self.stop = False
 
         # try to avoid leaving valid context when nothing is set
-        if avoid == [] and len(self.state_manager.avoid) == 0:
+        if avoid == [] and self.state_manager.avoid == []:
             state = self.state_manager.next()
             avoid = self.default_avoid(state)
 
             # no target or hooks, target is last ret
-            if target == None and len(avoid) > 0:
-                if len(self.hooks.keys()) == 0:
+            if target == None and avoid != []:
+                if len(self.hooks) == 0:
                     target = avoid[-1]
                     avoid = avoid[:-1]
 
@@ -159,7 +162,7 @@ class ESILSolver:
         return self.init_state()
 
     def reset(self, state):
-        self.state_manager = ESILStateManager([])
+        self.state_manager = ESILStateManager([], lazy=self.lazy)
         
         if state == None:
             state = self.state_manager.entry_state(self.r2api, **self.kwargs)
@@ -167,12 +170,13 @@ class ESILSolver:
             self.state_manager.add(state)
 
     def init_state(self):
-        self.state_manager = ESILStateManager([])
+        self.state_manager = ESILStateManager([], lazy=self.lazy)
         state = self.state_manager.entry_state(self.r2api, **self.kwargs)
         return state
 
     def blank_state(self, addr=0):
-        self.state_manager = ESILStateManager([])
+        self.state_manager = ESILStateManager([], lazy=self.lazy)
         state = self.state_manager.entry_state(self.r2api, **self.kwargs)
-        state.registers["PC"] = z3.BitVecVal(addr, state.registers["PC"].size())
+        pc_size = state.registers["PC"].size()
+        state.registers["PC"] = z3.BitVecVal(addr, pc_size)
         return state

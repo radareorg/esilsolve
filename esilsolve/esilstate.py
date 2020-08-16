@@ -46,7 +46,7 @@ class ESILState:
             self.endian = "little"
 
         if kwargs.get("init", True):
-            self.proc = ESILProcess(r2api, debug=self.debug, trace=self.trace)
+            self.proc = ESILProcess(r2api, **kwargs)
             self.init_state()
 
     def init_state(self):
@@ -257,17 +257,19 @@ class ESILState:
 
 class ESILStateManager:
 
-    def __init__(self, active=[], avoid=[]):
+    def __init__(self, active=[], avoid=[], lazy=False):
         self.active = set(active)
         self.inactive = set()
         self.unsat = set()
         self.recently_added = set()
 
         if isinstance(avoid, int):
-            avoid = (avoid,)
+            avoid = [avoid]
 
         self.avoid = avoid
         self.cutoff = 32
+
+        self.lazy = lazy
 
     def next(self):
         #print(self.active, self.inactive)
@@ -277,8 +279,8 @@ class ESILStateManager:
         elif len(self.active) > self.cutoff:
             state = max(self.active, key=lambda s: s.steps)
         else:
-            #state = min(self.active, key=lambda s: s.steps)
-            state = min(self.active, key=lambda s: s.distance) 
+            state = min(self.active, key=lambda s: s.steps)
+            #state = min(self.active, key=lambda s: s.distance) 
 
         #print(state.distance)
         self.active.discard(state)
@@ -291,7 +293,8 @@ class ESILStateManager:
                 self.inactive.add(state)
             else:
                 self.active.add(state)
-        elif state.is_sat():
+
+        elif self.lazy or state.is_sat():
             self.active.add(state)
 
         else:

@@ -6,13 +6,25 @@ import r2pipe
 from binascii import hexlify, unhexlify
 import re
 import logging
+import archinfo
 
 logging.getLogger('angr').setLevel('ERROR')
 reg_pattern = re.compile('^reg_([a-z0-9_]+)_\\d+_\\d+$')
 mem_pattern = re.compile('^mem_([a-f0-9]+)_\\d+_(\\d+)$')
 
 arch_dict = {
-    64: {"arm": "aarch64", "x86": "amd64"}
+    64: {"arm": "aarch64", "x86": "amd64", "ppc": "ppc64", "mips": "mips64"}
+}
+
+archinfo_dict = {
+    "x86": archinfo.ArchX86,
+    "arm": archinfo.ArchARM,
+    "aarch64": archinfo.ArchAArch64,
+    "amd64": archinfo.ArchAMD64,
+    "mips": archinfo.ArchMIPS32,
+    "mips64": archinfo.ArchMIPS64,
+    "ppc": archinfo.ArchPPC32,
+    "ppc64": archinfo.ArchPPC64
 }
 
 # the whole idea of this script is in jeopardy
@@ -29,9 +41,10 @@ class ESILCheck:
             self.aarch = arch_dict[bits][arch]
 
         self.converter = claripy.backends.z3
+        self.r2p = r2p = r2pipe.open("-", ["-a", self.arch, "-b", str(self.bits), "-2"])
 
     def check(self, instruction=None, code=None, esil=None, check_flags=True):
-        r2p = r2pipe.open("-", ["-a", self.arch, "-b", str(self.bits), "-2"])
+        r2p = self.r2p 
 
         if instruction == None:
             r2p.cmd("wx %s" % hexlify(code).decode())
@@ -50,18 +63,26 @@ class ESILCheck:
 
         print("[*] instruction: %s : %s\n" % (instr["opcode"], instr["esil"]))
 
+        basesolver = self.converter.solver()
+
         esilsolver = ESILSolver(r2p, sym=True)
         esstate = esilsolver.blank_state()
+        esstate.memory[0] = code # oof            
 
         esclone = esstate.clone()
 
-        proj = angr.load_shellcode(code, arch=self.aarch)
+        proj = angr.load_shellcode(code, arch=archinfo_dict[self.aarch]())
         state = proj.factory.blank_state()
+
+        if self.arch == "arm":
+            basesolver.add(
+                esstate.registers["sp"] == self.converter.convert(state.regs.sp))
+
         block = proj.factory.block(proj.entry)
 
         successor = state.step()[0]
+
         essuccessor = esclone.proc.execute_instruction(esclone, instr)[0]
-        basesolver = self.converter.solver()
 
         #basesolver.add(esstate.registers["ebx"] != 2147483648)
         #basesolver.add(esstate.registers["ebx"] != 0)
@@ -205,18 +226,18 @@ def trunc(s, maxlen=64):
 
 if __name__ == "__main__":
 
-    '''esilcheck = ESILCheck("x86", bits=64)
+    esilcheck = ESILCheck("ppc", bits=32)
     #esilcheck.check("or eax, ebx")
     #esilcheck.check(code=b"\x48\x63\xff")
-    esilcheck.check("idiv ebx") 
+    esilcheck.check(code=unhexlify("7c290b78")) #"sub rax, rbx") 
     exit()
     esilcheck.check("imul eax, edx") 
     esilcheck.check("imul ebx") # edx not equivalent
-    exit()'''
+    exit()
 
     esilcheck = ESILCheck("arm", bits=64)
-    esilcheck.check(code=unhexlify("602bc01a"))
-    #esilcheck.check("rbit w0, w1")
+    esilcheck.check(code=unhexlify("dac020cb"))
+    #esilcheck.check("movn w0, w1")
     exit()
     esilcheck.check("cmp r0, r1")
 

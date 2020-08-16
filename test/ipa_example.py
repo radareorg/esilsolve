@@ -4,7 +4,7 @@ import z3
 buf_addr = 0x100000
 buf_len = 16
 
-esilsolver = ESILSolver("ipa://test/tests/crackme-level0-symbols.ipa", debug=False)
+esilsolver = ESILSolver("ipa://test/tests/crackme-level0-symbols.ipa")
 state = esilsolver.call_state("sym._validate")
 state.registers["x0"] = buf_addr
 

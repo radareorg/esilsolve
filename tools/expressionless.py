@@ -56,7 +56,7 @@ def get_expressionless(prog):
                     #try:
                     if True:
                         #print(vexconv.convert(instr))
-                        print(vexconv.convert_c(instr["disasm"], code=unhexlify(instr["bytes"])))
+                        print(vexconv.convert_str(instr["disasm"], code=unhexlify(instr["bytes"])))
                     #except Exception as e:
                     #    print("error: %s" % str(e))
                     print("\n" + "-"*120)
@@ -65,8 +65,8 @@ def get_expressionless(prog):
                 #else:
                 #    print("%016x:\t%16s\t%s (dup)" % (instr["offset"], instr["bytes"], instr["opcode"]))
 
-        if len(instr_dict.keys()) > start_count:
-            break
+        #if len(instr_dict.keys()) > start_count:
+        #    break
 
 if __name__ == "__main__":
     get_expressionless(sys.argv[1])

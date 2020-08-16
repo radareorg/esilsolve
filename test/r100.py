@@ -1,7 +1,7 @@
 from esilsolve import ESILSolver
 import z3
 
-esilsolver = ESILSolver("test/tests/r100", init=True)
+esilsolver = ESILSolver("test/tests/r100")
 state = esilsolver.call_state(0x004006fd)
 
 addr = 0x1000000

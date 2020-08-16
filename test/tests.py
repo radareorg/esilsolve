@@ -2,6 +2,7 @@ from esilsolve import ESILSolver, ESILSim
 import r2pipe
 import z3
 import binascii
+import time
 
 def test_sym():
     esilsolver = ESILSolver(debug=True)
@@ -100,7 +101,7 @@ def test_goto():
     state.set_symbolic_register("rax")
     rax = state.registers["rax"]
     state.constrain(rax > 0, rax < 16)
-    state.proc.parse_expression("16,rax,-,?{,1,rax,+=,0,GOTO,}", state)
+    state.proc.parse_expression("rax,31,-,?{,1,rax,+=,0,GOTO,}", state)
     #print(state.stack)
     #print(state.registers["rax"])
     print(state.evaluate(rax))
@@ -152,6 +153,23 @@ def test_multi_hook():
 
     esilsolver.register_hook(0x6a1, success)
     esilsolver.run(target=0x000006a1, avoid=[0x000006a8])
+
+def test_multi_bench():
+    r2p = r2pipe.open("test/tests/multibranch", flags=["-2"])
+    r2p.cmd("s sym.check; aei; aeim; aer rdi=22021")
+
+    esilsolver = ESILSolver(r2p, debug=False, trace=False)
+    #esilsolver.initVM()
+
+    state = esilsolver.init_state().clone()
+
+    start = time.time()
+    for i in range(100):
+        new = esilsolver.run(target=0x000006a1)
+        esilsolver.reset(state.clone())
+        #print(new.steps)
+
+    print("elapsed: %0.5f" % (time.time() - start))
 
 def test_multi32():
     r2p = r2pipe.open("test/tests/multi32", flags=["-2"])
@@ -252,6 +270,6 @@ if __name__ == "__main__":
     #test_multi_hook()
     #test_multi32()
     #test_arm()
-    test_sim()
-    #test_goto()
-    #test_multi_addr()
+    #test_sim()
+    test_goto()
+    #test_multi_bench()

@@ -7,10 +7,11 @@ class ESILMemory:
     
     def __init__(self, r2api, info, sym=False):
         self._memory = {}
+        self._read_cache = {}
         self.r2api = r2api
         self.info = info
         self.pure_symbolic = sym
-        self.default_addr = 0x000000
+        self.default_addr = 0x100000
 
         self.multi_concretize = False # True destroys performance
         self.hit_symbolic_addr = False
@@ -79,13 +80,17 @@ class ESILMemory:
                     self.write_bv(addr, bv, self.chunklen)
                     d = self.unpack_bv(bv, self.chunklen)
                 else:
-                    d = self.r2api.read(caddr, self.chunklen)
+                    if caddr in self._read_cache:
+                        d = self._read_cache[caddr]
+                    else:
+                        d = self.r2api.read(caddr, self.chunklen)
+                        self._read_cache[caddr] = d
 
-                data += self.prepare_data(d)
+                    self._memory[caddr] = d
+
+                data += d
 
         offset = addr-maddr
-        #bv = solver.Concat(data[offset:offset+length])
-        #print(self._memory)
         return data[offset:offset+length]
 
 
@@ -113,7 +118,8 @@ class ESILMemory:
         length = len(data)
 
         if maddr != addr or length % self.chunklen != 0:
-            prev = self.read(maddr, length + (self.chunklen - (length % self.chunklen)))
+            prev_len = length + (self.chunklen - (length % self.chunklen))
+            prev = self.read(maddr, prev_len)
             data = prev[:offset] + data + prev[offset+length:]
 
         chunks = int(length/self.chunklen) + min(1, length%self.chunklen)
@@ -167,15 +173,12 @@ class ESILMemory:
         return z3.BitVecVal(val, BYTE*len(data))
 
     def unpack_bv(self, val, length):
-        data = []
         if type(val) == int:
-            #for i in range(length):
-            [data.append((val >> i*BYTE) & 0xff) for i in range(length)]
+            data = [(val >> i*BYTE) & 0xff for i in range(length)]
 
         else:
             val = z3.simplify(val) # useless?
-            #for i in range(length):
-            [data.append(z3.Extract((i+1)*BYTE-1, i*BYTE, val)) for i in range(length)]
+            data = [z3.Extract((i+1)*8-1, i*8, val) for i in range(length)]
 
         if self.endian == "big":
             data.reverse()
@@ -208,7 +211,7 @@ class ESILMemory:
         self._refs["count"] += 1
         clone._refs = self._refs
         clone._memory = self._memory
-        #clone._memory = deepcopy(self._memory)
+        clone._read_cache = self._read_cache
 
         return clone
 

@@ -11,7 +11,7 @@ from binascii import hexlify, unhexlify
 from esilcheck import ESILCheck
 
 arch_dict = {
-    64: {"arm": "aarch64", "x86": "amd64"}
+    64: {"arm": "aarch64", "x86": "amd64", "ppc": "ppc64", "mips": "mips64"}
 }
 
 archinfo_dict = {
@@ -20,7 +20,9 @@ archinfo_dict = {
     "aarch64": archinfo.ArchAArch64,
     "amd64": archinfo.ArchAMD64,
     "mips": archinfo.ArchMIPS32,
-    "mips64": archinfo.ArchMIPS64
+    "mips64": archinfo.ArchMIPS64,
+    "ppc": archinfo.ArchPPC32,
+    "ppc64": archinfo.ArchPPC64
 }
 
 op_dict = {}
@@ -52,6 +54,9 @@ for bit in bits:
 
             op_key = "Iop_%dHLto%d" % (bit, bit2)
             op_dict[op_key] = [str(bit2-bit), 1, "<<", 0, "+"]
+
+            op_key = "Iop_DivMod%s%dto%d" % (sign, bit, bit2)
+            #op_dict[op_key] = [bit2, 0, "~", bit2, "",<<,eax,+,~%,32,ebx,~,32,edx,<<,eax,+,~/,eax,=,edx,=]
 
         op_key = "Iop_Add%s%d" % (sign, bit)
         op_dict[op_key] = [0, 1, "+"]
@@ -238,9 +243,9 @@ class Vex2Esil:
         #print(self.exprs) 
         esilex = ",".join(self.exprs)
 
-        esilchecker = ESILCheck(self.arch, bits=self.bits)
+        #esilchecker = ESILCheck(self.arch, bits=self.bits)
         #esilchecker.check(code=code, check_flags=False)
-        esilchecker.check(code=code, esil=esilex, check_flags=False)
+        #esilchecker.check(code=code, esil=esilex, check_flags=False)
 
         #print(esilex)
         return esilex
@@ -335,16 +340,16 @@ class Vex2Esil:
             return final_exprs
 
         else:
-            raise VexException("op %s not found" % op_key)
-            #return []
+            #raise VexException("op %s not found" % op_key)
+            return []
 
 class VexException(Exception):
     pass
 
 if __name__ == "__main__":
 
-    vexconv = Vex2Esil("arm", bits=64)
+    vexconv = Vex2Esil("x86", bits=64)
     #print(vexconv.convert("cdq"))
-    #print(vexconv.convert("mov [rax], rbx"))
-    print(vexconv.convert_str(code=unhexlify("a0cc208b")))
+    print(vexconv.convert_str("idiv ebx"))
+    #print(vexconv.convert_str(code=unhexlify("a0cc208b")))
     #vexconv.convert(code=b"\x20\xc0\x1f\x38")

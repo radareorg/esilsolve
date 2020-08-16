@@ -23,15 +23,18 @@ def prepare(val, signext=False):
         #print(szdiff, val.size())
         if szdiff > 0:
             if signext:
-                return z3.SignExt(szdiff, val)
+                result = z3.SignExt(szdiff, val)
             else:
-                return z3.ZeroExt(szdiff, val)
+                result = z3.ZeroExt(szdiff, val)
         else:
-            return val
+            result = val
     elif z3.is_int(val):
-        return z3.Int2BV(val, SIZE)
+        result = z3.Int2BV(val, SIZE)
     else:
-        return z3.BitVecVal(val, SIZE)
+        result = z3.BitVecVal(val, SIZE)
+
+    #return z3.simplify(result)
+    return result
 
 def do_TRAP(op, stack, state):
     raise ESILTrapException
@@ -185,8 +188,7 @@ def do_SMOD(op, stack, state):
     stack.append(arg1 % arg2)
 
 def do_NOT(op, stack, state):
-    arg1, = pop_values(stack, state)
-    stack.append(z3.If(arg1 == ZERO, ONE, ZERO))
+    stack.append(z3.If(pop_values(stack, state)[0] == ZERO, ONE, ZERO))
 
 def do_INC(op, stack, state):
     arg1, = pop_values(stack, state)
@@ -223,7 +225,7 @@ def do_WEQ(op, stack, state):
 def do_OPEQ(op, stack, state):
     reg = stack.pop()
     regval = state.registers[reg]
-    newop = op.split("=")[0]
+    newop = op[:-1]
 
     stack.append(reg)
     opcodes[newop](newop, stack, state)
