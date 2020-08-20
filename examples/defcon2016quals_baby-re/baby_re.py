@@ -2,7 +2,7 @@ from esilsolve import ESILSolver, ESILSim
 import r2pipe
 import z3
 
-esilsolver = ESILSolver("test/tests/baby-re", lazy=True)
+esilsolver = ESILSolver("baby-re", lazy=True)
 esilsolver.r2pipe.cmd("oo+; wa ret @ sym.imp.printf")
 esilsolver.r2pipe.cmd("wa ret @ sym.imp.fflush")
 esilsolver.r2pipe.cmd("wa ret @ sym.imp.__isoc99_scanf")

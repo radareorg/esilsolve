@@ -2,7 +2,7 @@ from esilsolve import ESILSolver
 import r2pipe
 import z3
 
-r2p = r2pipe.open("test/tests/r200", flags=["-d", "-2"])
+r2p = r2pipe.open("r200", flags=["-d", "-2"])
 r2p.cmd("wa ret @ sym.imp.ptrace") # nop antidebug
 r2p.cmd("db 0x004008fa; dc;") # setup the linked list 
 

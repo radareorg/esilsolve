@@ -89,6 +89,14 @@ class ESILState:
     # this bizarre function takes a regular expression like [A-Z 123]
     # and constrains all the bytes in the bv to fit the expression
     def constrain_bytes(self, bv, regex):
+
+        # if its a bytes expr just constrain beginning to those values
+        if type(regex) == bytes:
+            for i in range(len(regex)):
+                self.constrain(z3.Extract(7+i*8, i*8, bv) == regex[i])
+
+            return 
+
         if z3.is_bv(bv):
             bv = [z3.Extract(b*8+7, b*8, bv) for b in range(int(bv.size()/8))]
 

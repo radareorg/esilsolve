@@ -32,11 +32,6 @@ class ESILRegisters:
         reg["end"] = end
         self._registers[reg["name"]] = reg    
 
-        # if its a *flags reg treat it special
-        # this will be a perf improvement
-        #if reg["type_str"] == "flg" and size > 1:
-        #    return 
-
         key = (start, end)
 
         reg_value = self.get_register_from_bounds(reg)

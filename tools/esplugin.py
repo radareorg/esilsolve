@@ -1,7 +1,12 @@
-import r2lang
-r2p = None
+
 
 try:
+    import r2lang
+    r2p = None
+
+    import os, sys
+    sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
+
     import esilsolve
     import r2pipe
     import z3
@@ -11,7 +16,8 @@ try:
 
     r2p = r2pipe.open()
 except ImportError:
-    print("esplugin could not be loaded")
+    #print("esplugin could not be loaded")
+    pass
 
 class ESILSolvePlugin:
 
@@ -23,6 +29,8 @@ class ESILSolvePlugin:
             "aesx?": self.print_help,
             "aesxi": self.handle_init,
             "aesxs": self.handle_set_symbolic,
+            "aesxsb": self.handle_set_symbolic,
+            "aesxsc": self.handle_set_symbolic,
             "aesxv": self.handle_set_value,
             "aesxc": self.handle_constrain,
             "aesxx": self.handle_execute_constrain,
@@ -66,8 +74,8 @@ class ESILSolvePlugin:
 
         lines = [
             usage,
-            ["aesxi", " [debug]", "Initialize the ESILSolve instance and VM"],
-            ["aesxs", " reg|addr [name] [length]", "Set symbolic value in register or memory"],
+            ["aesxi", " [debug] [lazy]", "Initialize the ESILSolve instance and VM"],
+            ["aesxs", "[bc] reg|addr [name] [length]", "Set symbolic value in register or memory"],
             ["aesxv", " reg|addr value", "Set concrete value in register or memory"],
             ["aesxc", " sym value", "Constrain symbol to be value, min, max, regex"],
             ["aesxx", "[ec] expr value", "Execute ESIL expression and evaluate/constrain the result"],
@@ -82,10 +90,14 @@ class ESILSolvePlugin:
 
     def handle_init(self, args):
         debug = False
-        if len(args) > 1 and args[1] == "debug":
+        lazy = False
+        if "debug" in args:
             debug = True
 
-        self.esinstance = esilsolve.ESILSolver(self.r2p, debug=debug)
+        if "lazy" in args:
+            lazy = True
+
+        self.esinstance = esilsolve.ESILSolver(self.r2p, debug=debug, lazy=lazy)
         core = self.r2p.cmdj("ij")["core"]
         if "referer" not in core and "frida:" != core["file"][:7]:
             self.esinstance.r2api.init_vm()
@@ -101,7 +113,7 @@ class ESILSolvePlugin:
 
         # constrain these first so the user gets the "expected" result
         for sym in self.symbols:
-            value = self.state.evalcon(self.symbols[sym])
+            value = self.state.evalcon(self.symbols[sym]["value"])
 
         self.state.apply()
 
@@ -125,7 +137,14 @@ class ESILSolvePlugin:
 
 
         sym = z3.BitVec(name, length*8)
-        self.symbols[name] = sym
+
+        sym_type = "int"
+        if args[0][-1] == "b":
+            sym_type = "bytes"
+        elif args[0][-1] == "c":
+            sym_type = "str" # c string
+
+        self.symbols[name] = {"value": sym, "type": sym_type}
 
         # set register
         if not is_int(set_val):
@@ -231,28 +250,26 @@ class ESILSolvePlugin:
             for state_type in state_dict:
                 for state in state_dict[state_type][0]:
                     pc = state.registers["PC"].as_long()
-                    comment = "%s%s%s%s: " % (
-                        colorama.Style.RESET_ALL,
-                        state_dict[state_type][1],
-                        state_type,
-                        colorama.Style.RESET_ALL
-                    )
+                    comment = "%s: " % state_type
 
                     if pc == target:
-                        comment = "%s%starget%s: " % (
-                            colorama.Style.RESET_ALL,
-                            colorama.Fore.GREEN,
-                            colorama.Style.RESET_ALL
-                        )
+                        comment = "target: " 
                     
                     if pc not in pcs:
                         pcs[pc] = True
                         state.solver.push()
                         sym_cmts = []
                         for sym_name in self.symbols:
-                            sym = self.symbols[sym_name]
-                            sym_val = state.evalcon(sym).as_long()
-                            sym_cmts.append("%s = 0x%08x" % (
+                            sym = self.symbols[sym_name]["value"]
+                            sym_type = self.symbols[sym_name]["type"]
+                            sym_val = "0x%08x" % state.evalcon(sym).as_long()
+
+                            if sym_type == "bytes":
+                                sym_val = state.evaluate_buffer(sym)
+                            elif sym_type == "str":
+                                sym_val = state.evaluate_string(sym)
+
+                            sym_cmts.append("%s = %s" % (
                                 sym_name,
                                 sym_val))
 
@@ -270,13 +287,19 @@ class ESILSolvePlugin:
         self.state.solver.push()
         for arg in args[1:]:
             sym = self.get_symbol(arg)
-            val = self.state.evaluate(sym)
+            val = self.state.evaluate(sym).as_long()
             self.state.solver.add(sym == val)
 
+            if arg in self.symbols:
+                if self.symbols[arg]["type"] == "bytes":
+                    val = self.state.evaluate_buffer(sym)
+                elif self.symbols[arg]["type"] == "str":
+                    val = self.state.evaluate_string(sym)
+
             if not is_json:
-                self.print("%s: %d" % (arg, val.as_long()))
+                self.print("%s: %s" % (arg, str(val)))
             else:
-                js[arg] = val.as_long()
+                js[arg] = val
 
         if is_json:
             self.print(json.dumps(js))
@@ -331,7 +354,7 @@ class ESILSolvePlugin:
 
     def get_symbol(self, arg):
         if arg in self.symbols:
-            return self.symbols[arg]
+            return self.symbols[arg]["value"]
         elif arg in self.state.registers:
             return self.state.registers[arg]
         elif is_int(arg):

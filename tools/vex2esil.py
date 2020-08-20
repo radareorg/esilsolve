@@ -348,8 +348,8 @@ class VexException(Exception):
 
 if __name__ == "__main__":
 
-    vexconv = Vex2Esil("x86", bits=64)
+    vexconv = Vex2Esil("arm", bits=64)
     #print(vexconv.convert("cdq"))
-    print(vexconv.convert_str("idiv ebx"))
+    print(vexconv.convert_str("add x0, x1, x2"))
     #print(vexconv.convert_str(code=unhexlify("a0cc208b")))
     #vexconv.convert(code=b"\x20\xc0\x1f\x38")

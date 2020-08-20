@@ -14,7 +14,7 @@ def get_value(val, state, signext=False):
         register = state.registers[val]
         return prepare(register, signext)
     else:
-        return prepare(val)
+        return prepare(val, signext)
 
 def prepare(val, signext=False):
     if z3.is_bv(val):
