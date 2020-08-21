@@ -66,6 +66,9 @@ class ESILSolver:
                 if len(self.hooks) == 0:
                     target = avoid[-1]
                     avoid = avoid[:-1]
+            
+            if target in avoid:
+                avoid.remove(target)
 
             self.state_manager.add(state)
 

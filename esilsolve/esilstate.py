@@ -151,7 +151,7 @@ class ESILState:
             if sat == z3.sat:
                 self.model = self.solver.model()
             else:
-                raise ESILUnsatException
+                raise ESILUnsatException("state has unsatisfiable constraints")
 
         value = self.model.eval(val, True)
 
@@ -163,7 +163,7 @@ class ESILState:
         if sat == z3.sat:
             model = self.solver.model()
         else:
-            raise ESILUnsatException
+            raise ESILUnsatException("state has unsatisfiable constraints")
 
         value = model.eval(val, True)
         return value
@@ -254,7 +254,7 @@ class ESILState:
         clone.stack = self.stack[:]
         clone.constrain(*self.solver.assertions())
 
-        clone.proc = self.proc #.clone() no need to clone this it has no state
+        clone.proc = self.proc #.clone() no need to clone this 
         clone.steps = self.steps
         clone.distance = self.distance
         clone.registers = self.registers.clone()
