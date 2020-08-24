@@ -26,26 +26,28 @@ class ESILSolvePlugin:
         
         self.commands = {
             # aesx - Analysis: Emulation / Symbolic eXecution
-            "aesx?": self.print_help,
-            "aesxi": self.handle_init,
-            "aesxs": self.handle_set_symbolic,
+            "aesx?" : self.print_help,
+            "aesxi" : self.handle_init,
+            "aesxs" : self.handle_set_symbolic,
             "aesxsb": self.handle_set_symbolic,
             "aesxsc": self.handle_set_symbolic,
-            "aesxv": self.handle_set_value,
-            "aesxc": self.handle_constrain,
-            "aesxx": self.handle_execute_constrain,
+            "aesxv" : self.handle_set_value,
+            "aesxc" : self.handle_constrain,
+            "aesxc+": self.handle_push,
+            "aesxc-": self.handle_pop,
+            "aesxx" : self.handle_execute_constrain,
             "aesxxc": self.handle_execute_constrain,
             "aesxxe": self.handle_execute_constrain,
-            "aesxr": self.handle_run,
+            "aesxr" : self.handle_run,
             "aesxra": self.handle_run,
             "aesxrc": self.handle_run,
-            "aesxe": self.handle_eval,
+            "aesxe" : self.handle_eval,
             "aesxej": self.handle_eval,
-            "aesxb": self.handle_eval_buffer,
+            "aesxb" : self.handle_eval_buffer,
             "aesxbj": self.handle_eval_buffer,
-            "aesxd": self.handle_dump,
+            "aesxd" : self.handle_dump,
             "aesxdj": self.handle_dump,
-            "aesxa": self.handle_apply
+            "aesxa" : self.handle_apply
         }
 
         self.symbols = {}
@@ -78,6 +80,7 @@ class ESILSolvePlugin:
             ["aesxs", "[bc] reg|addr [name] [length]", "Set symbolic value in register or memory"],
             ["aesxv", " reg|addr value", "Set concrete value in register or memory"],
             ["aesxc", " sym value", "Constrain symbol to be value, min, max, regex"],
+            ["aesxc", "[+-]", "Push / pop the constraint context"],
             ["aesxx", "[ec] expr value", "Execute ESIL expression and evaluate/constrain the result"],
             ["aesxr", "[ac] target [avoid x,y,z]", "Run symbolic execution until target address, avoiding x,y,z"],
             ["aesxe", "[j] sym1 [sym2] [...]", "Evaluate symbol in current state"],
@@ -89,13 +92,8 @@ class ESILSolvePlugin:
         print_help_lines(lines)
 
     def handle_init(self, args):
-        debug = False
-        lazy = False
-        if "debug" in args:
-            debug = True
-
-        if "lazy" in args:
-            lazy = True
+        debug = "debug" in args
+        lazy = "lazy" in args
 
         self.esinstance = esilsolve.ESILSolver(self.r2p, debug=debug, lazy=lazy)
         core = self.r2p.cmdj("ij")["core"]
@@ -193,6 +191,27 @@ class ESILSolvePlugin:
         else:
             self.state.constrain_bytes(sym, con)
 
+    def handle_push(self, args):
+        if not self.initialized:
+            self.print("error: need to initialize first")
+            return
+
+        self.state.solver.push()
+
+    def handle_pop(self, args):
+        if not self.initialized:
+            self.print("error: need to initialize first")
+            return
+
+        self.state.solver.pop()
+
+    def handle_constrain(self, args):
+        if not self.initialized:
+            self.print("error: need to initialize first")
+            return
+
+        self.state.solver.constraints
+
     def handle_execute_constrain(self, args):
         if not self.initialized:
             self.print("error: need to initialize first")
@@ -284,7 +303,7 @@ class ESILSolvePlugin:
             return
 
         js = {}
-        self.state.solver.push()
+        #self.state.solver.push()
         for arg in args[1:]:
             sym = self.get_symbol(arg)
             val = self.state.evaluate(sym).as_long()
@@ -304,7 +323,7 @@ class ESILSolvePlugin:
         if is_json:
             self.print(json.dumps(js))
 
-        self.state.solver.pop()
+        #self.state.solver.pop()
 
     def handle_eval_buffer(self, args):
         is_json = args[0][-1] == "j"

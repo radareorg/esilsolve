@@ -22,11 +22,10 @@ state.memory[buf_addr] = code
 
 # success hook callback
 def success(state):
-    cs = state.evaluate_buffer(code)
     # gives an answer with lots of spaces but it works
-    print("CODE: '%s'" % cs.decode())
+    print("CODE: '%s'" % state.evaluate_string(code))
     esilsolver.terminate()
 
 # set the hooks and run
 esilsolver.register_hook(validate+0x210, success)
-esilsolver.run()
+esilsolver.run(avoid=[validate+0x218])

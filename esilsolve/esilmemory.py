@@ -1,11 +1,19 @@
 import z3
 from .esilclasses import *
+from .r2api import R2API
 
 BYTE = 8
 
 class ESILMemory:
-    
-    def __init__(self, r2api, info, sym=False):
+    """ 
+    Provides access to methods to read and write memory
+
+    >>> state.memory[0xcafebabe]
+    31337
+
+    """
+
+    def __init__(self, r2api: R2API, info: Dict, sym=False):
         self._memory = {}
         self._read_cache = {}
         self.r2api = r2api
@@ -25,7 +33,7 @@ class ESILMemory:
 
         self.solver = None
 
-    def mask(self, addr):
+    def mask(self, addr: int):
         return int(addr - (addr % self.chunklen))
 
     def bv_to_int(self, bv):
@@ -60,7 +68,7 @@ class ESILMemory:
                     # there are no constraints on the addr
                     return self.default_addr
 
-    def read(self, addr, length):
+    def read(self, addr: int, length: int):
         maddr = self.mask(addr)
         #print(maddr, length)
 
@@ -158,7 +166,7 @@ class ESILMemory:
 
         return bv
 
-    def write_bv(self, addr, val, length):
+    def write_bv(self, addr, val, length: int):
         if type(addr) != int:
             addr = self.bv_to_int(addr)
 
@@ -172,7 +180,7 @@ class ESILMemory:
 
         return z3.BitVecVal(val, BYTE*len(data))
 
-    def unpack_bv(self, val, length):
+    def unpack_bv(self, val, length: int):
         if type(val) == int:
             data = [(val >> i*BYTE) & 0xff for i in range(length)]
 
@@ -191,7 +199,7 @@ class ESILMemory:
     def init_memory(self):
         pass
 
-    def __getitem__(self, addr):
+    def __getitem__(self, addr) -> z3.BitVecRef:
         if type(addr) == int:
             length = self.chunklen
             return self.read_bv(addr, length)
@@ -202,8 +210,16 @@ class ESILMemory:
     def __setitem__(self, addr, value):
         if type(addr) == int:
             return self.write(addr, value)
+        elif type(addr) == slice:
+            length = int(addr.stop-addr.start)
 
-    def __contains__(self, addr):
+            if type(value) == list:
+                self.write(addr.start, value[:length])
+            elif z3.is_bv(value):
+                new_val = z3.Extract(length*8 - 1, 0, value)
+                self.write(addr.start, new_val)
+
+    def __contains__(self, addr: int) -> bool:
         return addr in self._memory
 
     def clone(self):

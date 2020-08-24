@@ -4,17 +4,28 @@ from .esilregisters import *
 from .esilmemory import *
 from .esilprocess import *
 
+from .r2api import R2API
+
 import re # for buffer constraint
 all_bytes = "".join([chr(x) for x in range(256)])
 
 class ESILState:
+    """
+    A single possible state of the execution
+
+    This contains all context of execution: memory, registers, constraints.
+    All manipulation of a state should be done using the methods here 
+
+    :param r2api:     Instance of the R2API for communicating with r2
+    :param sym:       Boolean describing whether the state is blank 
+    """
     
-    def __init__(self, r2api, **kwargs):
+    def __init__(self, r2api: R2API, **kwargs):
         self.kwargs = kwargs
         self.r2api = r2api
         self.pure_symbolic = kwargs.get("sym", False)
 
-        if kwargs.get("opt", False):
+        if kwargs.get("optimize", False):
             self.solver = z3.Optimize()
         else:
             self.solver = z3.SimpleSolver()
@@ -28,8 +39,10 @@ class ESILState:
         self.debug = kwargs.get("debug", False)
         self.trace = kwargs.get("trace", False)
 
-        self.memory = {}
-        self.registers = {}
+        self.memory: ESILMemory = None
+        self.registers: ESILRegisters = None
+        self.proc: ESILProcess = None
+
         self.aliases = {}
         self.condition = None
 
@@ -75,7 +88,14 @@ class ESILState:
         self.registers = ESILRegisters(registers, self.aliases, sym=self.pure_symbolic)
         self.registers.init_registers()
 
-    def set_symbolic_register(self, name, var=None):
+    def set_symbolic_register(self, name: str, var: str = None):
+        """
+        Set a register to be a new symbolic value
+
+        :param name:     Name of the register (ex. "rax") 
+        :param var:      Variable name for the symbolic value
+        """
+
         if var == None:
             var = name
 
@@ -83,12 +103,14 @@ class ESILState:
         self.registers[name] = z3.BitVec(var, size)
 
     def constrain(self, *constraints):
+        """ Add constraint to the state """
+
         #self.constraints.extend(constraints)
         self.solver.add(*constraints)
 
     # this bizarre function takes a regular expression like [A-Z 123]
     # and constrains all the bytes in the bv to fit the expression
-    def constrain_bytes(self, bv, regex):
+    def constrain_bytes(self, bv, regex: Union[str, bytes]):
 
         # if its a bytes expr just constrain beginning to those values
         if type(regex) == bytes:
@@ -133,11 +155,13 @@ class ESILState:
             else:
                 self.constrain(z3.Or(*or_vals))
 
-    def constrain_register(self, name, val):
+    def constrain_register(self, name: str, val):
+        """ Constrain a register by name to a value """
+
         reg = self.registers[name]
         self.constrain(reg == val)
 
-    def evaluate_register(self, name, eval_type="eval"):
+    def evaluate_register(self, name: str, eval_type: str="eval"):
         val = self.registers[name]
 
         if eval_type == "max":
@@ -157,7 +181,13 @@ class ESILState:
 
         return value
 
-    def evaluate(self, val):
+    def evaluate(self, val) -> int:
+        """ 
+        Evaluate value with the current states constraints 
+        
+        :param val:     Symbol to be evaluated
+        """
+
         sat = self.solver.check()
         
         if sat == z3.sat:
@@ -174,7 +204,7 @@ class ESILState:
         self.constrain(val == eval_val)
         return eval_val
 
-    def eval_max(self, sym, n=16):
+    def eval_max(self, sym, n: int = 16):
         solutions = []
 
         while len(solutions) < n:
@@ -196,13 +226,13 @@ class ESILState:
 
         return solutions
 
-    def evaluate_buffer(self, bv):
+    def evaluate_buffer(self, bv) -> bytes:
         buf = self.evaluate(bv)
         val = buf.as_long()
         length = int(bv.size()/8)
         return bytes([(val >> (8*i)) & 0xff for i in range(length)])
 
-    def evaluate_string(self, bv):
+    def evaluate_string(self, bv) -> str:
         b = self.evaluate_buffer(bv)
         if b"\x00" in b:
             null_ind = b.index(b"\x00")
@@ -210,20 +240,29 @@ class ESILState:
 
         return b.decode()
         
-    def step(self):
+    def step(self) -> List:
+        """ Step the state forward by executing one instruction """
+
         pc = self.registers["PC"].as_long() 
         instr = self.r2api.disass(pc)
         new_states = self.proc.execute_instruction(self, instr)
         return new_states
 
-    def is_sat(self):
+    def is_sat(self) -> bool:
+        """ Check whether the states constraints are satisfiable"""
         if self.solver.check() == z3.sat:
             return True
         
         return False
 
-    # apply the ES state to the r2pipe ESIL VM
     def apply(self):
+        """ 
+        Apply this state to the r2 instance 
+        
+        This method evaluates all the symbolic memory and register values
+        and writes the results to the underlying r2 analyzing the binary
+        """
+
         # apply registers
         for reg in self.registers._registers:
             if not self.registers._registers[reg]["sub"]:
@@ -264,8 +303,15 @@ class ESILState:
         return clone
 
 class ESILStateManager:
+    """
+    Manage the status and order of the current states
 
-    def __init__(self, active=[], avoid=[], lazy=False):
+    :param active:     The list of active states to begin with
+    :param avoid:      List of addresses to avoid in execution
+    :param lazy:       Do not check satisfiability of the states
+    """
+
+    def __init__(self, active: List[ESILState]=[], avoid=[], lazy=False):
         self.active = set(active)
         self.inactive = set()
         self.unsat = set()
@@ -280,7 +326,7 @@ class ESILStateManager:
         self.lazy = lazy
 
     def next(self):
-        #print(self.active, self.inactive)
+        """ Get the next state to be stepped """
 
         if len(self.active) == 0:
             return
@@ -294,7 +340,13 @@ class ESILStateManager:
         self.active.discard(state)
         return state
 
-    def add(self, state):
+    def add(self, state: ESILState):
+        """
+        Add state to the manager
+
+        :param state:     The state to be added 
+        """
+
         pc = state.registers["PC"]
         if z3.is_bv_value(pc):
             if pc.as_long() in self.avoid:
@@ -308,7 +360,13 @@ class ESILStateManager:
         else:
             self.unsat.add(state)
 
-    def entry_state(self, r2api, **kwargs):
+    def entry_state(self, r2api: R2API, **kwargs):
+        """
+        Get an initial state
+
+        :param r2api:     Instance of R2API to communicate with r2
+        """
+        
         state = ESILState(r2api, **kwargs)
         self.add(state)
         return state

@@ -1,4 +1,5 @@
 from .esilclasses import *
+
 import z3
 
 SIZE = 64
@@ -6,7 +7,7 @@ ONE = z3.BitVecVal(1, SIZE)
 ZERO = z3.BitVecVal(0, SIZE)
 NEGONE = z3.BitVecVal(-1, SIZE)
 
-def pop_values(stack, state, num=1, signext=False):
+def pop_values(stack, state, num: int=1, signext=False):
     return [get_value(stack.pop(), state, signext) for i in range(num)]
 
 def get_value(val, state, signext=False):

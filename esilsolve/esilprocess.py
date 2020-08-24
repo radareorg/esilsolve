@@ -12,9 +12,16 @@ EXEC = 3
 NO_EXEC = 4
 
 class ESILProcess:
-    def __init__(self, r2p=None, debug=False, trace=False, lazy=False):
-        self.debug = debug
-        self.trace = trace
+    """ 
+    Executes ESIL expressions and handles results
+
+    >>> state.proc.parse_expression("4,rax,rbx,=", state)
+    """
+
+    def __init__(self, r2p: R2API = None, **kwargs):
+        self.kwargs = kwargs
+        self.debug = kwargs.get("debug", False)
+        self.trace = kwargs.get("trace", False)
         self._expr_cache = {}
 
         self.conditionals = {}
@@ -31,7 +38,7 @@ class ESILProcess:
         # this depth limit is maybe already too high
         # condition "size" scales like 2**limit
         self.goto_depth_limit = 16
-        self.lazy = lazy
+        self.lazy = kwargs.get("lazy", False) 
 
         # try to init vexit, an optional module that uses vex
         # if an esil expression is not available
@@ -44,7 +51,7 @@ class ESILProcess:
         except:
             self.vexit = None
     
-    def execute_instruction(self, state, instr):
+    def execute_instruction(self, state, instr: Dict):
         offset = instr["offset"]
 
         if self.debug:

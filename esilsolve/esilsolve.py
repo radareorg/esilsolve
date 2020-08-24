@@ -4,10 +4,22 @@ from .esilclasses import *
 from .esilstate import ESILState, ESILStateManager
 from .esilsim import ESILSim
 
-from typing import Union, List
+from typing import Union, List, Dict, Callable
 
 class ESILSolver:
-    def __init__(self, r2p=None, **kwargs):
+    """
+    Manage and run symbolic execution of a binary using ESIL
+
+    :param filename:     The path to the target binary
+    :param debug:        Print every executed instruction and constraint info
+    :param trace:        Trace the execution and emulate with r2's ESIL VM
+    :param optimize:     Use z3 Optimizer instead of Solver (slow)
+    :param lazy:         Use lazy solving, don't evaluate path satisfiability
+
+    >>> esilsolver = ESILSolver("/bin/ls", lazy=True)
+    """
+
+    def __init__(self, filename:str = None, **kwargs):
         self.kwargs = kwargs
         self.debug = kwargs.get("debug", False)
         self.trace = kwargs.get("trace", False)
@@ -24,13 +36,13 @@ class ESILSolver:
 
         # use r2api which caches some data
         # to increase speed
-        if r2p == None:
+        if filename == None:
             r2api = R2API()
         else:
-            if type(r2p) == str:
-                r2api = R2API(filename=r2p)
+            if type(filename) == str:
+                r2api = R2API(filename=filename)
             else:
-                r2api = R2API(r2p)
+                r2api = R2API(filename)
 
         self.r2api = r2api
         self.r2pipe = r2api.r2p
@@ -50,10 +62,28 @@ class ESILSolver:
 
     # initialize the ESIL VM
     def init_vm(self):
+        """ Initialize r2 ESIL VM """
         self.r2api.init_vm()
         self.did_init_vm = True
 
-    def run(self, target=None, avoid=[]):
+    def run(self, target:Address = None, avoid:List[int] = []) -> ESILState:
+        """
+        Run the symbolic execution until target is reached
+
+        The state returned is the first one to reach the target
+
+        :param target:     Address or symbol name to reach
+        :param avoid:      List of addresses to avoid
+
+        >>> state = esilsolver.run(target=0x00804010, avoid=[0x00804020])
+        >>> state.evaluate(state.registers["PC"])
+        0x00804010
+
+        """
+
+        if type(target) == str:
+            target = self.r2api.get_address(target)
+
         self.stop = False
 
         # try to avoid leaving valid context when nothing is set
@@ -107,10 +137,11 @@ class ESILSolver:
                 return state
 
     def terminate(self):
+        """ End the execution """
         self.stop = True
 
     # get rets from initial state to stop at
-    def default_avoid(self, state):
+    def default_avoid(self, state: ESILState):
         pc = state.registers["PC"].as_long() 
         func = self.r2api.function_info(pc)
         instrs = self.r2api.disass_function(pc)
@@ -122,17 +153,34 @@ class ESILSolver:
 
         return rets
 
-    def register_hook(self, addr, func):
-        if addr in self.hooks:
-            self.hooks[addr].append(func)
-        else:
-            self.hooks[addr] = [func]
+    def register_hook(self, addr: Address, hook: Callable):
+        """
+        Register a function to be called when specified address is reached
 
-    def register_sim(self, func, hook):
+        :param addr:     Address at which the hook will be called
+        :param hook:     Function to call when the above address is hit
+        """
+
+        if type(addr) == str:
+            addr = self.r2api.get_address(addr)
+
+        if addr in self.hooks:
+            self.hooks[addr].append(hook)
+        else:
+            self.hooks[addr] = [hook]
+
+    def register_sim(self, func: Address, hook: ESILSim):
+        """
+        Register a function as a simulated function to improve symex
+
+        :param func:     Name of function or address to replace
+        :param hook:     ESILSim to call when the above address is hit
+        """
+
         addr = self.r2api.get_address(func)
         self.sims[addr] = hook
 
-    def call_sim(self, state, instr):
+    def call_sim(self, state: ESILState, instr: Dict):
         target = instr["jump"]
         sim = self.sims[target](state)
         arg_count = sim.arg_count()
@@ -158,13 +206,31 @@ class ESILSolver:
         # fail contains next instr addr
         state.registers["PC"] = instr["fail"]
         
-    def call_state(self, function):
+    def call_state(self, addr: Address) -> ESILState:
+        """
+        Create an ESILState with PC at address and the VM initialized
+
+        :param addr:     Name of symbol or address to begin execution
+
+        >>> state = esilsolver.call_state("sym.validate")
+
+        """
+
+        if type(addr) == str:
+            addr = self.r2api.get_address(addr)
+
         # seek to function and init vm
-        self.r2api.seek(function)
+        self.r2api.seek(addr)
         self.init_vm()
         return self.init_state()
 
-    def reset(self, state):
+    def reset(self, state: ESILState = None):
+        """ 
+        Reset the StateManager with just the provided state 
+        
+        :param state: The state that will become the only active state
+        """
+
         self.state_manager = ESILStateManager([], lazy=self.lazy)
         
         if state == None:
@@ -172,12 +238,22 @@ class ESILSolver:
         else:
             self.state_manager.add(state)
 
-    def init_state(self):
+    def init_state(self) -> ESILState:
+        """ Create an ESILState without using the existing ESIL VM """
+
         self.state_manager = ESILStateManager([], lazy=self.lazy)
         state = self.state_manager.entry_state(self.r2api, **self.kwargs)
         return state
 
-    def blank_state(self, addr=0):
+    def blank_state(self, addr: Address = 0) -> ESILState:
+        """
+        Create an ESILState with everything (except PC) symbolic
+
+        :param addr:     Name of function or address to begin execution
+        """
+
+        addr = self.r2api.get_address(addr)
+
         self.state_manager = ESILStateManager([], lazy=self.lazy)
         state = self.state_manager.entry_state(self.r2api, **self.kwargs)
         pc_size = state.registers["PC"].size()

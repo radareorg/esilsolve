@@ -3,7 +3,15 @@ from .esilclasses import *
 import z3
 
 class ESILRegisters:
-    def __init__(self, reg_array, aliases={}, sym=False):
+    """ 
+    Provides access to methods to read and write register values
+
+    >>> state.registers["PC"]
+    0x41414141
+
+    """
+
+    def __init__(self, reg_array, aliases: Dict={}, sym=False):
         self.reg_info = reg_array
         self._registers = {}
         self.offset_dictionary = {}
@@ -23,7 +31,7 @@ class ESILRegisters:
         for reg in self.reg_info:
             self.add_register(reg)
 
-    def add_register(self, reg):
+    def add_register(self, reg: Dict):
         start = reg["offset"]
         end = reg["offset"] + reg["size"]
         size = reg["size"]
@@ -69,7 +77,7 @@ class ESILRegisters:
             reg["bounds"] = key
             reg["sub"] = False
             
-    def get_register_from_bounds(self, reg):
+    def get_register_from_bounds(self, reg: Dict):
 
         if "bounds" in reg and reg["bounds"] in self.offset_dictionary:
             return self.offset_dictionary[reg["bounds"]]
@@ -96,7 +104,9 @@ class ESILRegisters:
                 if above_start and below_end:
                     return old_reg
 
-    def __getitem__(self, key):
+    def __getitem__(self, key: str) -> z3.BitVecRef:
+        """ Get register value """
+
         if key in self.aliases:
             key = self.aliases[key]["reg"]
 
@@ -115,7 +125,8 @@ class ESILRegisters:
             reg = z3.Extract(high-1, low, reg_value["bv"])
             return reg
 
-    def __setitem__(self, key, val):
+    def __setitem__(self, key: str, val):
+        """ Set register value """
 
         if self._refs["count"] > 1:
             self.finish_clone()
@@ -135,7 +146,7 @@ class ESILRegisters:
             new_reg = self.set_register_bits(register, reg_value, zero, val)
             reg_value["bv"] = z3.simplify(new_reg)
 
-    def weak_set(self, key, val):
+    def weak_set(self, key: str, val):
         
         if self._refs["count"] > 1:
             self.finish_clone()
@@ -150,7 +161,7 @@ class ESILRegisters:
         new_reg = self.set_register_bits(register, reg_value, reg_value["bv"], val)
         reg_value["bv"] = z3.simplify(new_reg)
 
-    def val_to_register_bv(self, reg, val):
+    def val_to_register_bv(self, reg: Dict, val):
         new_val = val
 
         if type(val) == int:
@@ -172,7 +183,7 @@ class ESILRegisters:
 
         return new_val
 
-    def set_register_bits(self, register, reg_value, bv, val):
+    def set_register_bits(self, register: Dict, reg_value: Dict, bv, val):
         low = register["start"] - reg_value["start"]
         high = low + register["size"]        
 
@@ -195,7 +206,7 @@ class ESILRegisters:
 
         return new_reg
 
-    def __contains__(self, key):
+    def __contains__(self, key: str):
         return self._registers.__contains__(key)
 
     def clone(self):
