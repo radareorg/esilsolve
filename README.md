@@ -11,21 +11,18 @@ from esilsolve import ESILSolver
 
 # start the ESILSolver instance
 # and init state with r2 symbol for check function
-esilsolver = ESILSolver("tests/multibranch", debug=False)
+esilsolver = ESILSolver("test/tests/multibranch")
 state = esilsolver.call_state("sym.check")
 
 # make rdi (arg1) symbolic
 state.set_symbolic_register("rdi")
 rdi = state.registers["rdi"]
 
-# hook callback
-def success(state):
-    print("ARG1: %d" % state.evaluate(rdi).as_long())
+# set targets and avoided addresses
+# state will contain a state at the target pc addr
+state = esilsolver.run(target=0x6a1, avoid=[0x6a8])
+print("ARG1: %d " % state.evaluate(rdi).as_long())
 
-# hook any address to manipulate states
-# and set targets and avoided addresses
-esilsolver.register_hook(0x6a1, success)
-esilsolver.run(target=0x6a1, avoid=[0x6a8])
 ```
 
 ESILSolve also easily works with ipa and apk files since they are supported by r2. 
