@@ -4,8 +4,6 @@ from .esilclasses import *
 from .esilstate import ESILState, ESILStateManager
 from .esilsim import ESILSim
 
-from typing import Union, List, Dict, Callable
-
 class ESILSolver:
     """
     Manage and run symbolic execution of a binary using ESIL

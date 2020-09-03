@@ -47,7 +47,9 @@ class ESILSolvePlugin:
             "aesxbj": self.handle_eval_buffer,
             "aesxd" : self.handle_dump,
             "aesxdj": self.handle_dump,
-            "aesxa" : self.handle_apply
+            "aesxa" : self.handle_apply,
+            "aesxwl": self.handle_state_list,
+            "aesxws": self.handle_state_set
         }
 
         self.symbols = {}
@@ -72,7 +74,7 @@ class ESILSolvePlugin:
                     line[2]
                 ))
 
-        usage = ["Usage: aesx[iscxrebda]", "", "# Core plugin for ESILSolve"]
+        usage = ["Usage: aesx[iscxrebdaw]", "", "# Core plugin for ESILSolve"]
 
         lines = [
             usage,
@@ -86,7 +88,8 @@ class ESILSolvePlugin:
             ["aesxe", "[j] sym1 [sym2] [...]", "Evaluate symbol in current state"],
             ["aesxb", "[j] sym1 [sym2] [...]", "Evaluate buffer in current state"],
             ["aesxd", "[j] [reg1] [reg2] [...]", "Dump register values / ASTs"],
-            ["aesxa", "", "Apply the current state, setting registers and memory"]
+            ["aesxa", "", "Apply the current state, setting registers and memory"],
+            ["aesxw", "[ls] [state number]", "List or set the current states"]
         ]
 
         print_help_lines(lines)
@@ -114,6 +117,41 @@ class ESILSolvePlugin:
             value = self.state.evalcon(self.symbols[sym]["value"])
 
         self.state.apply()
+
+    def handle_state_list(self, args):
+        if not self.initialized:
+            self.print("error: need to initialize first")
+            return
+
+
+        prefix = "active:   "
+        for i, state in enumerate(self.esinstance.state_manager.active):
+            self.print("%s[%03d] addr: %016x steps: %06d" % (
+                prefix, i, state.registers["PC"].as_long(), state.steps
+            ))
+            prefix = " "*10
+
+        prefix = "\ninactive: "
+        for i, state in enumerate(self.esinstance.state_manager.inactive):
+            self.print("%s[%03d] addr: %016x steps: %06d" % (
+                prefix, i, state.registers["PC"].as_long(), state.steps
+            ))
+            prefix = " "*10
+
+        prefix = "\nunsat:    "
+        for i, state in enumerate(self.esinstance.state_manager.unsat):
+            self.print("%s[%03d] addr: %016x steps: %06d" % (
+                prefix, i, state.registers["PC"].as_long(), state.steps
+            ))
+            prefix = " "*10
+
+    def handle_state_set(self, args):
+        if not self.initialized:
+            self.print("error: need to initialize first")
+            return
+
+        state_num = to_int(args[1])
+        self.state = self.esinstance.state_manager.active[state_num]
 
     def handle_set_symbolic(self, args):
         if not self.initialized:
