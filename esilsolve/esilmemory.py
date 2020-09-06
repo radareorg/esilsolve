@@ -61,11 +61,12 @@ class ESILMemory:
                             self.concrete_addrs.append({"bv": bv, "values": vals})
                         self.solver.pop()'''
 
-                    self.constrain(bv == val)
+                    self.solver.add(bv == val)
                     return val
                 except:
                     # idk man i need a default value in case
                     # there are no constraints on the addr
+                    self.solver.add(bv == self.default_addr)
                     return self.default_addr
 
     def read(self, addr: int, length: int):
