@@ -43,7 +43,7 @@ class ESILMemory:
 
         # this is terrible and temporary
         elif z3.is_bv(bv):
-            print("symbolic addr: %s" % bv)
+            #print("symbolic addr: %s" % bv)
             self.hit_symbolic_addr = True
             sat = self.solver.check()
             if sat == z3.sat:

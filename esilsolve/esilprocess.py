@@ -52,6 +52,9 @@ class ESILProcess:
             self.vexit = None
     
     def execute_instruction(self, state, instr: Dict):
+        if "esil" not in instr:
+            raise ESILUnimplementedException(str(instr))
+
         offset = instr["offset"]
 
         if self.debug:
@@ -230,6 +233,14 @@ class ESILProcess:
                     
                 else:
                     goto = None
+
+            elif word == "BREAK":
+                # if its unconstrained just break
+                if exec_type in (UNCON, EXEC):
+                    break
+                else:
+                    # otherwise uhhh idk for now
+                    pass 
 
             elif exec_type != NO_EXEC:
 

@@ -243,13 +243,6 @@ class ESILSolvePlugin:
 
         self.state.solver.pop()
 
-    def handle_constrain(self, args):
-        if not self.initialized:
-            self.print("error: need to initialize first")
-            return
-
-        self.state.solver.constraints
-
     def handle_execute_constrain(self, args):
         if not self.initialized:
             self.print("error: need to initialize first")

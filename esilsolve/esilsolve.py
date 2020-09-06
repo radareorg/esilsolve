@@ -64,7 +64,11 @@ class ESILSolver:
         self.r2api.init_vm()
         self.did_init_vm = True
 
-    def run(self, target:Address = None, avoid:List[int] = []) -> ESILState:
+    def run(self, 
+            target:Address = None, 
+            avoid:List[int] = [], 
+            make_calls=True) -> ESILState:
+
         """
         Run the symbolic execution until target is reached
 
@@ -123,7 +127,12 @@ class ESILSolver:
                     hook(state)
 
             if instr["type"] == "call":
-                if instr["jump"] in self.sims:
+                if not make_calls:
+                    state.registers["PC"] = pc + instr["size"]
+                    self.state_manager.add(state)
+                    continue
+
+                elif instr["jump"] in self.sims:
                     self.call_sim(state, instr)
 
             if not self.stop:
@@ -253,7 +262,9 @@ class ESILSolver:
         addr = self.r2api.get_address(addr)
 
         self.state_manager = ESILStateManager([], lazy=self.lazy)
-        state = self.state_manager.entry_state(self.r2api, **self.kwargs)
+        kwargs = self.kwargs.copy()
+        kwargs["sym"] = True
+        state = self.state_manager.entry_state(self.r2api, **kwargs)
         pc_size = state.registers["PC"].size()
         state.registers["PC"] = z3.BitVecVal(addr, pc_size)
         return state
