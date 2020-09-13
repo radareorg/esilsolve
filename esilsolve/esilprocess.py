@@ -53,7 +53,7 @@ class ESILProcess:
     
     def execute_instruction(self, state, instr: Dict):
         if "esil" not in instr:
-            raise ESILUnimplementedException(str(instr))
+            raise ESILUnimplementedException("no esil for: %s" % str(instr))
 
         offset = instr["offset"]
 
@@ -62,7 +62,7 @@ class ESILProcess:
             print("%016x: %s" % (offset, instr["opcode"]))
 
         # old pc should never be anything other than a BitVecVal  
-        #old_pc = state.registers["PC"].as_long() + instr["size"]
+        # old_pc = state.registers["PC"].as_long() + instr["size"]
         old_pc = offset + instr["size"]
 
         state.registers["PC"] = old_pc
@@ -106,14 +106,15 @@ class ESILProcess:
 
             # if lazy don't eval, just try both If addresses
             if self.lazy and pc.decl().name() == "if":
-                arg1 = z3.simplify(pc.arg(1))
-                arg2 = z3.simplify(pc.arg(2))
-
-                if z3.is_bv_value(arg1) and z3.is_bv_value(arg2):
-                    possible_pcs = [arg1.as_long(), arg2.as_long()]
+                possible_pcs = self.get_lazy_pcs(pc)
             
             if possible_pcs == []:
                 possible_pcs = state.eval_max(pc)
+
+            if possible_pcs == [] and pc.decl().name() == "if":
+                # if its still [] we prolly timed out
+                # treat it like a lazy solve maybe
+                possible_pcs = self.get_lazy_pcs(pc)[:1]
 
             do_clone = len(possible_pcs) > 1
 
@@ -132,6 +133,16 @@ class ESILProcess:
 
         return states
 
+    def get_lazy_pcs(self, pc):
+        arg1 = z3.simplify(pc.arg(1))
+        arg2 = z3.simplify(pc.arg(2))
+
+        if z3.is_bv_value(arg1) and z3.is_bv_value(arg2):
+            return [arg1.as_long(), arg2.as_long()]
+        
+        else:
+            return []
+
     def parse_expression(self, expression, state):
 
         temp_stack1 = []
@@ -147,6 +158,7 @@ class ESILProcess:
 
         goto = None
         goto_condition = None
+        break_condition = None
         goto_depth = 0
         
         while word_ind < len(words):
@@ -193,7 +205,13 @@ class ESILProcess:
                         condval = z3.If(state.condition, if_val, else_val)
                         new_stack.append(z3.simplify(condval))
 
-                    state.condition = None
+                    if break_condition == None:
+                        state.condition = None
+                    else:
+                        # if there is a break condition 
+                        # we need to retore that
+                        state.condition = break_condition
+
                     new_stack.reverse()
                     state.stack = new_stack
 
@@ -203,6 +221,9 @@ class ESILProcess:
                     word_ind = goto
                     state.condition = goto_condition
                     goto = None
+
+                # if there is a break and a goto this will probably mess up
+                # but like, fuck that expression, it needs a rewrite
 
             elif word == "GOTO" and exec_type != NO_EXEC:
                 # goto makes things a bit wild
@@ -240,14 +261,14 @@ class ESILProcess:
                     break
                 else:
                     # otherwise uhhh idk for now
-                    pass 
+                    break_condition = z3.Not(state.condition)
 
             elif exec_type != NO_EXEC:
 
-                #if word in state.registers:
-                #    state.stack.append(word)
+                if word in state.registers:
+                    state.stack.append(word)
 
-                if word in esilops.opcodes:
+                elif word in esilops.opcodes:
                     op = esilops.opcodes[word]
                     op(word, state.stack, state)
 
@@ -258,10 +279,10 @@ class ESILProcess:
     def get_push_value(self, word):
         if(word.isdigit()):
             return int(word)
-        elif word[:2] == "0x" or word[:3] == "-0x":
-            return int(word, 16)
         elif word[:1] == "-" and word[1:].isdigit():
             return int(word)
+        elif word[:2] == "0x" or word[:3] == "-0x":
+            return int(word, 16)
         else:
             return word
 
@@ -274,13 +295,16 @@ class ESILProcess:
 
         zero = 0
         if z3.is_bv_value(val):
-            return val.as_long() != zero
+            val = val.as_long()
                 
         elif z3.is_bv(val):
             zero = z3.BitVecVal(0, val.size())
 
         if state.condition == None:
-            return z3.simplify(val != zero)
+            if type(val) == int:
+                return val != zero
+            else:
+                return z3.simplify(val != zero)
         else:
             return z3.simplify(z3.And(val != zero, state.condition))
 

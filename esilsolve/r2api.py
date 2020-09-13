@@ -4,10 +4,14 @@ import binascii
 class R2API:
     """ API for interacting with r2 through r2pipe """
 
-    def __init__(self, r2p=None, filename="-", flags=["-2"]):
+    def __init__(self, r2p=None, filename=None, flags=["-2"]):
         self.r2p = r2p
         if r2p == None:
-            self.r2p = r2pipe.open(filename, flags=flags)
+            #self.r2p = r2pipe.open(filename, flags=flags)
+            if filename == None:
+                self.r2p = r2pipe.open()
+            else:
+                self.r2p = r2pipe.open(filename, flags=flags)
 
         self.instruction_cache = {}
         self.cache_num = 64
@@ -117,8 +121,12 @@ class R2API:
     def emustep(self):
         self.r2p.cmd("aes")
 
+    def analyze_function(self, func):
+        self.r2p.cmdj("af @  %s" % str(func))
+
     def function_info(self, func):
-        return self.r2p.cmdj("af %s; afij %s" % (str(func), str(func)))[0]
+        self.analyze_function(func)
+        return self.r2p.cmdj("afij @ %s" % str(func))[0]
 
     # get calling convention for sims
     def calling_convention(self, func):

@@ -27,13 +27,32 @@ class ESILState:
 
         if kwargs.get("optimize", False):
             self.solver = z3.Optimize()
-        else:
+        elif kwargs.get("simple", True):
             self.solver = z3.SimpleSolver()
+        else:
+            self.solver = z3.Solver()
+
+        #self.solver.set("cache_all", True)
+
+        timeout = kwargs.get("timeout", None)
+        if timeout != None:
+            self.solver.set("timeout", timeout)
+
+        #self.solver.set("threads", 4)
+
+        # without this push z3 does not use an "incremental" solver 
+        # which causes it to try tactics which are wildly slow 
+        self.solver.push() 
 
         #self.constraints = []
         self.model = None
+        self.current_instruction = None
 
-        self.esil = {"cur":0, "old":0, "stack":[]}
+        self.esil = {
+            "cur":0, "old":0, "stack":[],
+            "size": 64, "type": 1
+        }
+        
         self.stack = self.esil["stack"]
         self.info = self.r2api.get_info()
         self.debug = kwargs.get("debug", False)
@@ -245,6 +264,7 @@ class ESILState:
 
         pc = self.registers["PC"].as_long() 
         instr = self.r2api.disass(pc)
+        self.current_instruction = instr
         new_states = self.proc.execute_instruction(self, instr)
         return new_states
 
@@ -282,12 +302,10 @@ class ESILState:
             self.r2api.write(addr, value, length)
 
     def clone(self):
+        self.kwargs["init"] = False
         clone = self.__class__(
             self.r2api, 
-            init=False, 
-            sym=self.pure_symbolic, 
-            debug=self.debug, 
-            trace=self.trace
+            **self.kwargs
         )
 
         clone.stack = self.stack[:]

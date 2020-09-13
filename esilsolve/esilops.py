@@ -1,5 +1,4 @@
 from .esilclasses import *
-
 import z3
 
 SIZE = 64
@@ -7,47 +6,76 @@ ONE = z3.BitVecVal(1, SIZE)
 ZERO = z3.BitVecVal(0, SIZE)
 NEGONE = z3.BitVecVal(-1, SIZE)
 
-def pop_values(stack, state, num: int=1, signext=False):
-    return [get_value(stack.pop(), state, signext) for i in range(num)]
+INT = 1
+FLOAT = 2
 
-def get_value(val, state, signext=False):
+def pop_values(stack, state, num: int=1, signext=False) -> List[z3.BitVecRef]:
+    size = state.esil["size"]
+    val_type = state.esil["type"]
+    return [
+        get_value(stack.pop(), state, signext, size, val_type) 
+        for i in range(num)
+    ]
+
+def get_value(val, state, signext=False, size=SIZE, val_type=INT) \
+    -> z3.BitVecRef:
+
     if type(val) == str:
-        register = state.registers[val]
-        return prepare(register, signext)
+        val = state.registers[val]
+    
+    if val_type == FLOAT:
+        return prepare_float(val, signext, size)
     else:
-        return prepare(val, signext)
+        return prepare(val, signext, size)
 
-def prepare(val, signext=False):
+def prepare(val, signext=False, size=SIZE) -> z3.BitVecRef:
     if z3.is_bv(val):
-        #print(val)
-        szdiff = SIZE-val.size()
-        #print(szdiff, val.size())
+        szdiff = size-val.size()
+
         if szdiff > 0:
             if signext:
                 result = z3.SignExt(szdiff, val)
             else:
                 result = z3.ZeroExt(szdiff, val)
+        elif szdiff < 0:
+            result = z3.Extract(size-1, 0, val)
         else:
             result = val
+    elif type(val) == int:
+        result = z3.BitVecVal(val, size)
     elif z3.is_int(val):
-        result = z3.Int2BV(val, SIZE)
+        result = z3.Int2BV(val, size)
+    elif z3.is_fp(val):
+        result = z3.fpToSBV(z3.RTZ(), val, z3.BitVecSort(size))
     else:
-        result = z3.BitVecVal(val, SIZE)
+        result = z3.BitVecVal(val, size)
 
-    #return z3.simplify(result)
+    return result
+
+def prepare_float(val, signext=False, size=SIZE) -> z3.FPRef:
+    size_class = z3.Float64()
+    if size == 32:
+        size_class = z3.Float32()
+    elif size == 128:
+        size_class = z3.Float128()
+
+    bv_val = prepare(val, signext, size)
+    result = z3.fpBVToFP(bv_val, size_class)
+
     return result
 
 def do_TRAP(op, stack, state):
-    raise ESILTrapException
+    raise ESILTrapException("encountered a TRAP operator")
 
 def do_BREAK(op, stack, state):
-    raise ESILBreakException
+    #raise ESILBreakException
+    pass # handle in parse_expression
 
 def do_TODO(op, stack, state):
-    raise ESILTodoException
+    raise ESILTodoException("encountered a TODO operator")
 
 def do_SYS(op, stack, state):
-    raise ESILUnimplementedException
+    raise ESILUnimplementedException("syscalls not implemented yet")
 
 def do_PCADDR(op, stack, state):
     stack.append(state.registers["PC"])
@@ -213,6 +241,25 @@ def do_EQU(op, stack, state):
 
     state.esil["lastsz"] = state.registers[reg].size()
 
+def do_EQUSIZED(op, stack, state):
+    length = getlen(op, state)
+    prev_size = state.esil["size"]
+    state.esil["size"] = length
+
+    reg = stack.pop()
+    val, = pop_values(stack, state)
+    tmp = get_value(reg, state)
+
+    if state.condition != None:
+        val = z3.If(state.condition, val, tmp)
+
+    state.registers[reg] = val
+    state.esil["old"] = tmp
+    state.esil["cur"] = val
+
+    state.esil["lastsz"] = state.registers[reg].size()
+    state.esil["size"] = prev_size
+
 def do_WEQ(op, stack, state):
     reg = stack.pop()
     val, = pop_values(stack, state)
@@ -270,16 +317,21 @@ def do_GOTO(op, stack, state):
     # this gets implemented in esilprocess
     pass
 
-def memlen(op, state):
-    b1 = op.index("[")
-    b2 = op.index("]")
+def getlen(op, state):
+    if "[" in op:
+        b1 = op.index("[")
+        b2 = op.index("]")
+    else:
+        b1 = op.index("(")
+        b2 = op.index(")")
+
     if op[b1+1:b2].isdigit():
         return int(op[b1+1:b2])
     else:
         return int(state.bits/8)
 
 def do_POKE(op, stack, state):
-    length = memlen(op, state)
+    length = getlen(op, state)
     addr, data = pop_values(stack, state, 2)
 
     if state.condition != None:
@@ -291,7 +343,7 @@ def do_POKE(op, stack, state):
     state.esil["lastsz"] = length*8
 
 def do_PEEK(op, stack, state):
-    length = memlen(op, state)
+    length = getlen(op, state)
     addr, = pop_values(stack, state)
 
     data = state.memory.read_bv(addr, length)
@@ -301,7 +353,7 @@ def do_PEEK(op, stack, state):
     state.esil["lastsz"] = length*8
 
 def do_OPPOKE(op, stack, state):
-    length = memlen(op, state)
+    length = getlen(op, state)
     addr, = pop_values(stack, state)
     stack.append(addr)
 
@@ -317,8 +369,34 @@ def do_OPPOKE(op, stack, state):
     state.memory.write_bv(addr, data, length)
     state.esil["old"] = addr
 
+def do_OPSIZED(op, stack, state):
+    length = getlen(op, state)
+    prev_size = state.esil["size"]
+    state.esil["size"] = length
+
+    newop = op.split("(")[0]
+    opcodes[newop](newop, stack, state)
+
+    state.esil["size"] = prev_size
+
+def do_OPFLOAT(op, stack, state):
+    length = getlen(op, state)
+
+    prev_size = state.esil["size"]
+    state.esil["size"] = length
+
+    prev_type = state.esil["type"]
+    state.esil["type"] = FLOAT
+
+    newop = op.split("(")[0][:-1]
+    opcodes[newop](newop, stack, state)
+
+    state.esil["size"] = prev_size
+    state.esil["type"] = prev_type
+
 def do_NOMBRE(op, stack, state):
-    raise ESILUnimplementedException
+    #raise ESILUnimplementedException
+    pass
 
 def do_NOP(op, stack, state):
     pass
@@ -346,7 +424,7 @@ def lastsz(state):
 # flag op functions
 # these are essentially taken from esil.c
 def do_ZF(op, stack, state):
-    eq = ((state.esil["cur"] & genmask(lastsz(state)-1)) == ZERO) # 
+    eq = ((state.esil["cur"] & genmask(lastsz(state)-1)) == ZERO)
     stack.append(z3.If(eq, ONE, ZERO))
     
 def do_CF(op, stack, state):
@@ -490,7 +568,7 @@ opcodes = {
     "$r": do_R,
 }
 
-byte_vals = ["", "*", "1", "2", "4", "8", "16"]
+byte_vals = ["", "*", "1", "2", "4", "8", "16", "32", "64"]
 op_vals = ["+", "-", "++", "--", "*", "/", "<<", ">>", "|", "&", "^", "%", "!", ">>>>", ">>>", "<<<"]
 
 for op_val in op_vals:
@@ -498,9 +576,12 @@ for op_val in op_vals:
 
 for byte_val in byte_vals:
     opcodes["=[%s]" % byte_val] = do_POKE
+    opcodes["=(%s)" % byte_val] = do_EQUSIZED
 
     for op_val in op_vals:
         opcodes["%s=[%s]" % (op_val, byte_val)] = do_OPPOKE
+        opcodes["%s(%s)" % (op_val, byte_val)] = do_OPSIZED
+        opcodes["%s.(%s)" % (op_val, byte_val)] = do_OPFLOAT
 
 for byte_val in byte_vals:
     opcodes["[%s]" % byte_val] = do_PEEK

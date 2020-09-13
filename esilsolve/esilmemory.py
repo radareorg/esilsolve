@@ -37,6 +37,7 @@ class ESILMemory:
         return int(addr - (addr % self.chunklen))
 
     def bv_to_int(self, bv):
+
         bv = z3.simplify(bv)
         if z3.is_bv_value(bv):
             return bv.as_long()
@@ -68,6 +69,9 @@ class ESILMemory:
                     # there are no constraints on the addr
                     self.solver.add(bv == self.default_addr)
                     return self.default_addr
+
+            else:
+                raise ESILUnsatException("no sat symbolic address found")
 
     def read(self, addr: int, length: int):
         maddr = self.mask(addr)

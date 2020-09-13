@@ -113,6 +113,9 @@ class ESILRegisters:
         if key in self.zero_regs:
             return self.zero_regs[key]
 
+        if key not in self._registers:
+            return self.zero_regs["zero"]
+
         register = self._registers[key]
         reg_value = self.get_register_from_bounds(register)
 
@@ -133,6 +136,9 @@ class ESILRegisters:
 
         if key in self.aliases:
             key = self.aliases[key]["reg"]
+
+        if key not in self._registers:
+            return 
 
         register = self._registers[key]
         reg_value = self.get_register_from_bounds(register)

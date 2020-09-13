@@ -4,6 +4,8 @@ from .esilclasses import *
 from .esilstate import ESILState, ESILStateManager
 from .esilsim import ESILSim
 
+z3.set_param('rewriter.hi_fp_unspecified', 'true')
+
 class ESILSolver:
     """
     Manage and run symbolic execution of a binary using ESIL
@@ -13,6 +15,7 @@ class ESILSolver:
     :param trace:        Trace the execution and emulate with r2's ESIL VM
     :param optimize:     Use z3 Optimizer instead of Solver (slow)
     :param lazy:         Use lazy solving, don't evaluate path satisfiability
+    :param simple:       Use simple solver, often faster (default is True) 
 
     >>> esilsolver = ESILSolver("/bin/ls", lazy=True)
     """
@@ -185,6 +188,7 @@ class ESILSolver:
         """
 
         addr = self.r2api.get_address(func)
+        self.r2api.analyze_function(func)
         self.sims[addr] = hook
 
     def call_sim(self, state: ESILState, instr: Dict):
