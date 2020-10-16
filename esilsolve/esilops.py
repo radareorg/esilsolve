@@ -50,7 +50,7 @@ def prepare(val, signext=False, size=SIZE) -> z3.BitVecRef:
     else:
         result = z3.BitVecVal(val, size)
 
-    return result
+    return z3.simplify(result)
 
 def prepare_float(val, signext=False, size=SIZE) -> z3.FPRef:
     size_class = z3.Float64()
@@ -85,6 +85,9 @@ def do_CMP(op, stack, state):
     #stack.append(arg1-arg2)
     state.esil["old"] = arg1
     state.esil["cur"] = arg1-arg2
+
+    if state.pcode: # pcode hax
+        stack.append(z3.If(arg1-arg2 == ZERO, ONE, ZERO))
 
 def do_LT(op, stack, state):
     arg1, arg2 = pop_values(stack, state, 2, signext=True)
@@ -291,10 +294,13 @@ def do_SWAP(op, stack, state):
 # i hope those dont occur
 def do_PICK(op, stack, state):
     n, = pop_values(stack, state)
+    #print(stack, n)
+
     if z3.is_bv_value(n):
         n = n.as_long()
     
-    stack.append(stack[-1*(n+1)])
+    # esil from pcode is 1, not 0 indexed for PICK
+    stack.append(stack[-n])
 
 def do_RPICK(op, stack, state):
     n, = pop_values(stack, state)
@@ -302,6 +308,16 @@ def do_RPICK(op, stack, state):
         n = n.as_long()
     
     stack.append(stack[n])
+
+def do_POPCOUNT(op, stack, state):
+    b, = pop_values(stack, state)
+
+    n = b.size()
+    bits = [ z3.Extract(i, i, b) for i in range(n) ]
+    bvs  = [ z3.Concat(z3.BitVecVal(0, n - 1), b) for b in bits ]
+    nb   = z3.Sum(*bvs)
+
+    stack.append(z3.simplify(nb))
 
 def do_DUP(op, stack, state):
     stack.append(stack[-1])
@@ -543,6 +559,8 @@ opcodes = {
     "--": do_DEC,
     "=": do_EQU,
     ":=": do_WEQ,
+    "SIGN": do_SIGN,
+    "POPCOUNT": do_POPCOUNT,
     "SWAP": do_SWAP,
     "PICK": do_PICK,
     "RPICK": do_RPICK,

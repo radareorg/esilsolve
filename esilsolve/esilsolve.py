@@ -25,6 +25,8 @@ class ESILSolver:
         self.debug = kwargs.get("debug", False)
         self.trace = kwargs.get("trace", False)
         self.lazy = kwargs.get("lazy", False)
+        self.pcode = kwargs.get("pcode", False)
+
         self.states = []
         self.hooks = {}
         self.sims = {}
@@ -112,6 +114,9 @@ class ESILSolver:
         if type(target) == str:
             target = self.r2api.get_address(target)
 
+        if self.pcode:
+            self.r2pipe.cmd("pdga")
+            
         while not self.stop:
             state = self.state_manager.next()
             if state == None:

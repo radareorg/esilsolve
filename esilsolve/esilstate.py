@@ -24,6 +24,7 @@ class ESILState:
         self.kwargs = kwargs
         self.r2api = r2api
         self.pure_symbolic = kwargs.get("sym", False)
+        self.pcode = kwargs.get("pcode", False)
 
         if kwargs.get("optimize", False):
             self.solver = z3.Optimize()

@@ -150,6 +150,7 @@ class ESILProcess:
         exec_type = UNCON
 
         if type(expression) == str:
+            # expression = expression.replace("f,=", "f,:=")
             words = expression.split(",")
         else:
             words = expression
@@ -163,6 +164,7 @@ class ESILProcess:
         
         while word_ind < len(words):
             #print(words[word_ind], temp_stack1, state.stack)
+
             word = words[word_ind]
             word_ind += 1
 

@@ -141,6 +141,12 @@ class ESILRegisters:
             return 
 
         register = self._registers[key]
+
+        # hack for pcode, always weak set flags
+        if register["type_str"] == "flg":
+            self.weak_set(key, val)
+            return 
+
         reg_value = self.get_register_from_bounds(register)
 
         # idk this should be fine and its faster but gives complex answers
