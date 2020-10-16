@@ -102,13 +102,13 @@ class R2API:
     # i should just make a pull request for r2
     def get_all_registers(self):
         reg_dict = {}
-        reg_str = ",".join(self.all_regs)
-        val_str = self.r2p.cmd("aer %s" % reg_str)
-        # this got a little too long
-        all_vals = list(map(lambda x: int(x, 16), val_str.split("\n")[:-1]))
 
-        for i in range(len(all_vals)):
-            reg_dict[self.all_regs[i]] = all_vals[i]
+        for reg in self.all_regs:
+            val_str = self.r2p.cmd("aer %s" % reg).strip().split(" = ")[-1]       
+            if val_str[:2] != "0x":
+                val_str = "0x0"
+
+            reg_dict[reg] = int(val_str, 16)
 
         return reg_dict
 

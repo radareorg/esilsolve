@@ -60,6 +60,9 @@ class ESILSolver:
         # but we must look to the future
         self.context = {}
 
+        if self.pcode:
+            self.r2pipe.cmd("pdga")
+
         if kwargs.get("init", False):
             self.init_state()
 
@@ -113,9 +116,6 @@ class ESILSolver:
 
         if type(target) == str:
             target = self.r2api.get_address(target)
-
-        if self.pcode:
-            self.r2pipe.cmd("pdga")
             
         while not self.stop:
             state = self.state_manager.next()

@@ -150,7 +150,6 @@ class ESILProcess:
         exec_type = UNCON
 
         if type(expression) == str:
-            # expression = expression.replace("f,=", "f,:=")
             words = expression.split(",")
         else:
             words = expression
@@ -285,6 +284,8 @@ class ESILProcess:
             return int(word)
         elif word[:2] == "0x" or word[:3] == "-0x":
             return int(word, 16)
+        elif "." in word and word.split(".")[0].isdigit():
+            return float(word)
         else:
             return word
 

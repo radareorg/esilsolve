@@ -9,6 +9,8 @@ NEGONE = z3.BitVecVal(-1, SIZE)
 INT = 1
 FLOAT = 2
 
+FPM = z3.RTZ()
+
 def pop_values(stack, state, num: int=1, signext=False) -> List[z3.BitVecRef]:
     size = state.esil["size"]
     val_type = state.esil["type"]
@@ -46,21 +48,29 @@ def prepare(val, signext=False, size=SIZE) -> z3.BitVecRef:
     elif z3.is_int(val):
         result = z3.Int2BV(val, size)
     elif z3.is_fp(val):
-        result = z3.fpToSBV(z3.RTZ(), val, z3.BitVecSort(size))
+        # changing up this logic to align with r2ghidra impl  
+        #result = z3.fpToSBV(z3.RTZ(), val, z3.BitVecSort(size))
+        result = val
     else:
         result = z3.BitVecVal(val, size)
 
     return z3.simplify(result)
 
 def prepare_float(val, signext=False, size=SIZE) -> z3.FPRef:
+    if z3.is_fp(val):
+        return val
+
     size_class = z3.Float64()
     if size == 32:
         size_class = z3.Float32()
     elif size == 128:
         size_class = z3.Float128()
 
-    bv_val = prepare(val, signext, size)
-    result = z3.fpBVToFP(bv_val, size_class)
+    if type(val) in (int, float):
+        result = z3.FPVal(val)
+    else:
+        bv_val = prepare(val, signext, size)
+        result = z3.fpBVToFP(bv_val, size_class)
 
     return result
 
@@ -396,7 +406,12 @@ def do_OPSIZED(op, stack, state):
     state.esil["size"] = prev_size
 
 def do_OPFLOAT(op, stack, state):
-    length = getlen(op, state)
+    if op[:1] == "F":
+        newop = op[1:]
+        length = SIZE
+    else:
+        newop = op.split("(")[0][:-1]
+        length = getlen(op, state)
 
     prev_size = state.esil["size"]
     state.esil["size"] = length
@@ -404,11 +419,43 @@ def do_OPFLOAT(op, stack, state):
     prev_type = state.esil["type"]
     state.esil["type"] = FLOAT
 
-    newop = op.split("(")[0][:-1]
     opcodes[newop](newop, stack, state)
 
     state.esil["size"] = prev_size
     state.esil["type"] = prev_type
+
+# completely untested
+def do_CEIL(op, stack, state):
+    val, = pop_values(stack, state)
+    stack.append(z3.fpRoundToIntegral(FPM, val)+1) # idk
+
+def do_FLOOR(op, stack, state):
+    val, = pop_values(stack, state)
+    stack.append(z3.fpRoundToIntegral(FPM, val))
+
+def do_ROUND(op, stack, state):
+    val, = pop_values(stack, state)
+    stack.append(z3.fpRoundToIntegral(FPM, val))
+
+def do_SQRT(op, stack, state):
+    val, = pop_values(stack, state)
+    stack.append(z3.fpSqrt(FPM, val))
+    
+def do_F2I(op, stack, state):
+    val, = pop_values(stack, state)
+    stack.append(z3.fpToIEEEBV(val))
+
+def do_I2F(op, stack, state):
+    val, = pop_values(stack, state)
+    stack.append(z3.fpBVToFP(val, z3.Float64))
+
+def do_F2F(op, stack, state):
+    val, = pop_values(stack, state)
+    stack.append(val)
+
+def do_FNEG(op, stack, state):
+    val, = pop_values(stack, state)
+    stack.append(-1*val)
 
 def do_NOMBRE(op, stack, state):
     #raise ESILUnimplementedException
@@ -431,11 +478,7 @@ def genmask(bits):
     return m
 
 def lastsz(state):
-    try:
-        return state.esil["lastsz"]
-    except:
-        #print(state.info)
-        return state.bits
+    return state.esil.get("lastsz", SIZE)
 
 # flag op functions
 # these are essentially taken from esil.c
@@ -561,6 +604,14 @@ opcodes = {
     ":=": do_WEQ,
     "SIGN": do_SIGN,
     "POPCOUNT": do_POPCOUNT,
+    "CEIL": do_CEIL,
+    "FLOOR": do_FLOOR,
+    "ROUND": do_ROUND,
+    "SQRT": do_SQRT,
+    "F2I": do_F2I,
+    "I2F": do_I2F,
+    "F2F": do_F2F,
+    "-F": do_FNEG,
     "SWAP": do_SWAP,
     "PICK": do_PICK,
     "RPICK": do_RPICK,
@@ -600,6 +651,7 @@ for byte_val in byte_vals:
         opcodes["%s=[%s]" % (op_val, byte_val)] = do_OPPOKE
         opcodes["%s(%s)" % (op_val, byte_val)] = do_OPSIZED
         opcodes["%s.(%s)" % (op_val, byte_val)] = do_OPFLOAT
+        opcodes["F%s" % op_val] = do_OPFLOAT # r2ghidra float op format
 
 for byte_val in byte_vals:
     opcodes["[%s]" % byte_val] = do_PEEK
