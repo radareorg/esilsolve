@@ -16,6 +16,7 @@ class ESILSolver:
     :param optimize:     Use z3 Optimizer instead of Solver (slow)
     :param lazy:         Use lazy solving, don't evaluate path satisfiability
     :param simple:       Use simple solver, often faster (default is True) 
+    :param pcode:        Generate ESIL expressions from PCODE using r2ghidra 
 
     >>> esilsolver = ESILSolver("/bin/ls", lazy=True)
     """
@@ -43,14 +44,14 @@ class ESILSolver:
             r2api = R2API()
         else:
             if type(filename) == str:
-                r2api = R2API(filename=filename)
+                r2api = R2API(filename=filename, pcode=self.pcode)
             else:
-                r2api = R2API(filename)
+                r2api = R2API(filename, pcode=self.pcode)
 
         self.r2api = r2api
         self.r2pipe = r2api.r2p
         self.z3 = z3
-        
+
         self.did_init_vm = False
         self.info = self.r2api.get_info()
         self.stop = False
@@ -59,9 +60,6 @@ class ESILSolver:
         # not really necessary yet since its single threaded
         # but we must look to the future
         self.context = {}
-
-        if self.pcode:
-            self.r2pipe.cmd("pdga")
 
         if kwargs.get("init", False):
             self.init_state()

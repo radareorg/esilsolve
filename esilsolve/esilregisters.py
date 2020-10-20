@@ -141,22 +141,17 @@ class ESILRegisters:
             return 
 
         register = self._registers[key]
+        reg_value = self.get_register_from_bounds(register)
 
-        # hack for pcode, always weak set flags
-        if register["type_str"] == "flg":
+        # hack for pcode, always weak set flags and size > 64
+        # i hate this 
+        if register["type_str"] == "flg" or reg_value["size"] > 64:
             self.weak_set(key, val)
             return 
 
-        reg_value = self.get_register_from_bounds(register)
-
-        # idk this should be fine and its faster but gives complex answers
-        if False and z3.is_bv(val) and val.size() == reg_value["size"]:
-            reg_value["bv"] = z3.simplify(val)
-
-        else:
-            zero = z3.BitVecVal(0, reg_value["size"])
-            new_reg = self.set_register_bits(register, reg_value, zero, val)
-            reg_value["bv"] = z3.simplify(new_reg)
+        zero = z3.BitVecVal(0, reg_value["size"])
+        new_reg = self.set_register_bits(register, reg_value, zero, val)
+        reg_value["bv"] = z3.simplify(new_reg)
 
     def weak_set(self, key: str, val):
         
@@ -187,8 +182,6 @@ class ESILRegisters:
                 new_val = z3.Extract(reg["size"]-1, 0, val)
             elif val.size() < reg["size"]:
                 new_val = z3.ZeroExt(reg["size"]-val.size(), val)
-            else:
-                new_reg = val
 
         else:
             raise ESILArgumentException

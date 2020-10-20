@@ -1,10 +1,17 @@
+from z3.z3 import fpFP
 from .esilclasses import *
 import z3
 
 SIZE = 64
+FSIZE = z3.Float64()
+
 ONE = z3.BitVecVal(1, SIZE)
 ZERO = z3.BitVecVal(0, SIZE)
 NEGONE = z3.BitVecVal(-1, SIZE)
+
+FONE = z3.FPVal(1.0, FSIZE)
+FZERO = z3.FPVal(0.0, FSIZE)
+FNEGONE = z3.FPVal(-1.0, FSIZE)
 
 INT = 1
 FLOAT = 2
@@ -49,8 +56,8 @@ def prepare(val, signext=False, size=SIZE) -> z3.BitVecRef:
         result = z3.Int2BV(val, size)
     elif z3.is_fp(val):
         # changing up this logic to align with r2ghidra impl  
-        #result = z3.fpToSBV(z3.RTZ(), val, z3.BitVecSort(size))
-        result = val
+        result = z3.fpToIEEEBV(val)
+        #result = val
     else:
         result = z3.BitVecVal(val, size)
 
@@ -60,19 +67,27 @@ def prepare_float(val, signext=False, size=SIZE) -> z3.FPRef:
     if z3.is_fp(val):
         return val
 
+    size_class = fp_size_to_sort(size)
+
+    if type(val) in (int, float):
+        result = z3.FPVal(float(val), FSIZE)
+    else:
+        bv_val = prepare(val, signext, size)
+        result = z3.fpToFP(bv_val, size_class)
+
+    return z3.simplify(result)
+
+def fp_size_to_sort(size):
     size_class = z3.Float64()
-    if size == 32:
+
+    if size == 16:
+        size_class = z3.Float16()
+    elif size == 32:
         size_class = z3.Float32()
     elif size == 128:
         size_class = z3.Float128()
 
-    if type(val) in (int, float):
-        result = z3.FPVal(val)
-    else:
-        bv_val = prepare(val, signext, size)
-        result = z3.fpBVToFP(bv_val, size_class)
-
-    return result
+    return size_class
 
 def do_TRAP(op, stack, state):
     raise ESILTrapException("encountered a TRAP operator")
@@ -97,7 +112,19 @@ def do_CMP(op, stack, state):
     state.esil["cur"] = arg1-arg2
 
     if state.pcode: # pcode hax
-        stack.append(z3.If(arg1-arg2 == ZERO, ONE, ZERO))
+        stack.append(z3.If(state.esil["cur"] == ZERO, ONE, ZERO))
+
+def do_FCMP(op, stack, state):
+    prev_type = state.esil["type"]
+    state.esil["type"] = FLOAT
+
+    arg1, arg2 = pop_values(stack, state, 2)
+    #stack.append(arg1-arg2)
+    state.esil["old"] = arg1
+    state.esil["cur"] = arg1-arg2
+
+    stack.append(z3.If(arg1-arg2 == FZERO, ONE, ZERO))
+    state.esil["type"] = prev_type
 
 def do_LT(op, stack, state):
     arg1, arg2 = pop_values(stack, state, 2, signext=True)
@@ -295,10 +322,7 @@ def do_OPEQ(op, stack, state):
     do_EQU(op, stack, state)
 
 def do_SWAP(op, stack, state):
-    v1 = stack.pop()
-    v2 = stack.pop()
-    stack.append(v1)
-    stack.append(v2)
+    stack += [stack.pop(), stack.pop()]
 
 # picks will fail for symbolic n
 # i hope those dont occur
@@ -426,36 +450,94 @@ def do_OPFLOAT(op, stack, state):
 
 # completely untested
 def do_CEIL(op, stack, state):
+    prev_type = state.esil["type"]
+    state.esil["type"] = FLOAT
+
     val, = pop_values(stack, state)
-    stack.append(z3.fpRoundToIntegral(FPM, val)+1) # idk
+    stack.append(z3.fpRoundToIntegral(FPM, val)+1.0) # idk
+
+    state.esil["type"] = prev_type
 
 def do_FLOOR(op, stack, state):
+    prev_type = state.esil["type"]
+    state.esil["type"] = FLOAT
+
     val, = pop_values(stack, state)
     stack.append(z3.fpRoundToIntegral(FPM, val))
+
+    state.esil["type"] = prev_type
 
 def do_ROUND(op, stack, state):
+    prev_type = state.esil["type"]
+    state.esil["type"] = FLOAT
+
     val, = pop_values(stack, state)
     stack.append(z3.fpRoundToIntegral(FPM, val))
 
+    state.esil["type"] = prev_type
+
 def do_SQRT(op, stack, state):
+    prev_type = state.esil["type"]
+    state.esil["type"] = FLOAT
+
     val, = pop_values(stack, state)
     stack.append(z3.fpSqrt(FPM, val))
+
+    state.esil["type"] = prev_type
     
 def do_F2I(op, stack, state):
-    val, = pop_values(stack, state)
-    stack.append(z3.fpToIEEEBV(val))
+    prev_type = state.esil["type"]
+    state.esil["type"] = FLOAT
 
-def do_I2F(op, stack, state):
     val, = pop_values(stack, state)
-    stack.append(z3.fpBVToFP(val, z3.Float64))
+    stack.append(z3.fpToUBV(FPM, val, z3.BitVecSort(SIZE)))
+
+    state.esil["type"] = prev_type
+
+# god forgive me for these hax
+fpcount = 0 # wtf
+def do_I2F(op, stack, state):
+    global fpcount
+    val, = pop_values(stack, state)
+
+    if z3.is_bv_value(val):
+        fp = z3.FPVal(val.as_long(), FSIZE)
+    else:
+        fp = z3.FP("fp%d" % fpcount, FSIZE)
+        state.solver.add(z3.fpToUBV(FPM, fp, z3.BitVecSort(SIZE)) == val)
+        fpcount += 1
+
+    stack.append(fp)
 
 def do_F2F(op, stack, state):
+    prev_type = state.esil["type"]
+    state.esil["type"] = FLOAT
+
+    val, size = pop_values(stack, state, 2)
+    fp_sort = fp_size_to_sort(size)
+
+    stack.append(z3.fpFPToFP(FPM, val, fp_sort))
+
+    state.esil["type"] = prev_type
+
+def do_NAN(op, stack, state):
+    prev_type = state.esil["type"]
+    state.esil["type"] = FLOAT
+
     val, = pop_values(stack, state)
-    stack.append(val)
+    stack.append(z3.If(z3.fpIsNaN(val), ONE, ZERO))
+
+    state.esil["type"] = prev_type
 
 def do_FNEG(op, stack, state):
+    prev_type = state.esil["type"]
+    state.esil["type"] = FLOAT
+
     val, = pop_values(stack, state)
-    stack.append(-1*val)
+    stack.append(-val)
+
+    state.esil["type"] = prev_type
+
 
 def do_NOMBRE(op, stack, state):
     #raise ESILUnimplementedException
@@ -611,6 +693,8 @@ opcodes = {
     "F2I": do_F2I,
     "I2F": do_I2F,
     "F2F": do_F2F,
+    "F==": do_FCMP,
+    "NAN": do_NAN,
     "-F": do_FNEG,
     "SWAP": do_SWAP,
     "PICK": do_PICK,
@@ -638,7 +722,7 @@ opcodes = {
 }
 
 byte_vals = ["", "*", "1", "2", "4", "8", "16", "32", "64"]
-op_vals = ["+", "-", "++", "--", "*", "/", "<<", ">>", "|", "&", "^", "%", "!", ">>>>", ">>>", "<<<"]
+op_vals = ["+", "-", "++", "--", "*", "/", "<", ">", "<=", ">=", "<<", ">>", "|", "&", "^", "%", "!", ">>>>", ">>>", "<<<"]
 
 for op_val in op_vals:
     opcodes["%s=" % op_val] = do_OPEQ

@@ -4,7 +4,7 @@ import binascii
 class R2API:
     """ API for interacting with r2 through r2pipe """
 
-    def __init__(self, r2p=None, filename=None, flags=["-2"]):
+    def __init__(self, r2p=None, filename=None, flags=["-2"], pcode=False):
         self.r2p = r2p
         if r2p == None:
             #self.r2p = r2pipe.open(filename, flags=flags)
@@ -13,6 +13,9 @@ class R2API:
             else:
                 self.r2p = r2pipe.open(filename, flags=flags)
 
+        if pcode:
+            self.r2p.cmd("pdga")
+            
         self.instruction_cache = {}
         self.cache_num = 64
         self.ccs = {}
