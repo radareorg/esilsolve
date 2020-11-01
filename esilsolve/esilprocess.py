@@ -87,7 +87,7 @@ class ESILProcess:
 
         pc = state.registers["PC"]
         if z3.is_bv_value(pc):
-            new_pc = pc.as_long()
+            #new_pc = pc.as_long()
 
             #if state.target != None:
             #    state.distance = min(state.distance, abs(state.target-new_pc))
@@ -226,7 +226,7 @@ class ESILProcess:
                 # if there is a break and a goto this will probably mess up
                 # but like, fuck that expression, it needs a rewrite
 
-            elif word == "GOTO" and exec_type != NO_EXEC:
+            elif exec_type != NO_EXEC and word == "GOTO":
                 # goto makes things a bit wild
                 goto, = esilops.pop_values(state.stack, state)
 
@@ -256,7 +256,7 @@ class ESILProcess:
                 else:
                     goto = None
 
-            elif word == "BREAK":
+            elif exec_type != NO_EXEC and word == "BREAK":
                 # if its unconstrained just break
                 if exec_type in (UNCON, EXEC):
                     break
@@ -284,7 +284,7 @@ class ESILProcess:
             return int(word)
         elif word[:2] == "0x" or word[:3] == "-0x":
             return int(word, 16)
-        elif "." in word and word.split(".")[0].isdigit():
+        elif "." in word:
             return float(word)
         else:
             return word
@@ -293,8 +293,8 @@ class ESILProcess:
         val, = esilops.pop_values(state.stack, state)
         val = z3.simplify(val)
 
-        if self.debug:
-            print("condition val: %s" % val)
+        #if self.debug:
+        #    print("condition val: %s" % val)
 
         zero = 0
         if z3.is_bv_value(val):

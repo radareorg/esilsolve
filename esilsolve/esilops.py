@@ -1,4 +1,3 @@
-from z3.z3 import fpFP
 from .esilclasses import *
 import z3
 
@@ -61,7 +60,8 @@ def prepare(val, signext=False, size=SIZE) -> z3.BitVecRef:
     else:
         result = z3.BitVecVal(val, size)
 
-    return z3.simplify(result)
+    #return z3.simplify(result)
+    return result
 
 def prepare_float(val, signext=False, size=SIZE) -> z3.FPRef:
     if z3.is_fp(val):
@@ -76,6 +76,8 @@ def prepare_float(val, signext=False, size=SIZE) -> z3.FPRef:
         result = z3.fpToFP(bv_val, size_class)
 
     return z3.simplify(result)
+
+float_data = {"count": 0} # oof
 
 def fp_size_to_sort(size):
     size_class = z3.Float64()
@@ -367,7 +369,12 @@ def do_GOTO(op, stack, state):
     # this gets implemented in esilprocess
     pass
 
+len_dict = {}
+
 def getlen(op, state):
+    if op in len_dict:
+        return len_dict[op]
+
     if "[" in op:
         b1 = op.index("[")
         b2 = op.index("]")
@@ -377,8 +384,10 @@ def getlen(op, state):
 
     if op[b1+1:b2].isdigit():
         return int(op[b1+1:b2])
-    else:
+    elif state != None:
         return int(state.bits/8)
+    else:
+        return int(SIZE/8)
 
 def do_POKE(op, stack, state):
     length = getlen(op, state)
@@ -494,18 +503,15 @@ def do_F2I(op, stack, state):
 
     state.esil["type"] = prev_type
 
-# god forgive me for these hax
-fpcount = 0 # wtf
 def do_I2F(op, stack, state):
-    global fpcount
     val, = pop_values(stack, state)
 
     if z3.is_bv_value(val):
         fp = z3.FPVal(val.as_long(), FSIZE)
     else:
-        fp = z3.FP("fp%d" % fpcount, FSIZE)
+        fp = z3.FP("fp%d" % float_data["count"], FSIZE)
         state.solver.add(z3.fpToUBV(FPM, fp, z3.BitVecSort(SIZE)) == val)
-        fpcount += 1
+        float_data["count"] += 1
 
     stack.append(fp)
 
@@ -721,22 +727,37 @@ opcodes = {
     "$r": do_R,
 }
 
+# TODO I may be mishandling "" and "*" peeks and pokes
 byte_vals = ["", "*", "1", "2", "4", "8", "16", "32", "64"]
-op_vals = ["+", "-", "++", "--", "*", "/", "<", ">", "<=", ">=", "<<", ">>", "|", "&", "^", "%", "!", ">>>>", ">>>", "<<<"]
+op_vals = ["+", "-", "++", "--", "*", "/", "<<", ">>", "|", "&", "^", "%", "!", ">>>>", ">>>", "<<<"]
 
 for op_val in op_vals:
     opcodes["%s=" % op_val] = do_OPEQ
+    opcodes["F%s" % op_val] = do_OPFLOAT # r2ghidra float op format
+
+for op_val in ("<", ">", ">=", "<="):
+    opcodes["F%s" % op_val] = do_OPFLOAT 
 
 for byte_val in byte_vals:
     opcodes["=[%s]" % byte_val] = do_POKE
     opcodes["=(%s)" % byte_val] = do_EQUSIZED
 
+    if byte_val not in ("", "*"):
+        len_dict["=[%s]" % byte_val] = int(byte_val)
+        len_dict["=(%s)" % byte_val] = int(byte_val)
+
     for op_val in op_vals:
         opcodes["%s=[%s]" % (op_val, byte_val)] = do_OPPOKE
         opcodes["%s(%s)" % (op_val, byte_val)] = do_OPSIZED
         opcodes["%s.(%s)" % (op_val, byte_val)] = do_OPFLOAT
-        opcodes["F%s" % op_val] = do_OPFLOAT # r2ghidra float op format
+
+        if byte_val not in ("", "*"):
+            len_dict["%s=[%s]" % (op_val, byte_val)] = int(byte_val)
+            len_dict["%s(%s)" % (op_val, byte_val)] = int(byte_val)
+            len_dict["%s.(%s)" % (op_val, byte_val)] = int(byte_val)
 
 for byte_val in byte_vals:
     opcodes["[%s]" % byte_val] = do_PEEK
 
+    if byte_val not in ("", "*"):
+        len_dict["[%s]" % byte_val] = int(byte_val)

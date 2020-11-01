@@ -114,6 +114,7 @@ class ESILRegisters:
             return self.zero_regs[key]
 
         if key not in self._registers:
+            print("register %s not found" % key)
             return self.zero_regs["zero"]
 
         register = self._registers[key]
@@ -138,6 +139,7 @@ class ESILRegisters:
             key = self.aliases[key]["reg"]
 
         if key not in self._registers:
+            print("register %s not found" % key)
             return 
 
         register = self._registers[key]

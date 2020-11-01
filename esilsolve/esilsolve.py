@@ -82,6 +82,7 @@ class ESILSolver:
 
         :param target:     Address or symbol name to reach
         :param avoid:      List of addresses to avoid
+        :param make_calls: Do not step over function calls
 
         >>> state = esilsolver.run(target=0x00804010, avoid=[0x00804020])
         >>> state.evaluate(state.registers["PC"])

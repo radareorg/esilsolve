@@ -2,7 +2,7 @@ import z3
 from .esilclasses import *
 from .esilregisters import *
 from .esilmemory import *
-from .esilprocess import *
+from .esilprocess import ESILProcess
 
 from .r2api import R2API
 
