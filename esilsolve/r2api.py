@@ -1,5 +1,11 @@
 import r2pipe
 import binascii
+import threading
+
+try:
+    import frida
+except ImportError:
+    pass
 
 class R2API:
     """ API for interacting with r2 through r2pipe """
@@ -18,11 +24,35 @@ class R2API:
             
         self.instruction_cache = {}
         self.cache_num = 64
+        self.sleep = 0.1
         self.ccs = {}
 
         self.register_info = None
         self.get_register_info()
         self.info = None
+        self.get_info()
+
+        info = self.r2p.cmdj("ij")
+        try:
+            self.frida = info["core"]["file"].startswith("frida:")
+        except:
+            self.frida = False
+
+        self.frida_sess = None
+        self.script = None
+        self.frida_sess_init()
+
+    def frida_sess_init(self):
+        if self.frida:
+            info = self.r2p.cmdj("ij")
+            self.pid = int(self.r2p.cmd("\\dp"))
+
+            self.device = frida.get_local_device()
+            for dev in frida.enumerate_devices():
+                if info["core"]["file"].startswith("frida://%s" % dev.id):
+                    self.device = dev
+
+            self.frida_sess = self.device.attach(self.pid)
 
     def get_info(self):
         if self.info == None:
@@ -103,11 +133,11 @@ class R2API:
 
     # theres no arj all function to get all the regs as json so i made this
     # i should just make a pull request for r2
-    def get_all_registers(self):
+    def get_all_registers(self, thread=None):
         reg_dict = {}
 
         for reg in self.all_regs:
-            val_str = self.r2p.cmd("aer %s" % reg).strip().split(" = ")[-1]       
+            val_str = self.r2p.cmd("aer %s" % reg).strip().split(" = ")[-1]   
             if val_str[:2] != "0x":
                 val_str = "0x0"
 
@@ -115,8 +145,32 @@ class R2API:
 
         return reg_dict
 
-    def init_vm(self):
-        self.r2p.cmd("aei; aeim")
+    def init_vm(self, thread=None):
+        if not self.frida:
+            self.r2p.cmd("aeim")
+        else:
+            reg_dict = {}
+            reg_dicts = self.r2p.cmdj("\drj")
+
+            for rd in reg_dicts:
+                if thread == None or thread == rd["id"]:
+                    reg_dict = rd["context"]
+                    break
+
+            # .\dr* should do this but doesn't always work
+            for reg in reg_dict:
+                self.set_reg_value(reg, int(reg_dict[reg], 16))
+
+        self.r2p.cmd("aei; aeip") # set PC
+
+    def frida_init(self, addr):
+        self.disass(addr) # cache unhooked instrs
+
+        reg_dict = self.frida_context(addr)
+
+        # .\dr* should do this but doesn't always work
+        for reg in reg_dict:
+            self.set_reg_value(reg, int(reg_dict[reg], 16))
 
     def emu(self, instr):
         self.r2p.cmd("ae %s" % instr["esil"])
@@ -140,7 +194,42 @@ class R2API:
             return self.ccs[func]
 
     def get_address(self, func):
-        return self.r2p.cmdj("pdj 1 @ %s" % str(func))[0]["offset"]
+        if not self.frida:
+            return self.r2p.cmdj("pdj 1 @ %s" % str(func))[0]["offset"]
+        else:
+            return int(self.r2p.cmd("\isa %s" % str(func)), 16)
 
     def analyze(self, level=3): # level 7 solves ctfs automatically
         self.r2p.cmd("a"*level)
+
+    def frida_continue(self):
+        if not self.frida:
+            return 
+            
+        self.r2p.cmd("\\dc")
+
+        if self.script != None:
+            self.script.post({"type": "continue"})
+            self.script.unload()
+            self.script = None
+
+    def frida_context(self, addr):        
+        # super jank
+        func = '''send(this.context);recv('continue',function(){}).wait()''' 
+        script_data = '''Interceptor.attach(ptr('0x%x'),function(){%s})''' \
+             % (addr, func)
+        
+        self.script = self.frida_sess.create_script(script_data)
+
+        context = {}
+        event = threading.Event()
+        def on_context(message, data):
+            if message["type"] == "send":
+                context.update(message["payload"])
+                event.set()
+
+        self.script.on('message', on_context)
+        self.script.load()
+
+        event.wait()
+        return context

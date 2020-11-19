@@ -5,8 +5,6 @@ try:
     r2p = None
 
     import os, sys
-    sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
-
     import esilsolve
     import r2pipe
     import z3
@@ -15,9 +13,11 @@ try:
     import colorama
 
     r2p = r2pipe.open()
-except ImportError:
-    #print("esplugin could not be loaded")
+except ImportError as e:
+    #print("esplugin could not be loaded: " + str(e))
     pass
+
+add_shortcuts = True
 
 class ESILSolvePlugin:
 
@@ -28,6 +28,8 @@ class ESILSolvePlugin:
             # aesx - Analysis: Emulation / Symbolic eXecution
             "aesx?" : self.print_help,
             "aesxi" : self.handle_init,
+            "aesxif": self.handle_init,
+            "aesxfc": self.handle_continue,
             "aesxs" : self.handle_set_symbolic,
             "aesxsb": self.handle_set_symbolic,
             "aesxsc": self.handle_set_symbolic,
@@ -51,6 +53,13 @@ class ESILSolvePlugin:
             "aesxwl": self.handle_state_list,
             "aesxws": self.handle_state_set
         }
+
+        if add_shortcuts:
+            new = {}
+            for c in self.commands: 
+                new["X"+c[4:]] = self.commands[c]
+
+            self.commands.update(new)
 
         self.symbols = {}
         self.esinstance = None
@@ -78,13 +87,14 @@ class ESILSolvePlugin:
 
         lines = [
             usage,
-            ["aesxi", " [debug] [lazy]", "Initialize the ESILSolve instance and VM"],
+            ["aesxi", "[f] [debug] [lazy]", "Initialize the ESILSolve instance and VM"],
             ["aesxs", "[bc] reg|addr [name] [length]", "Set symbolic value in register or memory"],
             ["aesxv", " reg|addr value", "Set concrete value in register or memory"],
             ["aesxc", " sym value", "Constrain symbol to be value, min, max, regex"],
             ["aesxc", "[+-]", "Push / pop the constraint context"],
             ["aesxx", "[ec] expr value", "Execute ESIL expression and evaluate/constrain the result"],
             ["aesxr", "[ac] target [avoid x,y,z]", "Run symbolic execution until target address, avoiding x,y,z"],
+            ["aesxf", "[c]", "Resume r2frida after symex is finished"],
             ["aesxe", "[j] sym1 [sym2] [...]", "Evaluate symbol in current state"],
             ["aesxb", "[j] sym1 [sym2] [...]", "Evaluate buffer in current state"],
             ["aesxd", "[j] [reg1] [reg2] [...]", "Dump register values / ASTs"],
@@ -99,13 +109,24 @@ class ESILSolvePlugin:
         lazy = "lazy" in args
 
         self.esinstance = esilsolve.ESILSolver(self.r2p, debug=debug, lazy=lazy)
-        core = self.r2p.cmdj("ij")["core"]
-        if "referer" not in core and "frida:" != core["file"][:7]:
-            self.esinstance.r2api.init_vm()
 
-        self.state = self.esinstance.init_state()
+        if args[0][-1] != "f":
+            thread = None
+            if len(args) > 1 and is_int(args[1]):
+                thread = to_int(args[1])
+
+            self.esinstance.r2api.init_vm(thread)
+            self.state = self.esinstance.init_state()
+
+        else:
+            pc = to_int(self.r2p.cmd("s"))
+            self.state = self.esinstance.frida_state(pc)
+
         self.initialized = True
         self.symbols = {}
+
+    def handle_continue(self, args):
+        self.esinstance.resume()
 
     def handle_apply(self, args):
         if not self.initialized:
@@ -420,6 +441,9 @@ def to_int(s):
     return int(s)
 
 def is_int(s):
+    if s[:1] == "-":
+        s = s[1:]
+
     if s.isdigit() or s[:2] == "0x":
         return True
 

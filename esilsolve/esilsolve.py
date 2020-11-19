@@ -25,7 +25,7 @@ class ESILSolver:
         self.kwargs = kwargs
         self.debug = kwargs.get("debug", False)
         self.trace = kwargs.get("trace", False)
-        self.lazy = kwargs.get("lazy", False)
+        self.lazy  = kwargs.get("lazy", False)
         self.pcode = kwargs.get("pcode", False)
 
         self.states = []
@@ -154,6 +154,10 @@ class ESILSolver:
         """ End the execution """
         self.stop = True
 
+    # just for r2frida, continue 
+    def resume(self):
+        self.r2api.frida_continue()
+
     # get rets from initial state to stop at
     def default_avoid(self, state: ESILState):
         pc = state.registers["PC"].as_long() 
@@ -237,7 +241,28 @@ class ESILSolver:
         # seek to function and init vm
         self.r2api.seek(addr)
         self.init_vm()
-        return self.init_state()
+        state = self.init_state()
+        # state.registers["PC"] = addr 
+
+        return state
+
+    def frida_state(self, addr: Address) -> ESILState:
+        """
+        Create an ESILState with PC at address from r2frida
+
+        :param addr:     Name of symbol or address to begin execution
+
+        >>> state = esilsolver.frida_state("validate")
+
+        """
+
+        if type(addr) == str:
+            addr = self.r2api.get_address(addr)
+
+        self.r2api.frida_init(addr)
+        state = self.init_state()
+
+        return state
 
     def reset(self, state: ESILState = None):
         """ 

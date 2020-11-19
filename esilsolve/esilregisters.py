@@ -214,7 +214,7 @@ class ESILRegisters:
         return new_reg
 
     def __contains__(self, key: str):
-        return self._registers.__contains__(key)
+        return (key in self._registers or key in self.aliases)
 
     def clone(self):
         clone = self.__class__(self.reg_info, self.aliases, self.pure_symbolic)
