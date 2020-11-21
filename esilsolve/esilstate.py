@@ -25,6 +25,7 @@ class ESILState:
         self.r2api = r2api
         self.pure_symbolic = kwargs.get("sym", False)
         self.pcode = kwargs.get("pcode", False)
+        self.check_perms = kwargs.get("check", False)
 
         if kwargs.get("optimize", False):
             self.solver = z3.Optimize()
@@ -88,7 +89,9 @@ class ESILState:
         self.init_memory()
 
     def init_memory(self):
-        self.memory = ESILMemory(self.r2api, self.info, self.pure_symbolic)
+        self.memory = ESILMemory(
+            self.r2api, self.info, self.pure_symbolic, self.check_perms)
+
         self.memory.solver = self.solver
         self.memory.init_memory()
 
@@ -105,7 +108,9 @@ class ESILState:
         for register in registers:
             register["value"] = register_values[register["name"]]
 
-        self.registers = ESILRegisters(registers, self.aliases, sym=self.pure_symbolic)
+        self.registers = ESILRegisters(
+            registers, self.aliases, sym=self.pure_symbolic)
+            
         self.registers.init_registers()
 
     def set_symbolic_register(self, name: str, var: str = None):

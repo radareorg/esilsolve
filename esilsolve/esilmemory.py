@@ -13,13 +13,14 @@ class ESILMemory:
 
     """
 
-    def __init__(self, r2api: R2API, info: Dict, sym=False):
+    def __init__(self, r2api: R2API, info: Dict, sym=False, check=False):
         self._memory = {}
         self._read_cache = {}
         self.r2api = r2api
         self.info = info
         self.pure_symbolic = sym
         self.default_addr = 0x100000
+        self.check_perms = check
 
         self.multi_concretize = False # True destroys performance
         self.hit_symbolic_addr = False
@@ -74,6 +75,12 @@ class ESILMemory:
                 raise ESILUnsatException("no sat symbolic address found")
 
     def read(self, addr: int, length: int):
+
+        if self.check_perms:
+            perms = self.r2api.get_permissions(addr)
+            if "r" not in perms:
+                raise ESILSegmentFault("failed to read to 0x%x (%s)" % (addr, perms))
+
         maddr = self.mask(addr)
         #print(maddr, length)
 
@@ -114,6 +121,11 @@ class ESILMemory:
 
         if type(addr) != int:
             addr = self.bv_to_int(addr)
+
+        if self.check_perms:
+            perms = self.r2api.get_permissions(addr)
+            if "w" not in perms:
+                raise ESILSegmentFault("failed to write to 0x%x (%s)" % (addr, perms))
 
         if z3.is_bv(data):
             length = int(data.size()/BYTE)

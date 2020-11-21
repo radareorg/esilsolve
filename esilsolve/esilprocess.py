@@ -22,6 +22,8 @@ class ESILProcess:
         self.kwargs = kwargs
         self.debug = kwargs.get("debug", False)
         self.trace = kwargs.get("trace", False)
+        self.check_perms = kwargs.get("check", False)
+
         self._expr_cache = {}
 
         self.conditionals = {}
@@ -57,6 +59,12 @@ class ESILProcess:
 
         offset = instr["offset"]
 
+        if self.check_perms:
+            perms = self.r2api.get_permissions(offset)
+            if "x" not in perms:
+                raise ESILSegmentFault(
+                    "failed to execute 0x%x (%s)" % (offset, perms))
+            
         if self.debug:
             print("\nexpr: %s" % instr["esil"])
             print("%016x: %s" % (offset, instr["opcode"]))

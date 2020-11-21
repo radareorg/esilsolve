@@ -23,6 +23,9 @@ class R2API:
             self.r2p.cmd("pdga")
             
         self.instruction_cache = {}
+        self.permission_cache  = {}
+        # default stack size
+        self.stack_size = 0x20000
         self.cache_num = 64
         self.sleep = 0.1
         self.ccs = {}
@@ -38,9 +41,14 @@ class R2API:
         except:
             self.frida = False
 
+        self.debug = self.r2p.cmd("di") not in (None, "")
+
         self.frida_sess = None
         self.script = None
         self.frida_sess_init()
+
+        self.segments = None
+        self.get_segment_info()
 
     def frida_sess_init(self):
         if self.frida:
@@ -67,6 +75,55 @@ class R2API:
 
         return self.register_info
 
+    def get_segment_info(self):
+        if self.segments == None:
+            self.segments = []
+
+            if self.frida:
+                segments = self.r2p.cmdj("\dmj")
+
+                for seg in segments:
+                    self.segments.append({
+                        "name": "",
+                        "size": seg["size"],
+                        "perm": seg["protection"],
+                        "addr": int(seg["base"], 16)
+                    })
+
+            elif self.debug:
+                segments = self.r2p.cmdj("dmj")
+
+                for seg in segments:
+                    self.segments.append({
+                        "name": seg["name"],
+                        "size": seg["addr_end"]-seg["addr"],
+                        "perm": seg["perm"],
+                        "addr": seg["addr"]
+                    })
+            else:
+                segments = self.r2p.cmdj("iSj")
+
+                for seg in segments:
+                    self.segments.append({
+                        "name": seg["name"],
+                        "size": seg["vsize"],
+                        "perm": seg["perm"][1:],
+                        "addr": seg["vaddr"]
+                    })
+
+        return self.segments
+
+    def get_permissions(self, addr):
+        if addr in self.permission_cache:
+            return self.permission_cache[addr]
+
+        for seg in self.segments:
+            if addr >= seg["addr"] and addr < (seg["addr"] + seg["size"]):
+                self.permission_cache[addr] = seg["perm"]
+                return seg["perm"]
+
+        return "----"
+        
     def get_reg_value(self, reg):
         return int(self.r2p.cmd("aer %s" % reg), 16)
 
@@ -148,6 +205,13 @@ class R2API:
     def init_vm(self, thread=None):
         if not self.frida:
             self.r2p.cmd("aeim")
+            stack = int(self.r2p.cmd("ar SP"), 16)
+            self.segments.append({
+                "name" : "stack",
+                "size" : self.stack_size,
+                "perm" : "rw-",
+                "addr": stack-int(self.stack_size/2)
+            })
         else:
             reg_dict = {}
             reg_dicts = self.r2p.cmdj("\drj")

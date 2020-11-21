@@ -16,6 +16,9 @@ class ESILUnimplementedException(Exception):
 class ESILUnsatException(Exception):
     pass
 
+class ESILSegmentFault(Exception):
+    pass
+
 from typing import Union, List, Dict, Callable
 
 # addresses can by flag names or ints

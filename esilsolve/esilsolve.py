@@ -17,6 +17,7 @@ class ESILSolver:
     :param lazy:         Use lazy solving, don't evaluate path satisfiability
     :param simple:       Use simple solver, often faster (default is True) 
     :param pcode:        Generate ESIL expressions from PCODE using r2ghidra 
+    :param check:        Check memory permissions (default is False)
 
     >>> esilsolver = ESILSolver("/bin/ls", lazy=True)
     """
@@ -27,6 +28,7 @@ class ESILSolver:
         self.trace = kwargs.get("trace", False)
         self.lazy  = kwargs.get("lazy", False)
         self.pcode = kwargs.get("pcode", False)
+        self.check_perms = kwargs.get("check", False)
 
         self.states = []
         self.hooks = {}

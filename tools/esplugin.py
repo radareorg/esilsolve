@@ -77,7 +77,7 @@ class ESILSolvePlugin:
             self.print("%s%s%s %s%s" % \
                 (colorama.Fore.YELLOW, usage[0], usage[1], usage[2], colorama.Style.RESET_ALL))
             for line in lines[1:]:
-                self.print("| %s%s%-30s%s%s" % (
+                self.print("| %s%s%-40s%s%s" % (
                     line[0], 
                     colorama.Fore.YELLOW, line[1], colorama.Style.RESET_ALL, 
                     line[2]
@@ -87,7 +87,7 @@ class ESILSolvePlugin:
 
         lines = [
             usage,
-            ["aesxi", "[f] [debug] [lazy]", "Initialize the ESILSolve instance and VM"],
+            ["aesxi", "[f] [debug] [lazy] [check]", "Initialize the ESILSolve instance and VM"],
             ["aesxs", "[bc] reg|addr [name] [length]", "Set symbolic value in register or memory"],
             ["aesxv", " reg|addr value", "Set concrete value in register or memory"],
             ["aesxc", " sym value", "Constrain symbol to be value, min, max, regex"],
@@ -107,8 +107,10 @@ class ESILSolvePlugin:
     def handle_init(self, args):
         debug = "debug" in args
         lazy = "lazy" in args
+        check = "check" in args
 
-        self.esinstance = esilsolve.ESILSolver(self.r2p, debug=debug, lazy=lazy)
+        self.esinstance = esilsolve.ESILSolver(
+            self.r2p, debug=debug, lazy=lazy, check=check)
 
         if args[0][-1] != "f":
             thread = None
