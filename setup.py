@@ -21,6 +21,9 @@ setuptools.setup(
     python_requires='>=3.6',
     install_requires=[
         'r2pipe',
-        'z3-solver'
+        'z3-solver',
+        'colorama',
+        'frida'
     ]
+    # colorama and frida are not strict requirements
 )

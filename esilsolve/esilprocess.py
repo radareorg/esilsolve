@@ -79,7 +79,7 @@ class ESILProcess:
             esil = self._expr_cache[offset]
         else:
             esil = instr["esil"]
-            if esil == "" and instr["type"] != "nop":
+            if esil in ("", "TODO") and instr["type"] != "nop":
                 if self.vexit != None:
                     try:
                         print("taking vexit for %s" % str(instr))

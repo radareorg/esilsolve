@@ -71,7 +71,7 @@ class R2API:
     def get_register_info(self):
         if self.register_info == None:
             self.register_info = self.r2p.cmdj("aerpj")
-            self.all_regs = [r["name"] for r in self.register_info["reg_info"]] 
+            self.all_regs = [r["name"] for r in self.register_info["reg_info"]]
 
         return self.register_info
 
@@ -83,36 +83,44 @@ class R2API:
                 segments = self.r2p.cmdj("\dmj")
 
                 for seg in segments:
-                    self.segments.append({
-                        "name": "",
-                        "size": seg["size"],
-                        "perm": seg["protection"],
-                        "addr": int(seg["base"], 16)
-                    })
+                    self.add_segment(
+                        "",
+                        seg["size"],
+                        seg["protection"],
+                        int(seg["base"], 16)
+                    )
 
             elif self.debug:
                 segments = self.r2p.cmdj("dmj")
 
                 for seg in segments:
-                    self.segments.append({
-                        "name": seg["name"],
-                        "size": seg["addr_end"]-seg["addr"],
-                        "perm": seg["perm"],
-                        "addr": seg["addr"]
-                    })
+                    self.add_segment(
+                        seg["name"],
+                        seg["addr_end"]-seg["addr"],
+                        seg["perm"],
+                        seg["addr"]
+                    )
             else:
                 segments = self.r2p.cmdj("iSj")
 
                 for seg in segments:
-                    self.segments.append({
-                        "name": seg["name"],
-                        "size": seg["vsize"],
-                        "perm": seg["perm"][1:],
-                        "addr": seg["vaddr"]
-                    })
+                    self.add_segment(
+                        seg["name"],
+                        seg["vsize"],
+                        seg["perm"][1:],
+                        seg["vaddr"]
+                    )
 
         return self.segments
 
+    def add_segment(self, name, size, perm, addr):
+        self.segments.append({
+            "name": name,
+            "size": size,
+            "perm": perm,
+            "addr": addr
+        })
+        
     def get_permissions(self, addr):
         if addr in self.permission_cache:
             return self.permission_cache[addr]
@@ -206,12 +214,12 @@ class R2API:
         if not self.frida:
             self.r2p.cmd("aeim")
             stack = int(self.r2p.cmd("ar SP"), 16)
-            self.segments.append({
-                "name" : "stack",
-                "size" : self.stack_size,
-                "perm" : "rw-",
-                "addr": stack-int(self.stack_size/2)
-            })
+            self.add_segment(
+                "stack",
+                self.stack_size,
+                "rw-",
+                stack-int(self.stack_size/2)
+            )
         else:
             reg_dict = {}
             reg_dicts = self.r2p.cmdj("\drj")

@@ -7,7 +7,6 @@ from .esilprocess import ESILProcess
 from .r2api import R2API
 
 import re # for buffer constraint
-all_bytes = "".join([chr(x) for x in range(256)])
 
 class ESILState:
     """
@@ -110,7 +109,7 @@ class ESILState:
 
         self.registers = ESILRegisters(
             registers, self.aliases, sym=self.pure_symbolic)
-            
+
         self.registers.init_registers()
 
     def set_symbolic_register(self, name: str, var: str = None):
@@ -143,6 +142,8 @@ class ESILState:
                 self.constrain(z3.Extract(7+i*8, i*8, bv) == regex[i])
 
             return 
+
+        all_bytes = "".join([chr(x) for x in range(256)])
 
         if z3.is_bv(bv):
             bv = [z3.Extract(b*8+7, b*8, bv) for b in range(int(bv.size()/8))]

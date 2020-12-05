@@ -50,6 +50,7 @@ class ESILSolvePlugin:
             "aesxd" : self.handle_dump,
             "aesxdj": self.handle_dump,
             "aesxa" : self.handle_apply,
+            "aesxaf": self.handle_apply_first,
             "aesxwl": self.handle_state_list,
             "aesxws": self.handle_state_set
         }
@@ -65,6 +66,7 @@ class ESILSolvePlugin:
         self.esinstance = None
         self.initialized = False
         self.state = None
+        self.first_state = None
 
     def command(self, args):
         cmd = args[0]
@@ -98,7 +100,7 @@ class ESILSolvePlugin:
             ["aesxe", "[j] sym1 [sym2] [...]", "Evaluate symbol in current state"],
             ["aesxb", "[j] sym1 [sym2] [...]", "Evaluate buffer in current state"],
             ["aesxd", "[j] [reg1] [reg2] [...]", "Dump register values / ASTs"],
-            ["aesxa", "", "Apply the current state, setting registers and memory"],
+            ["aesxa", "[f]", "Apply the [first] state, setting gdregisters and memory"],
             ["aesxw", "[ls] [state number]", "List or set the current states"]
         ]
 
@@ -140,6 +142,19 @@ class ESILSolvePlugin:
             value = self.state.evalcon(self.symbols[sym]["value"])
 
         self.state.apply()
+
+    def handle_apply_first(self, args):
+        if not self.initialized:
+            self.print("error: need to initialize first")
+            return
+
+        self.first_state.solver = self.state.solver
+
+        # constrain these first so the user gets the "expected" result
+        for sym in self.symbols:
+            value = self.first_state.evalcon(self.symbols[sym]["value"])
+
+        self.first_state.apply()
 
     def handle_state_list(self, args):
         if not self.initialized:
@@ -277,7 +292,10 @@ class ESILSolvePlugin:
         if args[0][-1] == "c":
             sym, = esilsolve.pop_values(self.state.stack, 1)
 
-            con = args[2]
+            con = "1"
+            if len(args) > 1:
+                con = args[2]
+
             if con == "min": 
                 self.state.solver.minimize(sym)
             elif con == "max":
@@ -299,6 +317,8 @@ class ESILSolvePlugin:
         if not self.initialized:
             self.print("error: need to initialize first")
             return
+
+        self.first_state = self.state.clone()
 
         target = to_int(args[1])
         avoid = []
