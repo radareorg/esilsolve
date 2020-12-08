@@ -28,6 +28,7 @@ class ESILProcess:
 
         self.conditionals = {}
         self.cond_count = 0
+        self.tactics = self.get_boolref_tactics()
 
         if r2p == None:
             r2api = R2API()
@@ -134,7 +135,7 @@ class ESILProcess:
                 else:
                     new_state = state
 
-                new_state.constrain(pc == possible_pc)
+                new_state.constrain(self.eq(pc == possible_pc))
                 new_state.registers["PC"] = possible_pc
 
                 states.append(new_state)
@@ -301,9 +302,6 @@ class ESILProcess:
         val, = esilops.pop_values(state.stack, state)
         val = z3.simplify(val)
 
-        #if self.debug:
-        #    print("condition val: %s" % val)
-
         zero = 0
         if z3.is_bv_value(val):
             val = val.as_long()
@@ -315,9 +313,9 @@ class ESILProcess:
             if type(val) == int:
                 return val != zero
             else:
-                return z3.simplify(val != zero)
+                return self.eq(val != zero)
         else:
-            return z3.simplify(z3.And(val != zero, state.condition))
+            return z3.And(self.eq(val != zero), state.condition)
 
     def check_condition(self, condition, state):
         if condition == None:
@@ -329,6 +327,24 @@ class ESILProcess:
         state.solver.pop()
 
         return is_sat
+
+    def eq(self, expr):
+        return self.tactics(expr).as_expr()
+
+    # stolen mostly from angr 
+    # but slightly different / better
+    def get_boolref_tactics(self):
+        tactics = z3.Then(
+            z3.Tactic("simplify"),
+            z3.Tactic("sat-preprocess"),
+            z3.Tactic("cofactor-term-ite"),
+            z3.Tactic("propagate-ineqs"),
+            z3.Tactic("propagate-values"),
+            z3.Tactic("unit-subsume-simplify"),
+            z3.Tactic("aig"),
+        )
+
+        return tactics
 
     def trace_registers(self, state):
         for regname in state.registers._registers:

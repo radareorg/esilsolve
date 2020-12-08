@@ -18,6 +18,8 @@ class ESILRegisters:
         self._register_values = {}
         self.aliases = aliases
         self._refs = {"count": 1}
+
+        # ad-hoc, mild to moderate oof
         self.zero_regs = {
             "xzr": z3.BitVecVal(0, 64), 
             "wzr": z3.BitVecVal(0, 32),
@@ -212,6 +214,10 @@ class ESILRegisters:
             new_reg = bvs[0]
 
         return new_reg
+
+    # get "all" the registers from bounds
+    def get_all_registers(self):
+        return self.offset_dictionary.values()
 
     def __contains__(self, key: str):
         return (key in self._registers or key in self.aliases)

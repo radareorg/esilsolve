@@ -245,10 +245,9 @@ def do_SIGN(op, stack, state):
     if z3.is_bv(size):
         size = size.as_long()
 
-    if not z3.is_bv(arg1):
-        arg1 = z3.BitVecVal(arg1, SIZE)
-
-    stack.append(z3.SignExt(SIZE-size, z3.Extract(size-1, 0, arg1)))
+    szdiff = SIZE-size
+    stack.append(z3.SignExt(szdiff, z3.Extract(size-1, 0, arg1)))
+    #stack.append((arg1 << szdiff) >> szdiff)
 
 def do_MOD(op, stack, state):
     arg1, arg2 = pop_values(stack, state, 2)

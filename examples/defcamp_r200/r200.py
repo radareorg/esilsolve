@@ -1,12 +1,11 @@
 from esilsolve import ESILSolver
-import r2pipe
 import z3
 
-r2p = r2pipe.open("r200", flags=["-d", "-2"])
-r2p.cmd("wa ret @ sym.imp.ptrace") # nop antidebug
-r2p.cmd("db 0x004008fa; dc;") # setup the linked list 
+# open in debug mode to exec concrete at first
+esilsolver = ESILSolver("r200", flags=["-d", "-2"], lazy=True)
 
-esilsolver = ESILSolver(r2p)
+esilsolver.r2pipe.cmd("wa ret @ sym.imp.ptrace") # nop antidebug
+esilsolver.r2pipe.cmd("db 0x004008fa; dc;") # setup the linked list 
 
 state = esilsolver.call_state(0x0040074d)
 
@@ -14,12 +13,9 @@ addr = 0x1000000
 state.registers["rdi"] = addr
 flag = z3.BitVec("flag", 6*8)
 state.memory[addr] = flag
-state.constrain_bytes(flag, "[sort]") # cheating
 
-# this one takes a while, even after cheating
-state = esilsolver.run(target=0x00400843, avoid=[0x00400832])
+# this one takes a whil-- NOT ANYMORE ITS FAST AF NOW
+state = esilsolver.run(0x00400843, 
+    avoid=[0x00400832], merge=[0x004007fd])
 
-if state != None:
-    print("FLAG: %s " % state.evaluate_buffer(flag).decode())
-else:
-    print("Could not reach target")
+print("FLAG: %s " % state.evaluate_string(flag))

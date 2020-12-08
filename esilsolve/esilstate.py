@@ -336,25 +336,42 @@ class ESILStateManager:
     :param lazy:       Do not check satisfiability of the states
     """
 
-    def __init__(self, active: List[ESILState]=[], avoid=[], lazy=False):
+    def __init__(self, active: List[ESILState]=[], avoid=[], merge=[], lazy=False):
         self.active = set(active)
         self.inactive = set()
         self.unsat = set()
+        self.merged = set()
         self.recently_added = set()
 
         if isinstance(avoid, int):
             avoid = [avoid]
 
+        if isinstance(merge, int):
+            merge = [merge]
+
         self.avoid = avoid
+        self.merge = merge
+        self.merge_states = {}
         self.cutoff = 32
+
+        self.merge_counts = {}
+        self.max_merges = 65536
 
         self.lazy = lazy
 
-    def next(self):
+    def next(self) -> ESILState:
         """ Get the next state to be stepped """
+        #print(self.active, self.merged)
 
         if len(self.active) == 0:
-            return
+            if len(self.merged) == 0:
+                return
+
+            state = max(self.merged, key=lambda s: s.steps)
+            self.merged.discard(state)
+            self.merge_states.pop(state.registers["PC"].as_long()) 
+            return state
+
         elif len(self.active) > self.cutoff:
             state = max(self.active, key=lambda s: s.steps)
         else:
@@ -374,10 +391,14 @@ class ESILStateManager:
 
         pc = state.registers["PC"]
         if z3.is_bv_value(pc):
-            if pc.as_long() in self.avoid:
+            pc = pc.as_long()
+            if pc in self.avoid:
                 self.inactive.add(state)
             else:
-                self.active.add(state)
+                if pc in self.merge:
+                    self.merge_state(state)
+                else:
+                    self.active.add(state)
 
         elif self.lazy or state.is_sat():
             self.active.add(state)
@@ -385,7 +406,7 @@ class ESILStateManager:
         else:
             self.unsat.add(state)
 
-    def entry_state(self, r2api: R2API, **kwargs):
+    def entry_state(self, r2api: R2API, **kwargs) -> ESILState:
         """
         Get an initial state
 
@@ -395,3 +416,56 @@ class ESILStateManager:
         state = ESILState(r2api, **kwargs)
         self.add(state)
         return state
+
+    def merge_state(self, state: ESILState):
+        pc = state.registers["PC"].as_long()
+
+        if pc in self.merge_states:
+            #print("merging %08x %d..." % (pc, self.merge_counts[pc]))
+            merged = self.merge_states[pc]
+            self.merge_counts[pc] += 1
+            assertion = z3.And(*state.solver.assertions())
+
+            # merge the regs
+            for bounds in merged.registers.offset_dictionary:
+                merge_val = merged.registers.offset_dictionary[bounds]
+                state_val = state.registers.offset_dictionary[bounds]
+
+                if not z3.eq(merge_val["bv"], state_val["bv"]):
+                    merge_val["bv"] = z3.If(assertion, 
+                        state_val["bv"], merge_val["bv"])
+
+            # merge the memory
+            merge_addrs = list(merged.memory._memory.keys())
+            state_addrs = list(state.memory._memory.keys())
+            addrs = list(set(merge_addrs+state_addrs)) # uhh
+            for addr in addrs:
+                if not z3.eq(merged.memory[addr], state.memory[addr]):
+                    merged.memory[addr] = z3.If(assertion, 
+                        state.memory[addr], merged.memory[addr])
+
+            # merge solvers 
+            combined = z3.Or(
+                z3.And(*merged.solver.assertions()),
+                assertion)
+
+            merged.solver.reset()
+            merged.solver.add(combined)
+            merged.steps = max(merged.steps, state.steps)
+
+        else:
+            merged = state
+            self.merge_states[pc] = state
+           
+            if pc not in self.merge_counts:
+                self.merge_counts[pc] = 0
+
+        if self.merge_counts[pc] < self.max_merges:
+            #print(merged.solver)
+            self.merged.add(merged)
+        else:
+            # kick it out of merging
+            self.merged.discard(merged)
+            self.merge_states.pop(pc)
+            self.active.add(merged)
+

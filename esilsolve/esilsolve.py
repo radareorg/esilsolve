@@ -40,15 +40,19 @@ class ESILSolver:
         self.cond_count = 0
         self.optimize = kwargs.get("optimize", False)
 
+        flags = kwargs.get("flags", ["-2"])
+
         # use r2api which caches some data
         # to increase speed
         if filename == None:
-            r2api = R2API()
+            r2api = R2API(flags=flags)
         else:
             if type(filename) == str:
-                r2api = R2API(filename=filename, pcode=self.pcode)
+                r2api = R2API(filename=filename,
+                    flags=flags, pcode=self.pcode)
             else:
-                r2api = R2API(filename, pcode=self.pcode)
+                r2api = R2API(filename,
+                    flags=flags, pcode=self.pcode)
 
         self.r2api = r2api
         self.r2pipe = r2api.r2p
@@ -75,6 +79,7 @@ class ESILSolver:
     def run(self, 
             target:Address = None, 
             avoid:List[int] = [], 
+            merge:List[int] = [],
             make_calls=True) -> ESILState:
 
         """
@@ -84,6 +89,7 @@ class ESILSolver:
 
         :param target:     Address or symbol name to reach
         :param avoid:      List of addresses to avoid
+        :param merge:      List of addresses for merge points
         :param make_calls: Do not step over function calls
 
         >>> state = esilsolver.run(target=0x00804010, avoid=[0x00804020])
@@ -114,6 +120,7 @@ class ESILSolver:
             self.state_manager.add(state)
 
         self.state_manager.avoid = avoid
+        self.state_manager.merge = merge
 
         if type(target) == str:
             target = self.r2api.get_address(target)
@@ -156,8 +163,8 @@ class ESILSolver:
         """ End the execution """
         self.stop = True
 
-    # just for r2frida, continue 
     def resume(self):
+        """ resume the process in r2frida """
         self.r2api.frida_continue()
 
     # get rets from initial state to stop at
@@ -303,3 +310,4 @@ class ESILSolver:
         pc_size = state.registers["PC"].size()
         state.registers["PC"] = z3.BitVecVal(addr, pc_size)
         return state
+

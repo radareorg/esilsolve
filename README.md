@@ -88,7 +88,7 @@ Usage: aesx[iscxrebdaw] # Core plugin for ESILSolve
 | aesxe[j] sym1 [sym2] [...]                   Evaluate symbol in current state
 | aesxb[j] sym1 [sym2] [...]                   Evaluate buffer in current state
 | aesxd[j] [reg1] [reg2] [...]                 Dump register values / ASTs
-| aesxa[f]                                     Apply the [first] state, setting gdregisters and memory
+| aesxa[f]                                     Apply the [first] state, setting registers and memory
 | aesxw[ls] [state number]                     List or set the current states
 ```
 
@@ -109,7 +109,7 @@ flag: 3405691582
 
 Here the state is initialized at the current location with `Xi`, and the value in register x2 is made symbolic with `Xs x2 flag 8`. Then the function is run until the return at `0x6f800b0a1c`, avoiding a failure branch at `0x6f800b09c4`. If the validation succeeds x0 should be 1 so we constrain it to that value with `Xc x0 1`. Then the value of the flag is evaluated, and it turns out to be 0xcafebabe.
 
-Some other cool uses of the plugin can be seen in the r2con2020 slides in /docs. Its also easy to make your own ESILSolve based r2 scripts. `ESILSolve()` without arguments will automatically use the current session when the script is run from r2, just like `r2pipe.open()`. Its simple to make powerful, generic tools utilizing symbolic execution. 
+Some other cool uses of the plugin can be seen in the r2con2020 slides in /docs. Its also easy to make your own ESILSolve based r2 scripts. `ESILSolver()` without arguments will automatically use the current session when the script is run from r2, just like `r2pipe.open()`. Its simple to make powerful, generic tools utilizing symbolic execution. 
 
 ### r2frida Integration
 
