@@ -40,7 +40,7 @@ class ESILProcess:
 
         # this depth limit is maybe already too high
         # condition "size" scales like 2**limit
-        self.goto_depth_limit = 16
+        self.goto_depth_limit = 32
         self.lazy = kwargs.get("lazy", False) 
 
         # try to init vexit, an optional module that uses vex
@@ -164,13 +164,14 @@ class ESILProcess:
             words = expression
 
         word_ind = 0
+        words_len = len(words)
 
         goto = None
         goto_condition = None
         break_condition = None
         goto_depth = 0
         
-        while word_ind < len(words):
+        while word_ind < words_len:
             #print(words[word_ind], temp_stack1, state.stack)
 
             word = words[word_ind]
@@ -219,8 +220,8 @@ class ESILProcess:
                         state.condition = None
                     else:
                         # if there is a break condition 
-                        # we need to retore that
-                        state.condition = break_condition
+                        # we need to restore that
+                        state.condition = z3.Not(break_condition)
 
                     new_stack.reverse()
                     state.stack = new_stack
@@ -232,21 +233,21 @@ class ESILProcess:
                     state.condition = goto_condition
                     goto = None
 
-                # if there is a break and a goto this will probably mess up
+                # if there is a symbolic break and a goto this will probably mess up
                 # but like, fuck that expression, it needs a rewrite
 
             elif exec_type != NO_EXEC and word == "GOTO":
                 # goto makes things a bit wild
                 goto, = esilops.pop_values(state.stack, state)
 
-                if state.condition != None:
-                    #print(state.condition)
-                    goto_depth += 1
-
                 if z3.is_bv_value(goto):
                     goto = goto.as_long()
+                else: # hopefully this doesn't happen
+                    goto = state.evalcon(goto).as_long()
 
-                if goto_depth > self.goto_depth_limit:
+                goto_depth += 1
+
+                if state.condition != None and goto_depth > self.goto_depth_limit:
                     # constrain the current condition to not be true
                     # effectively cutting off the nested gotos
                     state.constrain(z3.Not(state.condition))
@@ -255,12 +256,9 @@ class ESILProcess:
                 elif self.check_condition(state.condition, state):
                     goto_condition = state.condition
 
-                    # there should be nothing between GOTO and else/endif
-                    # but we will enforce this anyway
-                    word_str = words[word_ind]
-                    while word_str not in ("}", "}{"):
-                        word_ind += 1
-                        word_str = words[word_ind]
+                    if exec_type == UNCON:
+                        word_ind = goto
+                        goto = None
                     
                 else:
                     goto = None
@@ -269,9 +267,9 @@ class ESILProcess:
                 # if its unconstrained just break
                 if exec_type in (UNCON, EXEC):
                     break
-                else:
+                elif self.check_condition(state.condition, state):
                     # otherwise uhhh idk for now
-                    break_condition = z3.Not(state.condition)
+                    break_condition = state.condition
 
             elif exec_type != NO_EXEC:
 
@@ -285,6 +283,8 @@ class ESILProcess:
                 else:
                     val = self.get_push_value(word)
                     state.stack.append(val)
+            
+        state.condition = None
 
     def get_push_value(self, word):
         if(word.isdigit()):

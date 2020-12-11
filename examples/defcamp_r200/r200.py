@@ -5,12 +5,10 @@ import z3
 esilsolver = ESILSolver("r200", flags=["-d", "-2"], lazy=True)
 
 esilsolver.r2pipe.cmd("wa ret @ sym.imp.ptrace") # nop antidebug
-esilsolver.r2pipe.cmd("db 0x004008fa; dc;") # setup the linked list 
+esilsolver.r2pipe.cmd("db 0x0040091c; dc;") # setup the linked list 
 
 state = esilsolver.call_state(0x0040074d)
-
-addr = 0x1000000
-state.registers["rdi"] = addr
+addr = state.registers["rdi"].as_long()
 flag = z3.BitVec("flag", 6*8)
 state.memory[addr] = flag
 

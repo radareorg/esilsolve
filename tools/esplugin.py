@@ -95,12 +95,12 @@ class ESILSolvePlugin:
             ["aesxc", " sym value", "Constrain symbol to be value, min, max, regex"],
             ["aesxc", "[+-]", "Push / pop the constraint context"],
             ["aesxx", "[ec] expr value", "Execute ESIL expression and evaluate/constrain the result"],
-            ["aesxr", "[ac] target [avoid x,y,z]", "Run symbolic execution until target address, avoiding x,y,z"],
+            ["aesxr", "[ac] target [avoid x,y] [merge w,z]", "Run symbolic execution until target, avoiding x,y"],
             ["aesxf", "[c]", "Resume r2frida after symex is finished"],
             ["aesxe", "[j] sym1 [sym2] [...]", "Evaluate symbol in current state"],
             ["aesxb", "[j] sym1 [sym2] [...]", "Evaluate buffer in current state"],
             ["aesxd", "[j] [reg1] [reg2] [...]", "Dump register values / ASTs"],
-            ["aesxa", "[f]", "Apply the [first] state, setting gdregisters and memory"],
+            ["aesxa", "[f]", "Apply the [first] state, setting registers and memory"],
             ["aesxw", "[ls] [state number]", "List or set the current states"]
         ]
 
@@ -325,7 +325,11 @@ class ESILSolvePlugin:
         if len(args) > 2:
             avoid = [to_int(x) for x in args[2].split(",")]
 
-        self.state = self.esinstance.run(target=target, avoid=avoid)
+        merge = []
+        if len(args) > 3:
+            merge = [to_int(x) for x in args[3].split(",")]
+
+        self.state = self.esinstance.run(target=target, avoid=avoid, merge=merge)
 
         if args[0][-1] == "a":
             self.handle_apply(args)
