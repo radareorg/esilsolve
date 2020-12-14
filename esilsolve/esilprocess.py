@@ -5,11 +5,17 @@ from .esilclasses import *
 from .esilstate import *
 
 # some constants for exec type idk
-UNCON = 0
-IF = 1 
-ELSE = 2
-EXEC = 3
+UNCON   = 0
+IF      = 1 
+ELSE    = 2
+EXEC    = 3
 NO_EXEC = 4
+
+IF_C    = "?{"
+ELSE_C  = "}{"
+ENDIF_C = "}"
+GOTO_C  = "GOTO"
+BREAK_C = "BREAK"
 
 class ESILProcess:
     """ 
@@ -24,10 +30,6 @@ class ESILProcess:
         self.trace = kwargs.get("trace", False)
         self.check_perms = kwargs.get("check", False)
 
-        self._expr_cache = {}
-
-        self.conditionals = {}
-        self.cond_count = 0
         self.tactics = self.get_boolref_tactics()
 
         if r2p == None:
@@ -46,13 +48,15 @@ class ESILProcess:
         # try to init vexit, an optional module that uses vex
         # if an esil expression is not available
         # its not pretty but it (sort of) works (sometimes)
-        try:
-            from .vexit import VexIt
-            self.vexit = VexIt(
-                self.info["info"]["arch"], 
-                self.info["info"]["bits"])
-        except:
-            self.vexit = None
+        self.do_vexit = kwargs.get("vexit", False)
+        if self.do_vexit:
+            try:
+                from .vexit import VexIt
+                self.vexit = VexIt(
+                    self.info["info"]["arch"], 
+                    self.info["info"]["bits"])
+            except:
+                self.vexit = None
     
     def execute_instruction(self, state, instr: Dict):
         if "esil" not in instr:
@@ -61,46 +65,33 @@ class ESILProcess:
         offset = instr["offset"]
 
         if self.check_perms:
-            perms = self.r2api.get_permissions(offset)
-            if "x" not in perms:
-                raise ESILSegmentFault(
-                    "failed to execute 0x%x (%s)" % (offset, perms))
+            state.memory.check(offset, "x")
             
         if self.debug:
             print("\nexpr: %s" % instr["esil"])
             print("%016x: %s" % (offset, instr["opcode"]))
 
         # old pc should never be anything other than a BitVecVal  
-        # old_pc = state.registers["PC"].as_long() + instr["size"]
         old_pc = offset + instr["size"]
 
         state.registers["PC"] = old_pc
 
-        if offset in self._expr_cache:
-            esil = self._expr_cache[offset]
-        else:
-            esil = instr["esil"]
+        esil = instr["esil"]
+        if type(esil) == str:
+            esil = esil.split(",")
+            instr["esil"] = esil
+
+        if self.do_vexit and self.vexit != None:
             if esil in ("", "TODO") and instr["type"] != "nop":
-                if self.vexit != None:
-                    try:
-                        print("taking vexit for %s" % str(instr))
-                        esil = self.vexit.convert(instr)
-                    except:
-                        pass
+                esil = self.vexit.convert(instr)
 
-            self._expr_cache[offset] = esil.split(",")
+        self.parse_expression(esil, state) 
 
-        self.parse_expression(esil, state)
         state.steps += 1
         states = []
 
         pc = state.registers["PC"]
         if z3.is_bv_value(pc):
-            #new_pc = pc.as_long()
-
-            #if state.target != None:
-            #    state.distance = min(state.distance, abs(state.target-new_pc))
-
             if self.trace:
                 self.r2api.emustep()
                 self.trace_registers(state)
@@ -120,17 +111,15 @@ class ESILProcess:
             if possible_pcs == []:
                 possible_pcs = state.eval_max(pc)
 
-            if possible_pcs == [] and pc.decl().name() == "if":
-                # if its still [] we prolly timed out
-                # treat it like a lazy solve maybe
-                possible_pcs = self.get_lazy_pcs(pc)[:1]
-
-            do_clone = len(possible_pcs) > 1
+                if possible_pcs == [] and pc.decl().name() == "if":
+                    # if its still [] we prolly timed out
+                    # treat it like a lazy solve maybe
+                    possible_pcs = self.get_lazy_pcs(pc)[:1]
 
             for possible_pc in possible_pcs:
 
                 # this is the secret to speed, dont always clone states
-                if do_clone:
+                if len(possible_pcs) > 1:
                     new_state = state.clone()
                 else:
                     new_state = state
@@ -173,13 +162,12 @@ class ESILProcess:
         
         while word_ind < words_len:
             #print(words[word_ind], temp_stack1, state.stack)
-
             word = words[word_ind]
-            word_ind += 1
 
-            if word == "?{":
+            if word == IF_C:
+                words[word_ind] = IF_C
+
                 state.condition = self.do_if(state)
-
                 if type(state.condition) == bool:
                     if state.condition == True:
                         exec_type = EXEC
@@ -192,7 +180,9 @@ class ESILProcess:
                     temp_stack1 = state.stack
                     state.stack = temp_stack1[:]
 
-            elif word == "}{":
+            elif word == ELSE_C:
+                words[word_ind] = ELSE_C
+
                 if exec_type == NO_EXEC:
                     exec_type = EXEC
                 elif exec_type == EXEC:
@@ -202,8 +192,10 @@ class ESILProcess:
                     exec_type = ELSE
                     temp_stack2 = state.stack
                     state.stack = temp_stack1[:]
-                
-            elif word == "}":
+
+            elif word == ENDIF_C:
+                words[word_ind] = ENDIF_C
+
                 if NO_EXEC != exec_type != EXEC:
                     new_stack = []
                     new_temp = temp_stack1
@@ -229,14 +221,13 @@ class ESILProcess:
                 exec_type = UNCON
 
                 if goto != None and exec_type != NO_EXEC:
-                    word_ind = goto
+                    word_ind = goto-1
                     state.condition = goto_condition
                     goto = None
 
-                # if there is a symbolic break and a goto this will probably mess up
-                # but like, fuck that expression, it needs a rewrite
+            elif exec_type != NO_EXEC and word == GOTO_C:
+                words[word_ind] = GOTO_C
 
-            elif exec_type != NO_EXEC and word == "GOTO":
                 # goto makes things a bit wild
                 goto, = esilops.pop_values(state.stack, state)
 
@@ -257,13 +248,15 @@ class ESILProcess:
                     goto_condition = state.condition
 
                     if exec_type == UNCON:
-                        word_ind = goto
+                        word_ind = goto-1
                         goto = None
                     
                 else:
                     goto = None
 
-            elif exec_type != NO_EXEC and word == "BREAK":
+            elif exec_type != NO_EXEC and word == BREAK_C:
+                words[word_ind] = BREAK_C
+
                 # if its unconstrained just break
                 if exec_type in (UNCON, EXEC):
                     break
@@ -273,7 +266,7 @@ class ESILProcess:
 
             elif exec_type != NO_EXEC:
 
-                if word in state.registers:
+                if type(word) == int or word in state.registers:
                     state.stack.append(word)
 
                 elif word in esilops.opcodes:
@@ -283,7 +276,10 @@ class ESILProcess:
                 else:
                     val = self.get_push_value(word)
                     state.stack.append(val)
-            
+                    words[word_ind] = val
+
+            word_ind += 1
+
         state.condition = None
 
     def get_push_value(self, word):

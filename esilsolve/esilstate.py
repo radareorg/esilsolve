@@ -63,7 +63,6 @@ class ESILState:
         self.registers: ESILRegisters = None
         self.proc: ESILProcess = None
 
-        self.aliases = {}
         self.condition = None
 
         # steps executed and distance from goal
@@ -207,7 +206,7 @@ class ESILState:
 
         return value
 
-    def evaluate(self, val) -> int:
+    def evaluate(self, val: z3.BitVecRef) -> int:
         """ 
         Evaluate value with the current states constraints 
         
@@ -225,12 +224,12 @@ class ESILState:
         return value
 
     # shortcut to eval + constrain
-    def evalcon(self, val):
+    def evalcon(self, val: z3.BitVecRef):
         eval_val = self.evaluate(val)
         self.constrain(val == eval_val)
         return eval_val
 
-    def eval_max(self, sym, n: int = 16):
+    def eval_max(self, sym, n: int = 64):
         solutions = []
 
         while len(solutions) < n:
@@ -252,13 +251,13 @@ class ESILState:
 
         return solutions
 
-    def evaluate_buffer(self, bv) -> bytes:
+    def evaluate_buffer(self, bv: z3.BitVecRef) -> bytes:
         buf = self.evaluate(bv)
         val = buf.as_long()
         length = int(bv.size()/8)
         return bytes([(val >> (8*i)) & 0xff for i in range(length)])
 
-    def evaluate_string(self, bv) -> str:
+    def evaluate_string(self, bv: z3.BitVecRef) -> str:
         b = self.evaluate_buffer(bv)
         if b"\x00" in b:
             null_ind = b.index(b"\x00")
@@ -420,48 +419,45 @@ class ESILStateManager:
     def merge_state(self, state: ESILState):
         pc = state.registers["PC"].as_long()
 
-        if pc in self.merge_states:
-            #print("merging %08x %d..." % (pc, self.merge_counts[pc]))
-            merged = self.merge_states[pc]
-            self.merge_counts[pc] += 1
-            assertion = z3.And(*state.solver.assertions())
-
-            # merge the regs
-            for bounds in merged.registers.offset_dictionary:
-                merge_val = merged.registers.offset_dictionary[bounds]
-                state_val = state.registers.offset_dictionary[bounds]
-
-                if not z3.eq(merge_val["bv"], state_val["bv"]):
-                    merge_val["bv"] = z3.If(assertion, 
-                        state_val["bv"], merge_val["bv"])
-
-            # merge the memory
-            merge_addrs = list(merged.memory._memory.keys())
-            state_addrs = list(state.memory._memory.keys())
-            addrs = list(set(merge_addrs+state_addrs)) # uhh
-            for addr in addrs:
-                if not z3.eq(merged.memory[addr], state.memory[addr]):
-                    merged.memory[addr] = z3.If(assertion, 
-                        state.memory[addr], merged.memory[addr])
-
-            # merge solvers 
-            combined = z3.Or(
-                z3.And(*merged.solver.assertions()),
-                assertion)
-
-            merged.solver.reset()
-            merged.solver.add(combined)
-            merged.steps = max(merged.steps, state.steps)
-
-        else:
-            merged = state
+        if pc not in self.merge_states:
             self.merge_states[pc] = state
            
             if pc not in self.merge_counts:
                 self.merge_counts[pc] = 0
 
+            self.merged.add(state)
+            return
+
+        #print("merging %08x %d..." % (pc, self.merge_counts[pc]))
+        merged = self.merge_states[pc]
+        self.merge_counts[pc] += 1
+        assertion = z3.And(*state.solver.assertions())
+
+        # merge the regs
+        for bounds in merged.registers.offset_dictionary:
+            merge_val = merged.registers.offset_dictionary[bounds]
+            state_val = state.registers.offset_dictionary[bounds]
+
+            if not z3.eq(merge_val["bv"], state_val["bv"]):
+                merge_val["bv"] = z3.If(assertion, 
+                    state_val["bv"], merge_val["bv"])
+
+        # merge the memory
+        addrs = set(list(merged.memory)+list(state.memory))
+        for addr in addrs:
+            if not z3.eq(merged.memory[addr], state.memory[addr]):
+                merged.memory[addr] = z3.If(assertion, 
+                    state.memory[addr], merged.memory[addr])
+
+        # merge solvers 
+        combined = z3.Or(
+            z3.And(*merged.solver.assertions()), assertion)
+
+        merged.solver.reset()
+        merged.solver.add(combined)
+        merged.steps = max(merged.steps, state.steps)
+
         if self.merge_counts[pc] < self.max_merges:
-            #print(merged.solver)
             self.merged.add(merged)
         else:
             # kick it out of merging

@@ -3,6 +3,7 @@ from .r2api import R2API
 from .esilclasses import * 
 from .esilstate import ESILState, ESILStateManager
 from .esilsim import ESILSim
+from time import time
 
 z3.set_param('rewriter.hi_fp_unspecified', 'true')
 
@@ -61,6 +62,9 @@ class ESILSolver:
         self.did_init_vm = False
         self.info = self.r2api.get_info()
         self.stop = False
+        self.runtime = 0
+        self.steps = 0
+        self.ips = 0
 
         # context for hook variables
         # not really necessary yet since its single threaded
@@ -125,9 +129,12 @@ class ESILSolver:
         if type(target) == str:
             target = self.r2api.get_address(target)
             
+        start = time()
         while not self.stop:
             state = self.state_manager.next()
             if state == None:
+                self.runtime = time()-start
+                self.ips = self.steps/self.runtime
                 return
 
             pc = state.registers["PC"].as_long() 
@@ -153,10 +160,13 @@ class ESILSolver:
 
             if not self.stop:
                 new_states = state.step()
+                self.steps += 1
                 for new_state in new_states:
                     self.state_manager.add(new_state)
             else:
                 self.state_manager.add(state)
+                self.runtime = time()-start
+                self.ips = self.steps/self.runtime
                 return state
 
     def terminate(self):

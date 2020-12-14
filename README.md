@@ -120,7 +120,7 @@ from esilsolve import ESILSolver
 import z3
 
 # start the ESILSolver instance by attaching r2frida 
-esilsolver = ESILSolver("frida://usb/attach//iOSCrackMe")
+esilsolver = ESILSolver("frida://attach/usb//iOSCrackMe")
 
 validate = esilsolver.r2api.get_address("validate")
 # initialize state with context from hook, app is suspended

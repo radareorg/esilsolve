@@ -222,6 +222,9 @@ class ESILRegisters:
     def __contains__(self, key: str):
         return (key in self._registers or key in self.aliases)
 
+    def __iter__(self):
+        return iter(self._registers.keys())
+
     def clone(self):
         clone = self.__class__(self.reg_info, self.aliases, self.pure_symbolic)
         self._refs["count"] += 1

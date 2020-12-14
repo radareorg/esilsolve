@@ -55,9 +55,13 @@ class R2API:
             info = self.r2p.cmdj("ij")
             self.pid = int(self.r2p.cmd("\\dp"))
 
-            self.device = frida.get_local_device()
+            if "/usb/" in info["core"]["file"]:
+                self.device = frida.get_usb_device()
+            else:
+                self.device = frida.get_local_device()
+
             for dev in frida.enumerate_devices():
-                if info["core"]["file"].startswith("frida://%s" % dev.id):
+                if dev.id in info["core"]["file"]:
                     self.device = dev
 
             self.frida_sess = self.device.attach(self.pid)

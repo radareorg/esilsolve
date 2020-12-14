@@ -1,4 +1,6 @@
 import setuptools
+import subprocess
+import shutil
 
 with open("README.md", "r") as fh:
     long_description = fh.read()
@@ -11,7 +13,7 @@ setuptools.setup(
     description="A symbolic execution tool using r2 and ESIL",
     long_description=long_description,
     long_description_content_type="text/markdown",
-    url="https://github.com/aemmitt-ns/esilsolve",
+    url="https://github.com/radareorg/esilsolve",
     packages=setuptools.find_packages(),
     classifiers=[
         "Programming Language :: Python :: 3",
@@ -22,8 +24,9 @@ setuptools.setup(
     install_requires=[
         'r2pipe',
         'z3-solver',
-        'colorama',
-        'frida'
+        # 'frida' # optional for better r2frida support
     ]
-    # colorama and frida are not strict requirements
 )
+
+plugin_dir = subprocess.check_output(["r2", "-H", "R2_USER_PLUGINS"]).decode()
+shutil.copy(shutil.os.path.join("tools", "esplugin.py"), plugin_dir.strip())

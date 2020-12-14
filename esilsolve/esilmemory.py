@@ -22,7 +22,6 @@ class ESILMemory:
         self.default_addr = 0x100000
         self.check_perms = check
 
-        self.multi_concretize = False # True destroys performance
         self.hit_symbolic_addr = False
         self.concrete_addrs = []
 
@@ -45,31 +44,14 @@ class ESILMemory:
 
         # this is terrible and temporary
         elif z3.is_bv(bv):
-            print("symbolic addr: %s" % bv)
+            #print("symbolic addr: %s" % bv)
             self.hit_symbolic_addr = True
-            sat = self.solver.check()
-            if sat == z3.sat:
+            if self.solver.check() == z3.sat:
                 model = self.solver.model()
 
-                try:
-                    val = model.eval(bv, model_completion=True).as_long()
-                    #print(val)
-
-                    '''if self.multi_concretize:
-                        self.solver.push()
-                        self.solver.add(bv != val)
-                        vals = solver.EvalMax(self.solver, bv)
-                        if len(vals) > 0:
-                            self.concrete_addrs.append({"bv": bv, "values": vals})
-                        self.solver.pop()'''
-
-                    self.solver.add(bv == val)
-                    return val
-                except:
-                    # idk man i need a default value in case
-                    # there are no constraints on the addr
-                    self.solver.add(bv == self.default_addr)
-                    return self.default_addr
+                val = model.eval(bv, model_completion=True)
+                self.solver.add(bv == val)
+                return val.as_long()
 
             else:
                 raise ESILUnsatException("no sat symbolic address found")
@@ -77,9 +59,7 @@ class ESILMemory:
     def read(self, addr: int, length: int):
 
         if self.check_perms:
-            perms = self.r2api.get_permissions(addr)
-            if "r" not in perms:
-                raise ESILSegmentFault("failed to read to 0x%x (%s)" % (addr, perms))
+            self.check(addr, "r")
 
         maddr = self.mask(addr)
         #print(maddr, length)
@@ -123,9 +103,7 @@ class ESILMemory:
             addr = self.bv_to_int(addr)
 
         if self.check_perms:
-            perms = self.r2api.get_permissions(addr)
-            if "w" not in perms:
-                raise ESILSegmentFault("failed to write to 0x%x (%s)" % (addr, perms))
+            self.check(addr, "w")
 
         if z3.is_bv(data):
             length = int(data.size()/BYTE)
@@ -213,6 +191,18 @@ class ESILMemory:
     def prepare_data(self, data):
         return data
 
+    def check(self, addr, perm):
+        perm_names = {
+            "r": "read",
+            "w": "write",
+            "x": "execute"
+        }
+
+        perms = self.r2api.get_permissions(addr)
+        if perm not in perms:
+            raise ESILSegmentFault("failed to %s 0x%x (%s)" \
+                % (perm_names[perm], addr, perms))
+
     def init_memory(self):
         pass
 
@@ -238,6 +228,9 @@ class ESILMemory:
 
     def __contains__(self, addr: int) -> bool:
         return addr in self._memory
+
+    def __iter__(self): 
+        return iter(self._memory.keys())
 
     def clone(self):
         clone = self.__class__(self.r2api, self.info, self.pure_symbolic)
