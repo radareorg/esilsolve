@@ -1,8 +1,8 @@
 
 
 try:
-    import r2lang
     r2p = None
+    import r2lang
 
     import os, sys
     import esilsolve
@@ -503,7 +503,8 @@ def esplugin(a):
         "call": _call,
     }
 
-es = ESILSolvePlugin(r2p)
-#r2print(r2p, " -- registering ESILSolve plugin... enter %saesx?%s for help" % \
-#    (colorama.Fore.YELLOW, colorama.Style.RESET_ALL))
-r2lang.plugin("core", esplugin)
+if r2p != None:
+    es = ESILSolvePlugin(r2p)
+    #r2print(r2p, " -- registering ESILSolve plugin... enter %saesx?%s for help" % \
+    #    (colorama.Fore.YELLOW, colorama.Style.RESET_ALL))
+    r2lang.plugin("core", esplugin)
