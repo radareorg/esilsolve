@@ -6,7 +6,7 @@ ESILSolve supports the same architectures as ESIL, including x86, amd64, arm, aa
 
 ### Installation 
 
-To install ESILSolve run `pip install https://github.com/aemmitt-ns/esilsolve/archive/master.zip` or clone it locally and run `pip install .` so you can have the tools directory in a convenient location. 
+To install ESILSolve through the r2 package manager run `r2pm -ci esilsolve`. Alternatively clone it locally and run `pip install .` so you can have the tools directory in a convenient location. 
 
 ### Example Usage
 
@@ -29,49 +29,9 @@ print("ARG1: %d " % state.evaluate(rdi).as_long())
 
 ```
 
-ESILSolve also easily works with ipa and apk files since they are supported by r2. 
-
-### IPA CrackMe Example
-
-```python
-from esilsolve import ESILSolver
-import z3 
-
-buf_addr = 0x100000
-buf_len = 16
-
-esilsolver = ESILSolver("ipa://tests/crackme-level0-symbols.ipa", debug=False)
-state = esilsolver.call_state("sym._validate")
-state.registers["x0"] = buf_addr
-
-#use r2pipe like normal in context of the app
-validate = esilsolver.r2pipe.cmdj("pdj 1")[0]["offset"]
-
-# initialize symbolic bytes of solution
-# and constrain them to be /[a-z ]/
-b = [z3.BitVec("b%d" % x, 8) for x in range(buf_len)]
-state.constrain_bytes(b, "[a-z ]") 
-
-# concat the bytes and write them to memory 
-code = z3.Concat(*b)
-state.memory[buf_addr] = code
-
-# success hook callback
-def success(state):
-    cs = state.evaluate_buffer(code)
-    # gives an answer with lots of spaces but it works
-    print("CODE: '%s'" % cs.decode())
-    esilsolver.terminate()
-
-# set the hooks and run
-esilsolver.register_hook(validate+0x210, success)
-esilsolver.run(avoid=[validate+0x218, validate+0x3c])
-```
-
 ### ESILSolve Plugin
 
-The ESILSolve r2 plugin allows the user to quickly use ESILSolve from the r2 console. To add it to r2 run `echo . $(pwd)/tools/esplugin.py >> ~/.radare2rc` 
-from the ESILSolve directory. To get the available plugin commands enter `aesx?`. 
+The ESILSolve r2 plugin allows the user to quickly use ESILSolve from the r2 console. To get the available plugin commands enter `aesx?`. 
 
 ```
  -- Are you a wizard?
@@ -83,7 +43,7 @@ Usage: aesx[iscxrebdaw] # Core plugin for ESILSolve
 | aesxc sym value                              Constrain symbol to be value, min, max, regex
 | aesxc[+-]                                    Push / pop the constraint context
 | aesxx[ec] expr value                         Execute ESIL expression and evaluate/constrain the result
-| aesxr[ac] target [avoid x,y,z]               Run symbolic execution until target address, avoiding x,y,z
+| aesxr[ac] target [avoid x,y] [merge w,z]     Run symbolic execution until target, avoiding x,y
 | aesxf[c]                                     Resume r2frida after symex is finished
 | aesxe[j] sym1 [sym2] [...]                   Evaluate symbol in current state
 | aesxb[j] sym1 [sym2] [...]                   Evaluate buffer in current state

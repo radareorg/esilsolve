@@ -24,6 +24,7 @@ setuptools.setup(
     install_requires=[
         'r2pipe',
         'z3-solver',
+        'colorama',
         # 'frida' # optional for better r2frida support
     ]
 )
