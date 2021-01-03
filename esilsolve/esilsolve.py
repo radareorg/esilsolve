@@ -5,8 +5,6 @@ from .esilstate import ESILState, ESILStateManager
 from .esilsim import ESILSim
 from time import time
 
-z3.set_param('rewriter.hi_fp_unspecified', 'true')
-
 class ESILSolver:
     """
     Manage and run symbolic execution of a binary using ESIL
@@ -279,6 +277,24 @@ class ESILSolver:
             addr = self.r2api.get_address(addr)
 
         self.r2api.frida_init(addr)
+        state = self.init_state()
+
+        return state
+
+    def debug_state(self, addr: Address) -> ESILState:
+        """
+        Create an ESILState with PC at address from debugger bp
+
+        :param addr:     Name of symbol or address to begin execution
+
+        >>> state = esilsolver.debug_state("validate")
+
+        """
+
+        if type(addr) == str:
+            addr = self.r2api.get_address(addr)
+
+        self.r2api.debug_init(addr)
         state = self.init_state()
 
         return state

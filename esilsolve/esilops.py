@@ -1,6 +1,8 @@
 from .esilclasses import *
 import z3
 
+z3.set_param('rewriter.hi_fp_unspecified', 'true')
+
 SIZE = 64
 FSIZE = z3.Float64()
 

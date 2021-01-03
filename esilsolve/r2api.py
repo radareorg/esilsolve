@@ -239,6 +239,10 @@ class R2API:
 
         self.r2p.cmd("aei; aeip") # set PC
 
+    def debug_init(self, addr):
+        self.disass(addr) # cache unhooked instrs
+        self.r2p.cmd("db 0x%x; dc" % addr)
+
     def frida_init(self, addr):
         self.disass(addr) # cache unhooked instrs
 

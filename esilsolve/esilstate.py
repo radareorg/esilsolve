@@ -251,6 +251,14 @@ class ESILState:
 
         return solutions
 
+    def symbol(self, name: str, length: int, cons=None) -> z3.BitVecRef:
+        bv = z3.BitVec(name, length*8)
+
+        if cons != None:
+            self.constrain_bytes(bv, cons)
+
+        return bv
+
     def evaluate_buffer(self, bv: z3.BitVecRef) -> bytes:
         buf = self.evaluate(bv)
         val = buf.as_long()

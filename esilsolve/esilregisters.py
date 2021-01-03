@@ -147,14 +147,7 @@ class ESILRegisters:
         register = self._registers[key]
         reg_value = self.get_register_from_bounds(register)
 
-        # hack for pcode, always weak set flags and size > 64
-        # i hate this 
-        if register["type_str"] == "flg" or reg_value["size"] > 64:
-            self.weak_set(key, val)
-            return 
-
-        zero = z3.BitVecVal(0, reg_value["size"])
-        new_reg = self.set_register_bits(register, reg_value, zero, val)
+        new_reg = self.set_register_bits(register, reg_value, reg_value["bv"], val)
         reg_value["bv"] = z3.simplify(new_reg)
 
     def weak_set(self, key: str, val):
