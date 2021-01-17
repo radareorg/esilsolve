@@ -162,6 +162,7 @@ class ESILProcess:
         
         while word_ind < words_len:
             #print(words[word_ind], temp_stack1, state.stack)
+            #print(state.condition)
             word = words[word_ind]
 
             if word == IF_C:
@@ -309,6 +310,7 @@ class ESILProcess:
             if type(val) == int:
                 return val != zero
             else:
+                #return val != zero
                 return self.eq(val != zero)
         else:
             return z3.And(self.eq(val != zero), state.condition)
@@ -332,7 +334,7 @@ class ESILProcess:
     def get_boolref_tactics(self):
         tactics = z3.Then(
             z3.Tactic("simplify"),
-            z3.Tactic("sat-preprocess"),
+            #z3.Tactic("sat-preprocess"), # uh this makes things wrong? 
             z3.Tactic("cofactor-term-ite"),
             z3.Tactic("propagate-ineqs"),
             z3.Tactic("propagate-values"),

@@ -66,20 +66,24 @@ def prepare(val, signext=False, size=SIZE) -> z3.BitVecRef:
     return result
 
 def prepare_float(val, signext=False, size=SIZE) -> z3.FPRef:
-    if z3.is_fp(val):
-        return val
 
     size_class = fp_size_to_sort(size)
 
-    if type(val) in (int, float):
-        result = z3.FPVal(float(val), FSIZE)
+    if z3.is_fp(val):
+        result = val
+    elif type(val) in (int, float):
+        result = z3.FPVal(float(val), size_class)
     else:
-        bv_val = prepare(val, signext, size)
-        result = z3.fpToFP(bv_val, size_class)
+        bv_val = z3.simplify(prepare(val, signext, size))
+        if bv_val.decl().name() == "fp.to_ieee_bv":
+            result = bv_val.arg(0)
+        else:
+            result = z3.fpToFP(bv_val, size_class)
 
-    return z3.simplify(result)
+    if result.sort() != size_class:
+        result = z3.fpFPToFP(result, size_class)
 
-float_data = {"count": 0} # oof
+    return result
 
 def fp_size_to_sort(size):
     size_class = z3.Float64()
@@ -88,6 +92,8 @@ def fp_size_to_sort(size):
         size_class = z3.Float16()
     elif size == 32:
         size_class = z3.Float32()
+    elif size == 80:
+        size_class = z3.Float128()
     elif size == 128:
         size_class = z3.Float128()
 
@@ -124,10 +130,8 @@ def do_FCMP(op, stack, state):
 
     arg1, arg2 = pop_values(stack, state, 2)
     #stack.append(arg1-arg2)
-    state.esil["old"] = arg1
-    state.esil["cur"] = arg1-arg2
 
-    stack.append(z3.If(arg1-arg2 == FZERO, ONE, ZERO))
+    stack.append(z3.If(arg1 == arg2, ONE, ZERO))
     state.esil["type"] = prev_type
 
 def do_LT(op, stack, state):
@@ -356,6 +360,9 @@ def do_POPCOUNT(op, stack, state):
 
     stack.append(z3.simplify(nb))
 
+def do_POP(op, stack, state):
+    stack.pop()
+
 def do_DUP(op, stack, state):
     stack.append(stack[-1])
 
@@ -495,44 +502,72 @@ def do_SQRT(op, stack, state):
 
     state.esil["type"] = prev_type
     
-def do_F2I(op, stack, state):
+def do_D2I(op, stack, state):
     prev_type = state.esil["type"]
-    state.esil["type"] = FLOAT
 
     val, = pop_values(stack, state)
     stack.append(z3.fpToUBV(FPM, val, z3.BitVecSort(SIZE)))
 
-    state.esil["type"] = prev_type
-
-def do_I2F(op, stack, state):
+def do_S2D(op, stack, state):
     val, = pop_values(stack, state)
 
     if z3.is_bv_value(val):
         fp = z3.FPVal(val.as_long(), FSIZE)
     else:
-        fp = z3.FP("fp%d" % float_data["count"], FSIZE)
-        state.solver.add(z3.fpToUBV(FPM, fp, z3.BitVecSort(SIZE)) == val)
-        float_data["count"] += 1
+        fp = z3.fpSignedToFP(FPM, val, FSIZE)
 
     stack.append(fp)
 
-def do_F2F(op, stack, state):
+def do_U2D(op, stack, state):
+    val, = pop_values(stack, state)
+
+    if z3.is_bv_value(val):
+        fp = z3.FPVal(val.as_long(), FSIZE)
+    else:
+        fp = z3.fpUnsignedToFP(FPM, val, FSIZE)
+
+    stack.append(fp)
+
+def do_D2F(op, stack, state):
     prev_type = state.esil["type"]
     state.esil["type"] = FLOAT
 
-    val, size = pop_values(stack, state, 2)
+    val, = pop_values(stack, state)
+    state.esil["type"] = prev_type
+
+    size, = pop_values(stack, state)
     fp_sort = fp_size_to_sort(size)
 
-    stack.append(z3.fpFPToFP(FPM, val, fp_sort))
+    if val.sort() != fp_sort:
+        stack.append(z3.fpFPToFP(FPM, val, fp_sort))
+    else:
+        stack.append(val)
 
+def do_F2D(op, stack, state):
+    prev_type = state.esil["type"]
+    state.esil["type"] = FLOAT
+
+    val, = pop_values(stack, state)
     state.esil["type"] = prev_type
+
+    size, = pop_values(stack, state)
+    
+    #val = z3.fpFPToFP(FPM, val, fp_sort)
+    if val.sort() != FSIZE:
+        #fp_sort = fp_size_to_sort(size)
+        stack.append(z3.fpFPToFP(FPM, val, FSIZE))
+    else:
+        stack.append(val)
 
 def do_NAN(op, stack, state):
     prev_type = state.esil["type"]
     state.esil["type"] = FLOAT
 
     val, = pop_values(stack, state)
+    
     stack.append(z3.If(z3.fpIsNaN(val), ONE, ZERO))
+    # uhh NAN is broke right now come back later
+    #stack.append(ZERO)
 
     state.esil["type"] = prev_type
 
@@ -572,22 +607,23 @@ def lastsz(state):
 # flag op functions
 # these are essentially taken from esil.c
 def do_ZF(op, stack, state):
-    eq = ((state.esil["cur"] & genmask(lastsz(state)-1)) == ZERO)
+    cur = prepare(state.esil["cur"])
+    eq = ((cur & genmask(lastsz(state)-1)) == ZERO)
     stack.append(z3.If(eq, ONE, ZERO))
     
 def do_CF(op, stack, state):
     bits, = pop_values(stack, state)
     mask = genmask(bits & 0x3f)
-    old = state.esil["old"]
-    cur = state.esil["cur"]
+    old = prepare(state.esil["old"])
+    cur = prepare(state.esil["cur"])
     cf = z3.ULT((cur & mask), (old & mask))
     stack.append(z3.If(cf, ONE, ZERO))
 
 def do_B(op, stack, state):
     bits, = pop_values(stack, state)
     mask = genmask(bits & 0x3f)
-    old = state.esil["old"]
-    cur = state.esil["cur"]
+    old = prepare(state.esil["old"])
+    cur = prepare(state.esil["cur"])
     bf = z3.ULT((old & mask), (cur & mask))
 
     #print(bits, mask, z3.simplify(bf))
@@ -616,38 +652,38 @@ def do_P(op, stack, state):
 
 def do_O(op, stack, state):
     bit, = pop_values(stack, state)
-    old = state.esil["old"]
-    cur = state.esil["cur"]
+    old = prepare(state.esil["old"])
+    cur = prepare(state.esil["cur"])
     m = [genmask (bit & 0x3f), genmask ((bit + 0x3f) & 0x3f)]
     c_in = z3.If(z3.ULT((cur & m[0]), (old & m[0])), ONE, ZERO)
     c_out = z3.If(z3.ULT((cur & m[1]), (old & m[1])), ONE, ZERO)
-    #print(z3.simplify(c_in))
-    #print(z3.simplify(c_out))
+
     of = ((c_in ^ c_out) == 1)
 
     stack.append(z3.If(of, ONE, ZERO))
 
 def do_SO(op, stack, state):
     bit, = pop_values(stack, state)
-    old = state.esil["old"]
-    cur = state.esil["cur"]
+    old = prepare(state.esil["old"])
+    cur = prepare(state.esil["cur"])
     m = [genmask (bit & 0x3f), genmask ((bit + 0x3f) & 0x3f)]
     c_0 = z3.If(((old-cur) & m[0]) == (1<<bit), ONE, ZERO)
     c_in = z3.If(z3.ULT((cur & m[0]), (old & m[0])), ONE, ZERO)
     c_out = z3.If(z3.ULT((cur & m[1]), (old & m[1])), ONE, ZERO)
-    #print(z3.simplify(c_in))
-    #print(z3.simplify(c_out))
+
     of = ((c_0 ^ c_in) ^ c_out == 1)
 
     stack.append(z3.If(of, ONE, ZERO))
 
 def do_DS(op, stack, state):
-    ds = ((state.esil["cur"] >> (lastsz(state) - 1)) & ONE) == ONE
+    cur = prepare(state.esil["cur"])
+    ds = ((cur >> (lastsz(state) - 1)) & ONE) == ONE
     stack.append(z3.If(ds, ONE, ZERO))
 
 def do_S(op, stack, state):
     size, = pop_values(stack, state)
-    s = ((state.esil["cur"] >> size) & ONE) == ONE
+    cur = prepare(state.esil["cur"])
+    s = ((cur >> size) & ONE) == ONE
     stack.append(z3.If(s, ONE, ZERO))
 
 # jump target??
@@ -697,15 +733,19 @@ opcodes = {
     "FLOOR": do_FLOOR,
     "ROUND": do_ROUND,
     "SQRT": do_SQRT,
-    "F2I": do_F2I,
-    "I2F": do_I2F,
-    "F2F": do_F2F,
+    "D2I": do_D2I,
+    "I2D": do_S2D,
+    "S2D": do_S2D,
+    "U2D": do_U2D,
+    "D2F": do_F2D,
+    "F2D": do_D2F,
     "F==": do_FCMP,
     "NAN": do_NAN,
     "-F": do_FNEG,
     "SWAP": do_SWAP,
     "PICK": do_PICK,
     "RPICK": do_RPICK,
+    "POP": do_POP,
     "DUP": do_DUP,
     "NUM": do_NUM,
     "CLEAR": do_CLEAR,
@@ -750,12 +790,12 @@ for byte_val in byte_vals:
     for op_val in op_vals:
         opcodes["%s=[%s]" % (op_val, byte_val)] = do_OPPOKE
         opcodes["%s(%s)" % (op_val, byte_val)] = do_OPSIZED
-        opcodes["%s.(%s)" % (op_val, byte_val)] = do_OPFLOAT
+        #opcodes["%s.(%s)" % (op_val, byte_val)] = do_OPFLOAT
 
         if byte_val not in ("", "*"):
             len_dict["%s=[%s]" % (op_val, byte_val)] = int(byte_val)
             len_dict["%s(%s)" % (op_val, byte_val)] = int(byte_val)
-            len_dict["%s.(%s)" % (op_val, byte_val)] = int(byte_val)
+            #len_dict["%s.(%s)" % (op_val, byte_val)] = int(byte_val)
 
 for byte_val in byte_vals:
     opcodes["[%s]" % byte_val] = do_PEEK

@@ -18,7 +18,7 @@ class R2API:
                 self.r2p = r2pipe.open()
             else:
                 self.r2p = r2pipe.open(filename, flags=flags)
-
+        
         if pcode:
             self.r2p.cmd("pdga")
             
