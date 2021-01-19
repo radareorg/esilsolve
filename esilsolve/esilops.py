@@ -22,10 +22,8 @@ FPM = z3.RTZ()
 def pop_values(stack, state, num: int=1, signext=False) -> List[z3.BitVecRef]:
     size = state.esil["size"]
     val_type = state.esil["type"]
-    return [
-        get_value(stack.pop(), state, signext, size, val_type) 
-        for i in range(num)
-    ]
+    return [ get_value(stack.pop(), state, signext, size, val_type) 
+        for i in range(num) ]
 
 def get_value(val, state, signext=False, size=SIZE, val_type=INT) \
     -> z3.BitVecRef:
@@ -100,17 +98,29 @@ def fp_size_to_sort(size):
     return size_class
 
 def do_TRAP(op, stack, state):
-    raise ESILTrapException("encountered a TRAP operator")
+    code, = pop_values(stack, state)
+    if code in state.esil["traps"]:
+        state.proc.traps[code](state)
+    else:
+        print("unhandled TRAP %s" % code)
 
 def do_BREAK(op, stack, state):
-    #raise ESILBreakException
+    pass # handle in parse_expression
+
+def do_REPEAT(op, stack, state):
     pass # handle in parse_expression
 
 def do_TODO(op, stack, state):
-    raise ESILTodoException("encountered a TODO operator")
+    if state.proc.bail:
+        raise ESILTodoException("encountered a TODO operator")
+
 
 def do_SYS(op, stack, state):
-    raise ESILUnimplementedException("syscalls not implemented yet")
+    syscall, = pop_values(stack, state)
+    if syscall in state.esil["syscalls"]:
+        state.proc.syscalls[syscall](state)
+    else:
+        print("unhandled SYSCALL %s" % syscall)
 
 def do_PCADDR(op, stack, state):
     stack.append(state.registers["PC"])
@@ -235,6 +245,13 @@ def do_SUB(op, stack, state):
 def do_MUL(op, stack, state):
     arg1, arg2 = pop_values(stack, state, 2)
     stack.append(arg1*arg2)
+
+# unsigned long 128 bit multiply
+def do_LMUL(op, stack, state):
+    arg1, arg2 = pop_values(stack, state, 2)
+    result = z3.ZeroExt(64, arg1)*z3.ZeroExt(64, arg2)
+    stack.append(z3.Extract(127, 64, result))
+    stack.append(z3.Extract(63, 0, result))
 
 def do_DIV(op, stack, state):
     arg1, arg2 = pop_values(stack, state, 2)
@@ -367,8 +384,7 @@ def do_DUP(op, stack, state):
     stack.append(stack[-1])
 
 def do_NUM(op, stack, state):
-    val, = pop_values(stack, state)
-    stack.append(val)
+    stack.extend(pop_values(stack, state))
 
 def do_CLEAR(op, stack, state):
     stack.clear()
@@ -380,9 +396,6 @@ def do_GOTO(op, stack, state):
 len_dict = {}
 
 def getlen(op, state):
-    if op in len_dict:
-        return len_dict[op]
-
     if "[" in op:
         b1 = op.index("[")
         b2 = op.index("]")
@@ -718,6 +731,7 @@ opcodes = {
     "+": do_ADD,
     "-": do_SUB,
     "*": do_MUL,
+    "L*": do_LMUL,
     "/": do_DIV,
     "%": do_MOD,
     "~/": do_SDIV,
@@ -750,6 +764,7 @@ opcodes = {
     "NUM": do_NUM,
     "CLEAR": do_CLEAR,
     "BREAK": do_BREAK,
+    "REPEAT": do_REPEAT,
     "GOTO": do_GOTO,
     "TODO": do_TODO,
     "": do_NOP,
@@ -768,9 +783,10 @@ opcodes = {
     "$r": do_R,
 }
 
-# TODO I may be mishandling "" and "*" peeks and pokes
+# TODO I am mishandling [*], fix later
 byte_vals = ["", "*", "1", "2", "4", "8", "16", "32", "64"]
-op_vals = ["+", "-", "++", "--", "*", "/", "<<", ">>", "|", "&", "^", "%", "!", ">>>>", ">>>", "<<<"]
+op_vals = ["+", "-", "++", "--", "*", "/", "<<", ">>", 
+    "|", "&", "^", "%", "!", ">>>>", ">>>", "<<<"]
 
 for op_val in op_vals:
     opcodes["%s=" % op_val] = do_OPEQ
@@ -783,22 +799,11 @@ for byte_val in byte_vals:
     opcodes["=[%s]" % byte_val] = do_POKE
     opcodes["=(%s)" % byte_val] = do_EQUSIZED
 
-    if byte_val not in ("", "*"):
-        len_dict["=[%s]" % byte_val] = int(byte_val)
-        len_dict["=(%s)" % byte_val] = int(byte_val)
-
     for op_val in op_vals:
         opcodes["%s=[%s]" % (op_val, byte_val)] = do_OPPOKE
         opcodes["%s(%s)" % (op_val, byte_val)] = do_OPSIZED
         #opcodes["%s.(%s)" % (op_val, byte_val)] = do_OPFLOAT
 
-        if byte_val not in ("", "*"):
-            len_dict["%s=[%s]" % (op_val, byte_val)] = int(byte_val)
-            len_dict["%s(%s)" % (op_val, byte_val)] = int(byte_val)
-            #len_dict["%s.(%s)" % (op_val, byte_val)] = int(byte_val)
-
 for byte_val in byte_vals:
     opcodes["[%s]" % byte_val] = do_PEEK
 
-    if byte_val not in ("", "*"):
-        len_dict["[%s]" % byte_val] = int(byte_val)

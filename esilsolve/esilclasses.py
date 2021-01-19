@@ -23,3 +23,4 @@ from typing import Union, List, Dict, Callable
 
 # addresses can by flag names or ints
 Address = Union[str, int]
+HookTarget = Union[str, int, Callable]

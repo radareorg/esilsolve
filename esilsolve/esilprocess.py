@@ -11,11 +11,12 @@ ELSE    = 2
 EXEC    = 3
 NO_EXEC = 4
 
-IF_C    = "?{"
-ELSE_C  = "}{"
-ENDIF_C = "}"
-GOTO_C  = "GOTO"
-BREAK_C = "BREAK"
+IF_C     = "?{"
+ELSE_C   = "}{"
+ENDIF_C  = "}"
+GOTO_C   = "GOTO"
+REPEAT_C = "REPEAT"
+BREAK_C  = "BREAK"
 
 class ESILProcess:
     """ 
@@ -28,6 +29,7 @@ class ESILProcess:
         self.kwargs = kwargs
         self.debug = kwargs.get("debug", False)
         self.trace = kwargs.get("trace", False)
+        self.bail = kwargs.get("bail", False)
         self.check_perms = kwargs.get("check", False)
 
         self.tactics = self.get_boolref_tactics()
@@ -43,7 +45,11 @@ class ESILProcess:
         # this depth limit is maybe already too high
         # condition "size" scales like 2**limit
         self.goto_depth_limit = 32
-        self.lazy = kwargs.get("lazy", False) 
+        self.lazy = kwargs.get("lazy", False)
+
+        # TODO handle this stuff
+        self.traps = {}
+        self.syscalls = {}
 
         # try to init vexit, an optional module that uses vex
         # if an esil expression is not available
@@ -59,7 +65,7 @@ class ESILProcess:
                 self.vexit = None
     
     def execute_instruction(self, state, instr: Dict):
-        if "esil" not in instr:
+        if self.bail and "esil" not in instr:
             raise ESILUnimplementedException("no esil for: %s" % str(instr))
 
         offset = instr["offset"]
@@ -68,7 +74,7 @@ class ESILProcess:
             state.memory.check(offset, "x")
             
         if self.debug:
-            print("\nexpr: %s" % instr["esil"])
+            print("\nexpr: %s" % instr.get("esil", "no esil expr"))
             print("%016x: %s" % (offset, instr["opcode"]))
 
         # old pc should never be anything other than a BitVecVal  
@@ -76,7 +82,7 @@ class ESILProcess:
 
         state.registers["PC"] = old_pc
 
-        esil = instr["esil"]
+        esil = instr.get("esil", ",")
         if type(esil) == str:
             esil = esil.split(",")
             instr["esil"] = esil
@@ -137,7 +143,6 @@ class ESILProcess:
 
         if z3.is_bv_value(arg1) and z3.is_bv_value(arg2):
             return [arg1.as_long(), arg2.as_long()]
-        
         else:
             return []
 
@@ -159,6 +164,7 @@ class ESILProcess:
         goto_condition = None
         break_condition = None
         goto_depth = 0
+        repeat = None
         
         while word_ind < words_len:
             #print(words[word_ind], temp_stack1, state.stack)
@@ -254,6 +260,24 @@ class ESILProcess:
                     
                 else:
                     goto = None
+
+            elif exec_type != NO_EXEC and word == REPEAT_C:
+                words[word_ind] = REPEAT_C
+                # REPEAT is barely used and the code looks wrong
+                # but this is here for completeness sake
+
+                if repeat == None or repeat > 1:
+                    go, rep = esilops.pop_values(state.stack, state)
+
+                    if repeat == None:
+                        repeat = rep
+
+                    repeat -= 1
+                    state.stack.append(repeat)
+                    word_ind = go-1
+
+                else:
+                    repeat = None
 
             elif exec_type != NO_EXEC and word == BREAK_C:
                 words[word_ind] = BREAK_C

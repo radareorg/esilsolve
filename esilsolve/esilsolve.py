@@ -31,6 +31,7 @@ class ESILSolver:
 
         self.states = []
         self.hooks = {}
+        self.cond_hooks = []
         self.sims = {}
         self.state_manager = None
         self.pure_symbolic = kwargs.get("sym", False)
@@ -81,8 +82,7 @@ class ESILSolver:
     def run(self, 
             target:Address = None, 
             avoid:List[int] = [], 
-            merge:List[int] = [],
-            make_calls=True) -> ESILState:
+            merge:List[int] = []) -> ESILState:
 
         """
         Run the symbolic execution until target is reached
@@ -92,7 +92,6 @@ class ESILSolver:
         :param target:     Address or symbol name to reach
         :param avoid:      List of addresses to avoid
         :param merge:      List of addresses for merge points
-        :param make_calls: Do not step over function calls
 
         >>> state = esilsolver.run(target=0x00804010, avoid=[0x00804020])
         >>> state.evaluate(state.registers["PC"])
@@ -109,16 +108,9 @@ class ESILSolver:
         if avoid == [] and self.state_manager.avoid == []:
             state = self.state_manager.next()
             avoid = self.default_avoid(state)
-
-            # no target or hooks, target is last ret
-            if target == None and avoid != []:
-                if len(self.hooks) == 0:
-                    target = avoid[-1]
-                    avoid = avoid[:-1]
-            
             if target in avoid:
                 avoid.remove(target)
-
+                
             self.state_manager.add(state)
 
         self.state_manager.avoid = avoid
@@ -129,6 +121,7 @@ class ESILSolver:
             
         start = time()
         while not self.stop:
+            skip = False
             state = self.state_manager.next()
             if state == None:
                 self.runtime = time()-start
@@ -145,16 +138,22 @@ class ESILSolver:
         
             if pc in self.hooks:
                 for hook in self.hooks[pc]:
-                    hook(state)
+                    # returning False is a shortcut to skip instr
+                    skip = skip or (hook(state) is False)
 
-            if instr["type"] == "call":
-                if not make_calls:
-                    state.registers["PC"] = pc + instr["size"]
-                    self.state_manager.add(state)
-                    continue
+            for cond_hook in self.cond_hooks:
+                if cond_hook(instr):
+                    for hook in self.hooks[cond_hook]:
+                        skip = skip or (hook(state) is False)
 
-                elif instr["jump"] in self.sims:
+            has_sim = instr.get("jump", -1) in self.sims
+            if skip or has_sim:
+                if has_sim:
                     self.call_sim(state, instr)
+
+                state.registers["PC"] = pc + instr["size"]
+                self.state_manager.add(state)
+                continue
 
             if not self.stop:
                 new_states = state.step()
@@ -188,7 +187,7 @@ class ESILSolver:
 
         return rets
 
-    def register_hook(self, addr: Address, hook: Callable):
+    def register_hook(self, addr: HookTarget, hook: Callable):
         """
         Register a function to be called when specified address is reached
 
@@ -198,6 +197,8 @@ class ESILSolver:
 
         if type(addr) == str:
             addr = self.r2api.get_address(addr)
+        elif type(addr) != int:
+            self.cond_hooks.append(addr)
 
         if addr in self.hooks:
             self.hooks[addr].append(hook)
