@@ -181,7 +181,7 @@ class ESILRegisters:
                 new_val = z3.ZeroExt(reg["size"]-val.size(), val)
 
         else:
-            raise ESILArgumentException
+            raise ESILArgumentException("%s %s" % (reg, val))
 
         return new_val
 

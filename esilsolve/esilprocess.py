@@ -11,13 +11,6 @@ ELSE    = 2
 EXEC    = 3
 NO_EXEC = 4
 
-IF_C     = "?{"
-ELSE_C   = "}{"
-ENDIF_C  = "}"
-GOTO_C   = "GOTO"
-REPEAT_C = "REPEAT"
-BREAK_C  = "BREAK"
-
 class ESILProcess:
     """ 
     Executes ESIL expressions and handles results
@@ -72,10 +65,6 @@ class ESILProcess:
 
         if self.check_perms:
             state.memory.check(offset, "x")
-            
-        if self.debug:
-            print("\nexpr: %s" % instr.get("esil", "no esil expr"))
-            print("%016x: %s" % (offset, instr["opcode"]))
 
         # old pc should never be anything other than a BitVecVal  
         old_pc = offset + instr["size"]
@@ -171,8 +160,7 @@ class ESILProcess:
             #print(state.condition)
             word = words[word_ind]
 
-            if word == IF_C:
-                words[word_ind] = IF_C
+            if word == "?{":
 
                 state.condition = self.do_if(state)
                 if type(state.condition) == bool:
@@ -187,8 +175,7 @@ class ESILProcess:
                     temp_stack1 = state.stack
                     state.stack = temp_stack1[:]
 
-            elif word == ELSE_C:
-                words[word_ind] = ELSE_C
+            elif word == "}{":
 
                 if exec_type == NO_EXEC:
                     exec_type = EXEC
@@ -200,8 +187,7 @@ class ESILProcess:
                     temp_stack2 = state.stack
                     state.stack = temp_stack1[:]
 
-            elif word == ENDIF_C:
-                words[word_ind] = ENDIF_C
+            elif word == "}":
 
                 if NO_EXEC != exec_type != EXEC:
                     new_stack = []
@@ -232,8 +218,7 @@ class ESILProcess:
                     state.condition = goto_condition
                     goto = None
 
-            elif exec_type != NO_EXEC and word == GOTO_C:
-                words[word_ind] = GOTO_C
+            elif exec_type != NO_EXEC and word == "GOTO":
 
                 # goto makes things a bit wild
                 goto, = esilops.pop_values(state.stack, state)
@@ -261,8 +246,7 @@ class ESILProcess:
                 else:
                     goto = None
 
-            elif exec_type != NO_EXEC and word == REPEAT_C:
-                words[word_ind] = REPEAT_C
+            elif exec_type != NO_EXEC and word == "REPEAT":
                 # REPEAT is barely used and the code looks wrong
                 # but this is here for completeness sake
 
@@ -279,8 +263,7 @@ class ESILProcess:
                 else:
                     repeat = None
 
-            elif exec_type != NO_EXEC and word == BREAK_C:
-                words[word_ind] = BREAK_C
+            elif exec_type != NO_EXEC and word == "BREAK":
 
                 # if its unconstrained just break
                 if exec_type in (UNCON, EXEC):

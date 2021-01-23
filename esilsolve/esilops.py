@@ -6,10 +6,6 @@ z3.set_param('rewriter.hi_fp_unspecified', 'true')
 SIZE = 64
 FSIZE = z3.Float64()
 
-ONE = z3.BitVecVal(1, SIZE)
-ZERO = z3.BitVecVal(0, SIZE)
-NEGONE = z3.BitVecVal(-1, SIZE)
-
 FONE = z3.FPVal(1.0, FSIZE)
 FZERO = z3.FPVal(0.0, FSIZE)
 FNEGONE = z3.FPVal(-1.0, FSIZE)
@@ -99,7 +95,7 @@ def fp_size_to_sort(size):
 
 def do_TRAP(op, stack, state):
     code, = pop_values(stack, state)
-    if code in state.esil["traps"]:
+    if code in state.proc.traps:
         state.proc.traps[code](state)
     else:
         print("unhandled TRAP %s" % code)
@@ -117,7 +113,7 @@ def do_TODO(op, stack, state):
 
 def do_SYS(op, stack, state):
     syscall, = pop_values(stack, state)
-    if syscall in state.esil["syscalls"]:
+    if syscall in state.proc.syscalls:
         state.proc.syscalls[syscall](state)
     else:
         print("unhandled SYSCALL %s" % syscall)

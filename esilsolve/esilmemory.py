@@ -1,3 +1,4 @@
+import math
 import z3
 from .esilclasses import *
 from .r2api import R2API
@@ -10,7 +11,6 @@ class ESILMemory:
 
     >>> state.memory[0xcafebabe]
     31337
-
     """
 
     def __init__(self, r2api: R2API, info: Dict, sym=False, check=False):
@@ -30,9 +30,86 @@ class ESILMemory:
         self.endian = info["info"]["endian"]
         self.bits = info["info"]["bits"]
         self.chunklen = int(self.bits/8)
+        self.max_len = 4096
+        self.error = z3.BitVecVal(self.max_len, 64) 
+        # z3.BitVecVal((1<<(SIZE-1))-1, SIZE)
 
         self.solver = None
 
+        self.heap = {} # this is it
+        self.heap_start = 2 << (self.bits-8)
+        self.heap_size = self.heap_start #idk
+        self.heap_bin = 0x100
+        self.heap_init = False
+
+    def init_heap(self):
+        self.r2api.add_segment(
+            "heap",
+            self.heap_size,
+            "-rw-",
+            self.heap_start
+        )
+        self.heap_init = True
+
+    def alloc(self, length):
+        """ 
+        The dumbest memory allocation function
+        known to human or alien life
+
+        >>> state.memory.alloc(0x100)
+        0x02000100
+        """
+
+        if not self.heap_init:
+            self.init_heap()
+        
+        needs = 0
+        if type(length) == int:
+            needs = int(length/self.heap_bin) + 1
+        elif z3.is_bv_value(length):
+            needs = int(length.as_long()/self.heap_bin) + 1
+        else:
+            more = True
+            while more:
+                needs += 1
+                cur = z3.BitVecVal(needs*self.heap_bin, SIZE)
+                more = (self.solver.check(length > cur) == z3.sat)
+            
+        slot = 0
+        avail = False
+        while not avail:
+            unused = [(slot+i) not in self.heap for i in range(needs)]
+            avail = all(unused)
+            if not avail:
+                slot += unused[::-1].index(False)+1
+            else:
+                new_slots = [(slot+i, slot) for i in range(needs)]
+                self.heap.update(dict(new_slots))
+
+        addr = self.heap_start + slot*self.heap_bin
+        return addr
+
+    def free(self, addr):
+
+        if z3.is_bv(addr):
+            addr = self.bv_to_int(addr)
+
+        if addr == 0:
+            return
+
+        slot = int((addr-self.heap_start)/self.heap)
+        if slot not in self.heap:
+            print("%016x: double free?" % addr)
+            return 
+
+        cur = slot
+        while True:
+            if cur in self.heap and self.heap[cur] == slot:
+                self.heap.pop(cur)
+                cur += 1
+            else:
+                break
+    
     def mask(self, addr: int):
         return int(addr - (addr % self.chunklen))
 
@@ -58,15 +135,18 @@ class ESILMemory:
 
     def read(self, addr: int, length: int):
 
+        if type(addr) != int:
+            addr = self.bv_to_int(addr)
+
         if self.check_perms:
             self.check(addr, "r")
 
         maddr = self.mask(addr)
+        offset = addr-maddr
         #print(maddr, length)
 
         data = []
-        chunks = int(length/self.chunklen) + min(1, length%self.chunklen)
-        #print(chunks)
+        chunks = math.ceil(float(length+offset)/self.chunklen)
 
         for chunk in range(chunks):
             caddr = maddr + chunk*self.chunklen
@@ -90,9 +170,7 @@ class ESILMemory:
 
                 data += d
 
-        offset = addr-maddr
         return data[offset:offset+length]
-
 
     def write(self, addr, data):
 
@@ -132,34 +210,158 @@ class ESILMemory:
 
             self._memory[caddr] = data[o:o+self.chunklen]
 
+    def memcopy(self, dst, src, length):
+        length = z3.simplify(length)
+        if z3.is_bv_value(length):
+            data = self.read(src, length.as_long())
+            self.write(dst, data)
+        else:
+            data = []
+            for i in range(self.max_len):
+                sc = self.read_bv(src+i, 1)
+                dc = self.read_bv(dst+i, 1)
+                new_len = z3.BitVecVal(i, SIZE)
+                over_len = self.solver.check(length > new_len) == z3.unsat
+
+                if not over_len:
+                    data.append(z3.If(length > new_len, sc, dc))
+                else:
+                    break
+                    
+            self.write(dst, data)
+
+    def move(self, dst, src, length):
+        data = self.cond_read(src, length)
+        self.copy(dst, data, length)
+
+    def copy(self, dst, data, length):
+        length = z3.simplify(length)
+        if z3.is_bv_value(length):
+            self.write(dst, data[:length.as_long()])
+        else:
+            new_data = []
+            for i in range(len(data)):
+                sc = data[i]
+                dc = self.read_bv(dst+i, 1)
+                new_len = z3.BitVecVal(i, SIZE)
+                over_len = self.solver.check(length > new_len) == z3.unsat
+
+                if not over_len:
+                    new_data.append(z3.If(length > new_len, sc, dc))
+                else:
+                    break
+                    
+            self.write(dst, new_data)
+
+    def search(self, addr, needle, length=None, reverse=False):
+        max_len = self.max_len
+        n = len(needle)
+
+        if n == 0:
+            return ZERO
+
+        if length != None:
+            nbv = z3.BitVecVal(n-1, SIZE)
+            length = z3.simplify(length-nbv)
+            if z3.is_bv_value(length):
+                max_len = length.as_long()
+
+        else:
+            length = z3.BitVecVal(max_len-n+1, SIZE)
+        
+        ret_ind = self.error # hmm idk
+        ind_con = z3.BoolVal(False)
+
+        rargs = (0, max_len, 1)
+        if reverse:
+            rargs = (max_len, 0, -1)
+
+        for i in range(*rargs):
+            cs = self.read(addr+i, n)
+            found = all([
+                (self.solver.check(cs[k] != needle[k]) == z3.unsat)
+                for k in range(n)]) # oof
+
+            not_found = any([
+                (self.solver.check(cs[k] == needle[k]) == z3.unsat)
+                for k in range(n)])
+
+            new_ind = z3.BitVecVal(i, SIZE) 
+            over_len = self.solver.check(length > new_ind) == z3.unsat
+
+            if not over_len:
+                if found:
+                    ind_con = z3.And(length > new_ind, z3.Not(ind_con))
+                    ret_ind = z3.If(ind_con, new_ind, ret_ind) 
+                    return z3.simplify(ret_ind), i
+
+                elif not not_found:
+                    new_cons = [cs[k] == needle[k] for k in range(n)]
+                    new_cons.append(length > new_ind)
+                    new_con = z3.And(*new_cons)
+
+                    ind_con = z3.And(new_con, z3.Not(ind_con))
+                    ret_ind = z3.If(ind_con, new_ind, ret_ind)
+            else:
+                if not reverse:
+                    return z3.simplify(ret_ind), i
+
+        return z3.simplify(ret_ind), max_len
+
+    def cond_read(self, addr, length):
+        length = z3.simplify(length)
+        if z3.is_bv_value(length):
+            return self.read(addr, length.as_long())
+        else:
+            data = []
+            for i in range(self.max_len):
+                sc = self.read_bv(addr+i, 1)
+                new_len = z3.BitVecVal(i, SIZE)
+                over_len = self.solver.check(length > new_len) == z3.unsat
+
+                if not over_len:
+                    data.append(sc)
+                else:
+                    break
+
+            return data
+
+    def compare(self, s1, s2, length=None):
+        max_len = self.max_len
+        if length != None:
+            length = z3.simplify(length)
+            if z3.is_bv_value(length):
+                max_len = length.as_long()
+
+        else: # no len use null
+            len1, last1 = self.search(s1, [BZERO])
+            len2, last2 = self.search(s2, [BZERO])
+
+            max_len = min(last1, last2)+1
+            length = z3.If(len1 < len2, len1, len2)+1
+
+        ret_val = ZERO
+        for i in range(max_len):
+            c1 = z3.ZeroExt(24, self.read_bv(s1+i, 1))
+            c2 = z3.ZeroExt(24, self.read_bv(s2+i, 1))
+            new_ind = z3.BitVecVal(i, SIZE)
+            over_len = self.solver.check(length > new_ind) == z3.unsat
+
+            if not over_len:
+                this_val = z3.If(c1 == c2, ZERO, z3.If(c1 < c2, NEGONE, ONE))
+                new_val = z3.If(ret_val == ZERO, this_val, ret_val)
+                ret_val = z3.If(length > new_ind, new_val, ret_val) 
+            else:
+                break
+
+        return z3.simplify(ret_val)
+
     def read_bv(self, addr, length):
         if type(addr) != int:
             addr = self.bv_to_int(addr)
 
         data = self.read(addr, length)
-        bve = []
-
-        if all(type(x) == int for x in data):
-            bv = self.pack_bv(data)
-            return bv 
-
-        for datum in data:
-            if type(datum) == int:
-                bve.append(z3.BitVecVal(datum, BYTE))
-
-            else:
-                bve.append(datum)
-
-        if self.endian == "little":
-            bve.reverse()
-
-        #print(bve)
-        if len(bve) > 1:
-            bv = z3.simplify(z3.Concat(*bve))
-        else:
-            bv = z3.simplify(bve[0])
-
-        return bv
+        return self.pack_bv(data)
 
     def write_bv(self, addr, val, length: int):
         if type(addr) != int:
@@ -169,11 +371,22 @@ class ESILMemory:
         self.write(addr, data)
 
     def pack_bv(self, data):
-        val = 0
-        for ind, dat in enumerate(data):
-            val += dat << BYTE*ind
+        bve = []
+        for d in data:
+            if type(d) == int:
+                bve.append(z3.BitVecVal(d, BYTE))
+            else:
+                bve.append(d)
 
-        return z3.BitVecVal(val, BYTE*len(data))
+        if self.endian == "little":
+            bve.reverse()
+
+        if len(bve) > 1:
+            bv = z3.simplify(z3.Concat(*bve))
+        else:
+            bv = z3.simplify(bve[0])
+
+        return bv
 
     def unpack_bv(self, val, length: int):
         if type(val) == int:
@@ -237,6 +450,7 @@ class ESILMemory:
         self._refs["count"] += 1
         clone._refs = self._refs
         clone._memory = self._memory
+        clone.heap = self.heap
         clone._read_cache = self._read_cache
 
         return clone
@@ -244,5 +458,6 @@ class ESILMemory:
     def finish_clone(self):
         # we can do a shallow copy instead of deep
         self._memory = self._memory.copy()
+        self.heap = self.heap.copy()
         self._refs["count"] -= 1
         self._refs = {"count": 1}

@@ -197,7 +197,6 @@ class R2API:
             val = val.rjust(length, str(fill))
 
         cmd = "wx %s @ %d" % (val, addr)
-        #print(cmd)
         return self.r2p.cmd(cmd)
 
     # theres no arj all function to get all the regs as json so i made this
@@ -259,11 +258,15 @@ class R2API:
         self.r2p.cmd("aes")
 
     def analyze_function(self, func):
-        self.r2p.cmdj("af @  %s" % str(func))
+        self.r2p.cmd("af @  %s" % str(func))
 
     def function_info(self, func):
         self.analyze_function(func)
-        return self.r2p.cmdj("afij @ %s" % str(func))[0]
+        info =  self.r2p.cmdj("afij @ %s" % str(func))
+        if info == []:
+            return None
+        else:
+            return info[0]
 
     # get calling convention for sims
     def calling_convention(self, func):
@@ -273,11 +276,21 @@ class R2API:
             self.ccs[func] = self.r2p.cmdj("afcrj @ %s" % str(func))
             return self.ccs[func]
 
+    def is_symbol(self, sym):
+        return self.r2p.cmd("f?%s;??" % sym)[:1] == "1"
+
     def get_address(self, func):
-        if not self.frida:
-            return self.r2p.cmdj("pdj 1 @ %s" % str(func))[0]["offset"]
-        else:
-            return int(self.r2p.cmd("\isa %s" % str(func)), 16)
+        if type(func) == int:
+            return func
+
+        try:
+            if not self.frida and self.is_symbol(func):
+                return self.r2p.cmdj("pdj 1 @ %s" % str(func))[0]["offset"]
+            else:
+                func = str(func).split(".")[-1] # oof
+                return int(self.r2p.cmd("\isa %s" % func), 16)
+        except:
+            return None
 
     def analyze(self, level=3): # level 7 solves ctfs automatically
         self.r2p.cmd("a"*level)

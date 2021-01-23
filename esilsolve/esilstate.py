@@ -3,7 +3,7 @@ from .esilclasses import *
 from .esilregisters import *
 from .esilmemory import *
 from .esilprocess import ESILProcess
-
+from .esilfs import ESILFilesystem
 from .r2api import R2API
 
 import re # for buffer constraint
@@ -53,7 +53,14 @@ class ESILState:
             "cur":0, "old":0, "stack":[],
             "size": 64, "type": 1
         }
-        
+        self.max_len = kwargs.get("max_len", 4096)
+
+        self.pid = kwargs.get("pid", 1337)
+        self.fork_mode = kwargs.get("fork_mode", "parent")
+
+        # esilsolve aint sleepin
+        self.sleep = kwargs.get("sleep", False)
+
         self.stack = self.esil["stack"]
         self.info = self.r2api.get_info()
         self.debug = kwargs.get("debug", False)
@@ -62,6 +69,7 @@ class ESILState:
         self.memory: ESILMemory = None
         self.registers: ESILRegisters = None
         self.proc: ESILProcess = None
+        self.fs: ESILFilesystem = None
 
         self.condition = None
 
@@ -69,6 +77,7 @@ class ESILState:
         self.steps = 0
         self.distance = 0xffffffff
         self.target = None
+        self.exit = None
 
         if "info" in self.info:
             self.bits = self.info["info"]["bits"]
@@ -85,12 +94,14 @@ class ESILState:
         # get information about the registers and memory
         self.init_registers()
         self.init_memory()
+        self.init_filesystem()
 
     def init_memory(self):
         self.memory = ESILMemory(
             self.r2api, self.info, self.pure_symbolic, self.check_perms)
 
         self.memory.solver = self.solver
+        self.memory.max_len = self.max_len
         self.memory.init_memory()
 
     def init_registers(self):
@@ -110,6 +121,26 @@ class ESILState:
             registers, self.aliases, sym=self.pure_symbolic)
 
         self.registers.init_registers()
+
+    def init_filesystem(self):
+        self.fs = ESILFilesystem(self.r2api, **self.kwargs)
+
+    def dump_file(self, f):
+        data = self.fs.content(f)
+        if len(data) > 0:
+            return self.memory.pack_bv(data)
+
+    def dump_stdin(self):
+        return self.dump_file(0)
+
+    def dump_stdout(self):
+        return self.dump_file(1)
+
+    def dump_stderr(self):
+        return self.dump_file(2)
+
+    def write_stdin(self, data):
+        self.fs.add({0: data})
 
     def set_symbolic_register(self, name: str, var: str = None):
         """
@@ -203,7 +234,6 @@ class ESILState:
                 raise ESILUnsatException("state has unsatisfiable constraints")
 
         value = self.model.eval(val, True)
-
         return value
 
     def evaluate(self, val: z3.BitVecRef) -> int:
@@ -212,16 +242,11 @@ class ESILState:
         
         :param val:     Symbol to be evaluated
         """
-
-        sat = self.solver.check()
-        
-        if sat == z3.sat:
+        if self.is_sat():
             model = self.solver.model()
+            return model.eval(val, True)
         else:
             raise ESILUnsatException("state has unsatisfiable constraints")
-
-        value = model.eval(val, True)
-        return value
 
     # shortcut to eval + constrain
     def evalcon(self, val: z3.BitVecRef):
@@ -272,6 +297,11 @@ class ESILState:
             b = b[:null_ind]
 
         return b.decode()
+
+    def symbolic_string(self, addr, length=None):
+        ret_len, last = self.memory.search(addr, [BZERO], length)
+        data = self.memory.read_bv(addr, last)
+        return data, ret_len
         
     def step(self) -> List:
         """ Step the state forward by executing one instruction """
@@ -284,10 +314,7 @@ class ESILState:
 
     def is_sat(self) -> bool:
         """ Check whether the states constraints are satisfiable"""
-        if self.solver.check() == z3.sat:
-            return True
-        
-        return False
+        return self.solver.check() == z3.sat
 
     def apply(self):
         """ 
@@ -326,10 +353,13 @@ class ESILState:
         clone.constrain(*self.solver.assertions())
 
         clone.proc = self.proc #.clone() no need to clone this 
+        clone.pid = self.pid
+        clone.fork_mode = self.fork_mode
         clone.steps = self.steps
         clone.distance = self.distance
         clone.registers = self.registers.clone()
         clone.memory = self.memory.clone()
+        clone.fs = self.fs.clone()
         clone.memory.solver = clone.solver
 
         return clone

@@ -2,7 +2,8 @@ import z3
 from .r2api import R2API
 from .esilclasses import * 
 from .esilstate import ESILState, ESILStateManager
-from .esilsim import ESILSim
+from .esilsim import replacements
+from .esilops import prepare
 from time import time
 
 class ESILSolver:
@@ -29,15 +30,12 @@ class ESILSolver:
         self.pcode = kwargs.get("pcode", False)
         self.check_perms = kwargs.get("check", False)
 
-        self.states = []
         self.hooks = {}
         self.cond_hooks = []
         self.sims = {}
+
         self.state_manager = None
         self.pure_symbolic = kwargs.get("sym", False)
-
-        self.conditionals = {}
-        self.cond_count = 0
         self.optimize = kwargs.get("optimize", False)
 
         flags = kwargs.get("flags", ["-2"])
@@ -58,12 +56,23 @@ class ESILSolver:
         self.r2pipe = r2api.r2p
         self.z3 = z3
 
+        if self.debug:
+            self.r2pipe.cmd("e asm.emu=false")
+            self.r2pipe.cmd("e scr.color=3")
+            self.r2pipe.cmd("e asm.cmt.esil=true")
+
         self.did_init_vm = False
         self.info = self.r2api.get_info()
         self.stop = False
         self.runtime = 0
         self.steps = 0
         self.ips = 0
+
+        self.sim_all  = kwargs.get("sim_all", False)
+        self.sim  = kwargs.get("sim", True) or self.sim_all
+        if self.sim:
+            for rep in replacements:
+                self.register_sim(rep, replacements[rep])
 
         # context for hook variables
         # not really necessary yet since its single threaded
@@ -96,7 +105,6 @@ class ESILSolver:
         >>> state = esilsolver.run(target=0x00804010, avoid=[0x00804020])
         >>> state.evaluate(state.registers["PC"])
         0x00804010
-
         """
 
         if type(target) == str:
@@ -110,14 +118,13 @@ class ESILSolver:
             avoid = self.default_avoid(state)
             if target in avoid:
                 avoid.remove(target)
-                
+
             self.state_manager.add(state)
+
+        avoid.append(0)
 
         self.state_manager.avoid = avoid
         self.state_manager.merge = merge
-
-        if type(target) == str:
-            target = self.r2api.get_address(target)
             
         start = time()
         while not self.stop:
@@ -127,11 +134,17 @@ class ESILSolver:
                 self.runtime = time()-start
                 self.ips = self.steps/self.runtime
                 return
+            elif state.exit != None:
+                continue
 
             pc = state.registers["PC"].as_long() 
 
             state.target = target
             instr = self.r2api.disass(pc)
+
+            if self.debug:
+                print(self.r2pipe.cmd("pd 1 @ %d" % pc).rstrip())
+
             found = pc == target
             if found:
                 self.terminate()
@@ -146,7 +159,13 @@ class ESILSolver:
                     for hook in self.hooks[cond_hook]:
                         skip = skip or (hook(state) is False)
 
-            has_sim = instr.get("jump", -1) in self.sims
+            has_sim = False
+            if instr["type"] == "call":
+                has_sim = instr.get("jump", -1) in self.sims
+                if not has_sim and self.sim_all:
+                    if "sym.imp" in instr["disasm"]:
+                        skip = True # skip if no sim and sim_all
+
             if skip or has_sim:
                 if has_sim:
                     self.call_sim(state, instr)
@@ -205,7 +224,7 @@ class ESILSolver:
         else:
             self.hooks[addr] = [hook]
 
-    def register_sim(self, func: Address, hook: ESILSim):
+    def register_sim(self, func: Address, hook: Callable):
         """
         Register a function as a simulated function to improve symex
 
@@ -214,43 +233,105 @@ class ESILSolver:
         """
 
         addr = self.r2api.get_address(func)
-        self.r2api.analyze_function(func)
-        self.sims[addr] = hook
+        if addr != None:
+            self.sims[addr] = hook
+
+    def deregister(self, func: Address):
+        """
+        Deregister a function as a hook or simulated function
+
+        :param func:     Name of function or address
+        """
+
+        addr = self.r2api.get_address(func)
+        if addr in self.sims:
+            self.sims.pop(addr)
+        elif addr in self.hooks:
+            self.hooks.pop(addr)
 
     def call_sim(self, state: ESILState, instr: Dict):
         target = instr["jump"]
-        sim = self.sims[target](state)
-        arg_count = sim.arg_count()
+        sim = self.sims[target]
+
+        self.r2api.analyze_function(target)
+
+        arg_count = sim.__code__.co_argcount-1
         bits = state.bits
 
         cc = self.r2api.calling_convention(target)
-        args = []
+        args = [state]
         if "args" in cc:
             # register args
             for i in range(arg_count):
                 arg = cc["args"][i]
                 if arg in state.registers:
-                    args.append(state.registers[arg])
+                    args.append(prepare(state.registers[arg]))
         else:
             # read from stack
             sp = state.registers["SP"].as_long()
             for i in range(arg_count):
                 addr = sp + int(i*bits/8)
-                args.append(state.memory[addr])
-
+                args.append(prepare(state.memory[addr]))
 
         state.registers[cc["ret"]] = sim(*args)
         # fail contains next instr addr
         state.registers["PC"] = instr["fail"]
+
+    def set_args(self, state, addr, args=[]):
+
+        arg_count = len(args)
+        if arg_count == 0:
+            return
+
+        self.r2api.analyze_function(addr)
+        cc = self.r2api.calling_convention(addr)
+        if "args" in cc:
+            # register args
+            for i in range(arg_count):
+                reg = cc["args"][i]
+                if reg in state.registers:
+                    argv = self.prep_arg(state, args[i])
+                    state.registers[reg] = argv
+        else:
+            # read from stack
+            sp = state.registers["SP"].as_long()
+            for i in range(arg_count):
+                addr = sp + int(i*state.bits/8)
+                argv = self.prep_arg(state, args[i])
+                state.memory[addr] = argv
+
+    def prep_arg(self, state, arg):
+        if type(arg) == int:
+            return z3.BitVecVal(arg, state.bits)
+
+        elif type(arg) in (str, bytes):
+            addr = state.memory.alloc(len(arg))
+            state.memory[addr] = arg
+            return z3.BitVecVal(addr, state.bits)
+
+        elif type(arg) == list:
+            b = int(state.bits/8)
+            size = (len(arg)+1)*b
+            addr = state.memory.alloc(size)
+            new_addr = addr
+            for i in range(len(arg)):
+                argv = self.prep_arg(state, arg[i])
+                state.memory[new_addr] = argv
+                new_addr += b
+
+            state.memory[new_addr] = 0
+            return z3.BitVecVal(addr, state.bits)
+
+        else:
+            return arg
         
-    def call_state(self, addr: Address) -> ESILState:
+    def call_state(self, addr: Address, args=[]) -> ESILState:
         """
         Create an ESILState with PC at address and the VM initialized
 
         :param addr:     Name of symbol or address to begin execution
 
         >>> state = esilsolver.call_state("sym.validate")
-
         """
 
         if type(addr) == str:
@@ -260,6 +341,7 @@ class ESILSolver:
         self.r2api.seek(addr)
         self.init_vm()
         state = self.init_state()
+        self.set_args(state, addr, args)
         # state.registers["PC"] = addr 
 
         return state
@@ -271,7 +353,6 @@ class ESILSolver:
         :param addr:     Name of symbol or address to begin execution
 
         >>> state = esilsolver.frida_state("validate")
-
         """
 
         if type(addr) == str:
@@ -289,7 +370,6 @@ class ESILSolver:
         :param addr:     Name of symbol or address to begin execution
 
         >>> state = esilsolver.debug_state("validate")
-
         """
 
         if type(addr) == str:
