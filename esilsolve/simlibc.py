@@ -4,12 +4,14 @@ import sys
 import random
 import time
 import socket
+import os
+from struct import pack, unpack
 
 def puts(state, s):
     addr = state.evaluate(s).as_long()
     length, last = state.memory.search(addr, [BZERO])
     data = state.memory.cond_read(addr, length)
-    state.fs.write(1, data)
+    state.fs.write(STDOUT, data)
     return length
 
 def memmove(state, dst, src, num):
@@ -65,9 +67,14 @@ def strnlen(state, s, n):
 def gets(state, s): # just a maybe useful default
     addr = state.evalcon(s).as_long()
     length = state.fs.stdin_chunk
-    data = BV("gets_%08x" % addr, length)
-    state.write_stdin(data)
-    read(state, 0, addr, length)
+    read(state, STDIN, addr, length)
+    return s
+
+def fgets(state, s, num, f):
+    fd = fileno(state, f)
+    addr = state.evalcon(s).as_long()
+    length = state.evalcon(f).as_long()
+    read(state, BV(fd), addr, length)
     return s
 
 def strcpy(state, dst, src):
@@ -260,21 +267,107 @@ def atoi_helper(state, s, size=SIZE): # still sucks
         length = state.evalcon(length).as_long() # unfortunate
 
         result = BV(0, size)
+        is_neg = z3.BoolVal(False)
+        m = BV(ord("-"), 8)
         for i in range(length):
             d = state.memory.read_bv(addr+i, 1)
-            c = z3.ZeroExt(size-8, d-BV_0)
-            result = result+(c*BV(10**(length-i), size))
+            is_neg = z3.If(d == m, z3.BoolVal(True), is_neg)
+            c = z3.If(d == m, BV(0, size), z3.ZeroExt(size-8, d-BV_0))
+            result = result+(c*BV(10**(length-(i+1)), size))
 
+        result = z3.If(is_neg, -result, result)
         return result
 
 def atoi(state, s):
-    atoi_helper(state, s, 32)
+    return atoi_helper(state, s, 32)
 
 def atol(state, s):
-    atoi_helper(state, s, state.bits)
+    return atoi_helper(state, s, state.bits)
 
 def atoll(state, s):
-    atoi_helper(state, s, 64)
+    return atoi_helper(state, s, 64)
+
+def digit_to_char(digit):
+    if digit < 10:
+        return str(digit)
+
+    return chr(ord('a') + digit - 10)
+
+def str_base(number, base):
+    if number < 0:
+        return '-' + str_base(-number, base)
+
+    (d, m) = divmod(number, base)
+    if d > 0:
+        return str_base(d, base) + digit_to_char(m)
+
+    return digit_to_char(m)
+
+def bvpow(bv, ex):
+    nbv = BV(1, 128)
+    for i in range(ex):
+        nbv = nbv*bv
+    
+    return z3.simplify(nbv)
+
+def itoa_helper(state, value, string, base, sign=True):
+    addr = state.evalcon(string).as_long()
+
+    # ok so whats going on here is... uhh it works
+    data = [BZERO]
+    nvalue = z3.SignExt(96, z3.Extract(31, 0, value))
+    pvalue = z3.ZeroExt(64, value)
+    do_neg = z3.And(nvalue < 0, base == 10, z3.BoolVal(sign))
+    base = z3.ZeroExt(64, base)
+    new_value = z3.If(do_neg, -nvalue, pvalue)
+    shift = BV(0, 128)
+    for i in range(32):
+        d = (new_value % bvpow(base, i+1)) / bvpow(base, i)
+        c = z3.Extract(7, 0, d)
+        shift = z3.If(c == BZERO, shift+BV(8, 128), BV(0, 128))
+        data.append(z3.If(c < 10, c+BV_0, (c-10)+BV_a))
+
+    pbv = z3.Concat(*data)
+    szdiff = pbv.size()-shift.size()
+    pbv = pbv >> z3.ZeroExt(szdiff, shift)
+    nbv = z3.simplify(z3.Concat(pbv, BV(ord("-"),8)))
+    pbv = z3.simplify(z3.Concat(BV(0,8), pbv)) # oof
+    state.memory[addr] = z3.If(do_neg, nbv, pbv)
+        
+    return string
+
+def itoa(state, value, string, base):
+    return itoa_helper(state, value, string, base)
+
+def islower(state, ch):
+    c = z3.Extract(7, 0, ch)
+    return z3.If(z3.And(c >= BV_a, c <= BV_z), ONE, ZERO)
+
+def isupper(state, ch):
+    c = z3.Extract(7, 0, ch)
+    return z3.If(z3.And(c >= BV_A, c <= BV_Z), ONE, ZERO)
+    
+def isalpha(state, ch):
+    return isupper(state, ch) | islower(state, ch)
+
+def isdigit(state, ch):
+    c = z3.Extract(7, 0, ch)
+    return z3.If(z3.And(c >= BV_0, c <= BV_9), ONE, ZERO)
+
+def isalnum(state, ch):
+    return isalpha(state, ch) | isdigit(state, ch)
+
+def isblank(state, ch):
+    c = z3.Extract(7, 0, ch)
+    return z3.If(z3.Or(
+        c == BV(ord(" "), 8), 
+        c == BV(ord("\t"), 8)), ONE, ZERO)
+
+def iscntrl(state, ch):
+    c = z3.Extract(7, 0, ch)
+    return z3.If(z3.Or(
+        z3.And(c >= BV(0,8), c <= BV(0x1f,8)), 
+        c == BV(0x7f, 8)), ONE, ZERO)
 
 def toupper(state, ch):
     c = z3.Extract(7, 0, ch)
@@ -335,7 +428,7 @@ def gethostname(state, addr, size):
     size = state.evalcon(size).as_long()
     hostname = socket.gethostname()
     state.memory[addr] = hostname[:size]
-    return 0x1000 #idk
+    return 0
 
 def sleep(state, secs):
     if state.sleep:
@@ -344,6 +437,11 @@ def sleep(state, secs):
         
     return 0
 
+def fileno(state, f):
+    addr = state.evalcon(f).as_long()
+    bv = state.memory[addr]
+    return state.evalcon(bv).as_long()
+
 def open(state, path, flags, mode):
     path = state.evalcon(path).as_long()
     path_str = state.evaluate_string(state.symbolic_string(path)[0])
@@ -351,9 +449,38 @@ def open(state, path, flags, mode):
     mode = state.evalcon(mode).as_long()
     return state.fs.open(path_str, flags, mode)
 
+def mode_to_int(mode):
+    m = 0
+
+    if "rw" in mode:
+        m |= os.O_RDWR
+    elif "r" in mode:
+        m |= os.O_RDONLY
+    elif "w" in mode:
+        m |= os.O_WRONLY
+    elif "a" in mode:
+        m |= os.O_APPEND
+
+    if "+" in mode:
+        m |= os.O_CREAT
+
+    return m
+
+def fopen(state, path, mode):
+    f = state.memory.alloc(8)
+    mode = state.evaluate_string(state.symbolic_string(path)[0])
+    flags = mode_to_int(mode)
+    fd = open(state, path, BV(flags), BV(0o777))
+    state.memory[f] = fd
+    return f
+
 def close(state, fd):
     fd = state.evalcon(fd).as_long()
     return state.fs.close(fd)
+
+def fclose(state, f):
+    fd = fileno(state, f)
+    return close(state, BV(fd))
 
 def read(state, fd, addr, length):
     fd = state.evalcon(fd).as_long()
@@ -371,6 +498,10 @@ def read(state, fd, addr, length):
     state.memory.copy(addr, data, length)
     return z3.If(dlen < length, dlen, length)
 
+def fread(state, addr, sz, length, f):
+    fd = fileno(state, f)
+    return read(state, BV(fd), addr, sz*length)
+
 def write(state, fd, addr, length):
     fd = state.evalcon(fd).as_long()
     addr = state.evalcon(addr).as_long()
@@ -378,11 +509,19 @@ def write(state, fd, addr, length):
     data = state.memory.read(addr, length)
     return state.fs.write(fd, data)
 
+def fwrite(state, addr, sz, length, f):
+    fd = fileno(state, f)
+    return write(state, BV(fd), addr, sz*length)
+
 def lseek(state, fd, offset, whence):
     fd = state.evalcon(fd).as_long()
     offset = state.evalcon(offset).as_long()
     whence = state.evalcon(whence).as_long()
     return state.fs.seek(fd, offset, whence)
+
+def fseek(state, f, offset, whence):
+    fd = fileno(state, f)
+    return lseek(state, BV(fd), offset, whence)
 
 def access(state, path, flag): # TODO: complete this
     path = state.evalcon(path).as_long()
@@ -419,6 +558,12 @@ def print_stdout(s: str):
 def nothin(state):
     return 0
     
+def ret_one(state):
+    return 1
+
+def ret_negone(state):
+    return BV(-1)
+
 def ret_arg1(state, a):
     return a
 
@@ -431,7 +576,100 @@ def ret_arg3(state, a, b, c):
 def ret_arg4(state, a, b, c, d):
     return d
 
-def format_helper(state, fmt, vargs, write=True):
-    data = []
-    replacements = {}
-    return data
+UINT = 0
+SINT = 1
+FLOAT = 2
+PTR = 3
+
+def ieee_to_float(endian, v, size=64):
+    e = "<"
+    if endian == "big":
+        e = ">"
+
+    o = e+"d"
+    i = e+"Q"
+    if size == 32:
+        o = e+"f"
+        i = e+"I"
+
+    return unpack(o, pack(i, v))[0]
+
+def convert_arg(state, arg, type, size, base):
+    return arg
+
+def format_writer(state, fmt, vargs):
+    fmts = {
+        "c":   ["c",  UINT,  8, 10],
+        "d":   ["d",  SINT,  32, 10],
+        "i":   ["i",  SINT,  32, 10],
+        "u":   ["u",  UINT,  32, 10],
+        "e":   ["e",  FLOAT, 64, 10],
+        "E":   ["E",  FLOAT, 64, 10],
+        "f":   ["f",  FLOAT, 32, 10],
+        "lf":  ["lf", FLOAT, 64, 10],
+        "Lf":  ["Lf", FLOAT, 64, 10],
+        "g":   ["g",  FLOAT, 64, 10],
+        "G":   ["G",  FLOAT, 64, 10],
+        "hi":  ["hi", SINT,  16, 10],
+        "hu":  ["hu", UINT,  16, 10],
+        "lu":  ["lu", UINT,  state.bits, 10],
+        "ld":  ["ld", SINT,  state.bits, 10],
+        "li":  ["li", SINT,  state.bits, 10],
+        "p":   ["x",  UINT,  state.bits, 16],
+        "llu": ["lu", UINT,  64, 10],
+        "lld": ["ld", SINT,  64, 10],
+        "lli": ["li", SINT,  64, 10],
+        "x":   ["x",  UINT,  32, 16],
+        "lx":  ["x",  UINT,  state.bits, 16],
+        "llx": ["x",  UINT,  64, 16],
+        "o":   ["o",  UINT,  32, 8],
+        "s":   ["s",  PTR,   state.bits, 10],
+        #"n":   ["",  PTR,   state.bits, 10],
+    }
+
+    new_args = []
+    new_fmt = ""
+
+    ind = 0
+    argc = 0
+    while ind < len(fmt):
+        new_fmt += fmt[ind]
+        if fmt[ind] == "%":  
+            ind += 1
+            nextc = fmt[ind:ind+1]
+            if nextc == "%":
+                new_fmt += nextc
+
+            else:
+                arg = vargs[argc]
+                argc += 1
+
+                while not nextc.isalpha():
+                    new_fmt += nextc
+                    ind += 1
+                    nextc = fmt[ind:ind+1]
+                
+                next3fmt = "%"+fmts[ind:ind+3]
+                next2fmt = "%"+fmts[ind:ind+2]
+                next1fmt = "%"+fmts[ind:ind+1]
+
+                if next3fmt in fmts:
+                    rep, typ, sz, base = fmts[next3fmt]
+                    new_args += [convert_arg(state, arg, typ, sz, base)]
+                    new_fmt += rep
+                    ind += 3
+
+                elif next2fmt in fmts:
+                    rep, typ, sz, base = fmts[next2fmt]
+                    new_args += [convert_arg(state, arg, typ, sz, base)]
+                    new_fmt += rep
+                    ind += 2
+
+                elif next1fmt in fmts:
+                    rep, typ, sz, base = fmts[next1fmt]
+                    new_args += [convert_arg(state, arg, typ, sz, base)]
+                    new_fmt += rep
+                    ind += 1
+
+                elif next1fmt == "n":
+                    pass

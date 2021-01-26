@@ -1,6 +1,5 @@
 from .esilclasses import *
 import os
-import sys
 import z3
 
 class ESILFilesystem:
@@ -11,7 +10,7 @@ class ESILFilesystem:
         self.real = kwargs.get("realfs", False)
         self.realstd = kwargs.get("realstd", False)
         self.std = (STDIN, STDOUT, STDERR)
-        # fd_dict[i] == [position, length, path, mode, content]
+        # fd_dict[i] == [position, length, path, flags, content]
         # file_dict[path] == [length, content]
         self.file_dict = {}
         self.fd_dict = {}
@@ -62,7 +61,13 @@ class ESILFilesystem:
 
     def open(self, path, flags, mode):
         fd = -1
-        if not self.real and path in self.file_dict:
+        if not self.real:
+            if path not in self.file_dict:
+                if flags & os.O_CREAT:
+                    self.file_dict[path] = []
+                else:
+                    return fd
+
             if self._needs_copy:
                 self.finish_clone()
 
@@ -72,11 +77,14 @@ class ESILFilesystem:
                 0, len(f), path, flags, f
             ]
 
-            if flags | os.O_APPEND:
+            if flags & os.O_APPEND:
                 self.fd_dict[fd][0] = self.fd_dict[fd][1]
         
         elif self.real:
-            if os.path.exists(path) or flags | os.O_CREAT:
+            if os.pathsep != "/": # for the win?
+                path = path.replace("/", os.pathsep)
+
+            if os.path.exists(path) or flags & os.O_CREAT:
                 fd = os.open(path, flags, mode)
         
         return fd

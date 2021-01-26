@@ -40,6 +40,7 @@ class ESILSolver:
 
         flags = kwargs.get("flags", ["-2"])
 
+        self.filename = filename
         # use r2api which caches some data
         # to increase speed
         if filename == None:
@@ -55,11 +56,6 @@ class ESILSolver:
         self.r2api = r2api
         self.r2pipe = r2api.r2p
         self.z3 = z3
-
-        if self.debug:
-            self.r2pipe.cmd("e asm.emu=false")
-            self.r2pipe.cmd("e scr.color=3")
-            self.r2pipe.cmd("e asm.cmt.esil=true")
 
         self.did_init_vm = False
         self.info = self.r2api.get_info()
@@ -121,7 +117,8 @@ class ESILSolver:
 
             self.state_manager.add(state)
 
-        avoid.append(0)
+        if self.filename != None:
+            avoid.append(0) # avoid jmp plt nulls
 
         self.state_manager.avoid = avoid
         self.state_manager.merge = merge
@@ -143,7 +140,11 @@ class ESILSolver:
             instr = self.r2api.disass(pc)
 
             if self.debug:
-                print(self.r2pipe.cmd("pd 1 @ %d" % pc).rstrip())
+                print("    %016x: %s ( %s )" % (
+                    instr["offset"],
+                    instr.get("disasm", "<invalid>").ljust(32),
+                    instr.get("esil", "<no esil>")
+                ))
 
             found = pc == target
             if found:

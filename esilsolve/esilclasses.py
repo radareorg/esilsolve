@@ -51,3 +51,12 @@ BV_9 = BV(ord("9"), 8)
 STDIN  = 0
 STDOUT = 1
 STDERR = 2
+
+def recursive_if(val, opts, default=BV(0)):
+    if len(opts) > 0:
+        opt = opts[0]
+        opts.remove(opt)
+        val = z3.If(val == opt[0], opt[1], 
+            recursive_if(val, opts, default))
+    else:
+        return default

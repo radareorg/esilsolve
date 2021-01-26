@@ -96,6 +96,20 @@ class ESILState:
         self.init_memory()
         self.init_filesystem()
 
+        # this fuckin sucks
+        flags = self.r2api.get_flags()
+        stdfds = {
+            "obj.stdin":  0,
+            "obj.stdout": 1,
+            "obj.stderr": 2
+        }
+        for stdfd in stdfds:
+            if stdfd in flags:
+                addr = flags[stdfd]["offset"]
+                new_addr = self.memory.alloc()
+                self.memory[new_addr] = stdfds[stdfd]
+                self.memory[addr] = new_addr
+
     def init_memory(self):
         self.memory = ESILMemory(
             self.r2api, self.info, self.pure_symbolic, self.check_perms)
@@ -293,8 +307,7 @@ class ESILState:
     def evaluate_string(self, bv: z3.BitVecRef) -> str:
         b = self.evaluate_buffer(bv)
         if b"\x00" in b:
-            null_ind = b.index(b"\x00")
-            b = b[:null_ind]
+            b = b[:b.index(b"\x00")]
 
         return b.decode()
 

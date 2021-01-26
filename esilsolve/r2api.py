@@ -21,6 +21,14 @@ class R2API:
         
         if pcode:
             self.r2p.cmd("pdga")
+
+        start_cmds = [
+            "e io.cache=false",
+            "e emu.write=false",
+            "e asm.emu=false"
+        ]
+
+        self.r2p.cmd("; ".join(start_cmds))
             
         self.instruction_cache = {}
         self.permission_cache  = {}
@@ -34,6 +42,7 @@ class R2API:
         self.get_register_info()
         self.info = None
         self.get_info()
+        self.flags = None
 
         info = self.r2p.cmdj("ij")
         try:
@@ -71,6 +80,15 @@ class R2API:
             self.info = self.r2p.cmdj("iaj")
 
         return self.info
+
+    def get_flag(self, addr):
+        return self.r2p.cmd("fN @ 0x%x" % addr).strip()
+
+    def get_flags(self):
+        if self.flags == None:
+            self.flags = dict([(n["name"], n) for n in self.r2p.cmdj("fj")])
+        
+        return self.flags
 
     def get_register_info(self):
         if self.register_info == None:

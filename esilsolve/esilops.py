@@ -121,8 +121,19 @@ def do_SYS(op, stack, state):
 def do_PCADDR(op, stack, state):
     stack.append(state.registers["PC"])
 
+def get_size(state, args):
+    for arg in args:
+        if arg in state.registers:
+            return state.registers[arg].size()
+    
+    return state.esil["lastsz"]
+
 def do_CMP(op, stack, state):
+    # apparently r2 esil uses a size in comparisons
+    state.esil["lastsz"] = get_size(state, stack[-2:])
+
     arg1, arg2 = pop_values(stack, state, 2)
+
     #stack.append(arg1-arg2)
     state.esil["old"] = arg1
     state.esil["cur"] = arg1-arg2
@@ -141,24 +152,32 @@ def do_FCMP(op, stack, state):
     state.esil["type"] = prev_type
 
 def do_LT(op, stack, state):
+    state.esil["lastsz"] = get_size(state, stack[-2:])
+
     arg1, arg2 = pop_values(stack, state, 2, signext=True)
     stack.append(z3.If(arg1 < arg2, ONE, ZERO))
     state.esil["old"] = arg1
     state.esil["cur"] = stack[-1]
 
 def do_LTE(op, stack, state):
+    state.esil["lastsz"] = get_size(state, stack[-2:])
+
     arg1, arg2 = pop_values(stack, state, 2, signext=True)
     stack.append(z3.If(arg1 <= arg2, ONE, ZERO))
     state.esil["old"] = arg1
     state.esil["cur"] = stack[-1]
 
 def do_GT(op, stack, state):
+    state.esil["lastsz"] = get_size(state, stack[-2:])
+
     arg1, arg2 = pop_values(stack, state, 2, signext=True)
     stack.append(z3.If(arg1 > arg2, ONE, ZERO))
     state.esil["old"] = arg1
     state.esil["cur"] = stack[-1]
 
 def do_GTE(op, stack, state):
+    state.esil["lastsz"] = get_size(state, stack[-2:])
+
     arg1, arg2 = pop_values(stack, state, 2, signext=True)
     stack.append(z3.If(arg1 >= arg2, ONE, ZERO))
     state.esil["old"] = arg1

@@ -43,6 +43,23 @@ class ESILMemory:
         self.heap_init = False
 
     def init_heap(self):
+        segs = self.r2api.segments
+
+        start = self.heap_start
+        size = self.heap_size
+        avail = False
+        while not avail:
+            avail = True
+            for seg in segs:
+                if (seg["addr"] < start < seg["addr"]+seg["size"] or 
+                    start < seg["addr"] < start+size):
+
+                        start = start+size
+                        avail = False
+                        break
+
+        self.heap_start = start
+
         self.r2api.add_segment(
             "heap",
             self.heap_size,
@@ -51,7 +68,7 @@ class ESILMemory:
         )
         self.heap_init = True
 
-    def alloc(self, length):
+    def alloc(self, length=0x80):
         """ 
         The dumbest memory allocation function
         known to human or alien life
@@ -109,6 +126,9 @@ class ESILMemory:
                 cur += 1
             else:
                 break
+
+    def in_heap(self, addr):
+        return self.heap_start+self.heap_size > addr > self.heap_start
     
     def mask(self, addr: int):
         return int(addr - (addr % self.chunklen))
@@ -451,6 +471,8 @@ class ESILMemory:
         clone._refs = self._refs
         clone._memory = self._memory
         clone.heap = self.heap
+        clone.heap_start = self.heap_start
+        clone.heap_init = self.heap_init
         clone._read_cache = self._read_cache
 
         return clone
