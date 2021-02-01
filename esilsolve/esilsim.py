@@ -1,7 +1,7 @@
 from . import simlibc
 
 replacements = {
-    "sym.imp.printf":  simlibc.puts, # TODO actually do this mess
+    "sym.imp.printf":  simlibc.printf, # TODO actually do this mess
     "sym.imp.puts":    simlibc.puts,
     "sym.imp.memcpy":  simlibc.memcpy, 
     "sym.imp.memmove": simlibc.memmove, 

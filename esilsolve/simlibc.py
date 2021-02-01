@@ -14,6 +14,16 @@ def puts(state, s):
     state.fs.write(STDOUT, data)
     return length
 
+def printf(state, s, a1, a2, a3, a4, a5, a6, a7):
+    addr = state.evaluate(s).as_long()
+    vargs = (a1,a2,a3,a4,a5,a6,a7)
+    ##length, last = state.memory.search(addr, [BZERO])
+    string, length = state.symbolic_string(addr)
+    fmt = state.evaluate_string(string)
+    data = list(format_writer(state, fmt, vargs).encode())
+    state.fs.write(STDOUT, data)
+    return len(data)
+
 def memmove(state, dst, src, num):
     # evaluate and constrain
     # unconstrained memcpys will never be good
@@ -70,12 +80,10 @@ def gets(state, s): # just a maybe useful default
     read(state, STDIN, addr, length)
     return s
 
-def fgets(state, s, num, f):
+def fgets(state, addr, length, f):
     fd = fileno(state, f)
-    addr = state.evalcon(s).as_long()
-    length = state.evalcon(f).as_long()
     read(state, BV(fd), addr, length)
-    return s
+    return addr
 
 def strcpy(state, dst, src):
     dst = state.evalcon(dst).as_long()
@@ -594,9 +602,32 @@ def ieee_to_float(endian, v, size=64):
 
     return unpack(o, pack(i, v))[0]
 
-def convert_arg(state, arg, type, size, base):
-    return arg
+def convert_arg(state, arg, typ, size, base):
+    if arg.size() > size:
+        szdiff = size-arg.size()
 
+        if szdiff > 0:
+            if typ == SINT:
+                arg = z3.SignExt(szdiff, arg)
+            else:
+                arg = z3.ZeroExt(szdiff, arg)
+        elif szdiff < 0:
+            arg = z3.Extract(size-1, 0, arg)
+
+    arg = state.evalcon(arg)
+    if typ == UINT:
+        return arg.as_long()
+    elif typ == SINT:
+        return arg.as_signed_long()
+    elif typ == FLOAT:
+        argl = arg.as_long()
+        return ieee_to_float(state.endian, argl, size)
+    else:
+        addr = arg.as_long()
+        string = state.symbolic_string(addr)[0]
+        return state.evaluate_string(string)
+
+# this sucks 
 def format_writer(state, fmt, vargs):
     fmts = {
         "c":   ["c",  UINT,  8, 10],
@@ -620,6 +651,7 @@ def format_writer(state, fmt, vargs):
         "lld": ["ld", SINT,  64, 10],
         "lli": ["li", SINT,  64, 10],
         "x":   ["x",  UINT,  32, 16],
+        "hx":  ["x",  UINT,  16, 16],
         "lx":  ["x",  UINT,  state.bits, 16],
         "llx": ["x",  UINT,  64, 16],
         "o":   ["o",  UINT,  32, 8],
@@ -634,7 +666,9 @@ def format_writer(state, fmt, vargs):
     argc = 0
     while ind < len(fmt):
         new_fmt += fmt[ind]
-        if fmt[ind] == "%":  
+        if fmt[ind] != "%":  
+            ind += 1
+        else:  
             ind += 1
             nextc = fmt[ind:ind+1]
             if nextc == "%":
@@ -649,9 +683,9 @@ def format_writer(state, fmt, vargs):
                     ind += 1
                     nextc = fmt[ind:ind+1]
                 
-                next3fmt = "%"+fmts[ind:ind+3]
-                next2fmt = "%"+fmts[ind:ind+2]
-                next1fmt = "%"+fmts[ind:ind+1]
+                next3fmt = fmt[ind:ind+3]
+                next2fmt = fmt[ind:ind+2]
+                next1fmt = fmt[ind:ind+1]
 
                 if next3fmt in fmts:
                     rep, typ, sz, base = fmts[next3fmt]
@@ -670,6 +704,11 @@ def format_writer(state, fmt, vargs):
                     new_args += [convert_arg(state, arg, typ, sz, base)]
                     new_fmt += rep
                     ind += 1
-
+                
                 elif next1fmt == "n":
-                    pass
+                    lastind = len(new_fmt)-new_fmt[::-1].index("%")-1
+                    n = len(new_fmt[:lastind]%tuple(new_args))
+                    state.memory[state.evalcon(arg).as_long()] = n
+
+    return new_fmt % tuple(new_args)
+

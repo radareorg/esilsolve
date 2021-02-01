@@ -2,7 +2,6 @@ import z3
 from .r2api import R2API
 from .esilclasses import * 
 from .esilstate import ESILState, ESILStateManager
-from .esilsim import replacements
 from .esilops import prepare
 from time import time
 
@@ -65,10 +64,15 @@ class ESILSolver:
         self.ips = 0
 
         self.sim_all  = kwargs.get("sim_all", False)
-        self.sim  = kwargs.get("sim", True) or self.sim_all
+        self.sim_unk  = kwargs.get("sim_unk", False)
+        # sims really raise init time for r2frida
+        self.sim  = kwargs.get("sim", not self.r2api.frida)
+        self.reps = {}
         if self.sim:
-            for rep in replacements:
-                self.register_sim(rep, replacements[rep])
+            from .esilsim import replacements
+            self.reps = replacements
+            for rep in self.reps:
+                self.register_sim(rep, self.reps[rep])
 
         # context for hook variables
         # not really necessary yet since its single threaded
@@ -140,11 +144,13 @@ class ESILSolver:
             instr = self.r2api.disass(pc)
 
             if self.debug:
-                print("    %016x: %s ( %s )" % (
-                    instr["offset"],
+                esil = instr.get("esil", "<no esil>")
+                if type(esil) == list:
+                    esil = ",".join([str(x) for x in esil])
+
+                print("%016x: %s ( %s )" % (instr["offset"],
                     instr.get("disasm", "<invalid>").ljust(32),
-                    instr.get("esil", "<no esil>")
-                ))
+                    esil))
 
             found = pc == target
             if found:
@@ -161,11 +167,19 @@ class ESILSolver:
                         skip = skip or (hook(state) is False)
 
             has_sim = False
-            if instr["type"] == "call":
-                has_sim = instr.get("jump", -1) in self.sims
+            if not found and instr["type"] == "call":
+                jmp = instr.get("jump", -1)
+                has_sim = jmp in self.sims
                 if not has_sim and self.sim_all:
                     if "sym.imp" in instr["disasm"]:
                         skip = True # skip if no sim and sim_all
+
+                elif not has_sim and self.sim_unk:
+                    if "sym.unk" in instr["disasm"]:
+                        unk_name = instr["disasm"].split(" ")[-1]
+                        imp_name = unk_name.replace(".unk.", ".imp.")
+                        self.register_sim(jmp, self.reps[imp_name])
+                        has_sim = True
 
             if skip or has_sim:
                 if has_sim:
@@ -279,7 +293,6 @@ class ESILSolver:
         state.registers["PC"] = instr["fail"]
 
     def set_args(self, state, addr, args=[]):
-
         arg_count = len(args)
         if arg_count == 0:
             return
@@ -306,7 +319,7 @@ class ESILSolver:
             return z3.BitVecVal(arg, state.bits)
 
         elif type(arg) in (str, bytes):
-            addr = state.memory.alloc(len(arg))
+            addr = state.memory.alloc(len(arg)+1)
             state.memory[addr] = arg
             return z3.BitVecVal(addr, state.bits)
 
@@ -318,9 +331,10 @@ class ESILSolver:
             for i in range(len(arg)):
                 argv = self.prep_arg(state, arg[i])
                 state.memory[new_addr] = argv
-                new_addr += b
+                new_addr += int(argv.size()/8)
 
             state.memory[new_addr] = 0
+
             return z3.BitVecVal(addr, state.bits)
 
         else:
@@ -331,6 +345,10 @@ class ESILSolver:
         Create an ESILState with PC at address and the VM initialized
 
         :param addr:     Name of symbol or address to begin execution
+        :param args:     List of arguments to the called function, assigned
+                         according to the CC. Inner lists will become ptrs to
+                         the contained elements so main's (argc, **argv) can be passed
+                         like args=[4, ["hello", "there", "general", "kenobi"]]
 
         >>> state = esilsolver.call_state("sym.validate")
         """

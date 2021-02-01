@@ -37,7 +37,7 @@ class ESILMemory:
         self.solver = None
 
         self.heap = {} # this is it
-        self.heap_start = 2 << (self.bits-8)
+        self.heap_start = 0x1000000 #2 << (self.bits-8)
         self.heap_size = self.heap_start #idk
         self.heap_bin = 0x100
         self.heap_init = False
