@@ -56,8 +56,10 @@ def prepare(val, signext=False, size=SIZE) -> z3.BitVecRef:
     else:
         result = z3.BitVecVal(val, size)
 
-    #return z3.simplify(result)
-    return result
+    if not z3.is_bv_value(result):
+        return z3.simplify(result)
+    else:
+        return result
 
 def prepare_float(val, signext=False, size=SIZE) -> z3.FPRef:
 
@@ -493,7 +495,6 @@ def do_OPFLOAT(op, stack, state):
     state.esil["size"] = prev_size
     state.esil["type"] = prev_type
 
-# completely untested
 def do_CEIL(op, stack, state):
     prev_type = state.esil["type"]
     state.esil["type"] = FLOAT

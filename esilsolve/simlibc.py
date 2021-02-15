@@ -438,6 +438,19 @@ def gethostname(state, addr, size):
     state.memory[addr] = hostname[:size]
     return 0
 
+def getenv(state, name):
+    addr = state.evalcon(name).as_long()
+    name, length = state.symbolic_string(addr)
+    con_name = state.evaluate_string(name)
+    data = state.os.getenv(con_name)
+
+    if data == None:
+        return 0
+    else:
+        val_addr = state.memory.alloc(len(data)+1)
+        state.memory[val_addr] = data
+        return val_addr
+
 def sleep(state, secs):
     if state.sleep:
         secs = state.evalcon(secs).as_long()
@@ -658,6 +671,16 @@ def format_writer(state, fmt, vargs):
         "s":   ["s",  PTR,   state.bits, 10],
         #"n":   ["",  PTR,   state.bits, 10],
     }
+
+    '''if fmt.count("%") == 1:
+        r_str = ""
+        p_ind = fmt.index("%")
+
+        i = p_ind+1
+        shiftstr = ""
+        while not fmt[i].isalpha():
+            shiftstr += fmt[i]
+            i += 1'''
 
     new_args = []
     new_fmt = ""

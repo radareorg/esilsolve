@@ -4,6 +4,7 @@ from .esilregisters import *
 from .esilmemory import *
 from .esilprocess import ESILProcess
 from .esilfs import ESILFilesystem
+from .esilos import ESILOS
 from .r2api import R2API
 
 import re # for buffer constraint
@@ -70,6 +71,7 @@ class ESILState:
         self.registers: ESILRegisters = None
         self.proc: ESILProcess = None
         self.fs: ESILFilesystem = None
+        self.os: ESILOS = None
 
         self.condition = None
 
@@ -95,6 +97,7 @@ class ESILState:
         self.init_registers()
         self.init_memory()
         self.init_filesystem()
+        self.init_os()
 
         # this fuckin sucks
         flags = self.r2api.get_flags()
@@ -138,6 +141,9 @@ class ESILState:
 
     def init_filesystem(self):
         self.fs = ESILFilesystem(self.r2api, **self.kwargs)
+
+    def init_os(self):
+        self.os = ESILOS(self.r2api, **self.kwargs)
 
     def dump_file(self, f):
         data = self.fs.content(f)
@@ -316,6 +322,12 @@ class ESILState:
         data = self.memory.read_bv(addr, last)
         return data, ret_len
         
+    def concrete_string(self, addr, length=None):
+        ret_len, last = self.memory.search(addr, [BZERO], length)
+        sym_str = self.memory.read_bv(addr, last)
+        self.evalcon(sym_str)
+        return self.evaluate_string(sym_str)
+
     def step(self) -> List:
         """ Step the state forward by executing one instruction """
 
@@ -392,6 +404,7 @@ class ESILStateManager:
         self.unsat = set()
         self.merged = set()
         self.recently_added = set()
+        self.exited = set()
 
         if isinstance(avoid, int):
             avoid = [avoid]
@@ -516,3 +529,5 @@ class ESILStateManager:
             self.merge_states.pop(pc)
             self.active.add(merged)
 
+    def exit(self, state):
+        self.exited.add(state)

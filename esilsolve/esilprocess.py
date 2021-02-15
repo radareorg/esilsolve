@@ -15,7 +15,7 @@ class ESILProcess:
     """ 
     Executes ESIL expressions and handles results
 
-    >>> state.proc.parse_expression("4,rax,rbx,=", state)
+    >>> state.proc.parse_expression("4,rax,+,rbx,=", state)
     """
 
     def __init__(self, r2p: R2API = None, **kwargs):
@@ -23,6 +23,7 @@ class ESILProcess:
         self.debug = kwargs.get("debug", False)
         self.trace = kwargs.get("trace", False)
         self.bail = kwargs.get("bail", False)
+        self.sim = kwargs.get("sim", True)
         self.check_perms = kwargs.get("check", False)
 
         self.tactics = self.get_boolref_tactics()
@@ -43,6 +44,9 @@ class ESILProcess:
         # TODO handle this stuff
         self.traps = {}
         self.syscalls = {}
+        if self.sim:
+            from .simsys import syscalls
+            self.syscalls = syscalls
 
         # try to init vexit, an optional module that uses vex
         # if an esil expression is not available
@@ -52,7 +56,7 @@ class ESILProcess:
             try:
                 from .vexit import VexIt
                 self.vexit = VexIt(
-                    self.info["info"]["arch"], 
+                    self.info["info"]["arch"],
                     self.info["info"]["bits"])
             except:
                 self.vexit = None
@@ -66,15 +70,17 @@ class ESILProcess:
         if self.check_perms:
             state.memory.check(offset, "x")
 
-        # old pc should never be anything other than a BitVecVal  
         old_pc = offset + instr["size"]
-
         state.registers["PC"] = old_pc
 
-        esil = instr.get("esil", ",")
+        if "dsil" in instr:
+            esil = instr["dsil"]
+        else:
+            esil = instr.get("esil", ",")
+
         if type(esil) == str:
             esil = esil.split(",")
-            instr["esil"] = esil
+            instr["dsil"] = esil
 
         if self.do_vexit and self.vexit != None:
             if esil in ("", "TODO") and instr["type"] != "nop":
@@ -297,8 +303,8 @@ class ESILProcess:
             return int(word)
         elif word[:2] == "0x" or word[:3] == "-0x":
             return int(word, 16)
-        elif "." in word:
-            return float(word)
+        #elif "." in word:
+        #    return float(word)
         else:
             return word
 

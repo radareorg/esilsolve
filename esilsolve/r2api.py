@@ -21,14 +21,6 @@ class R2API:
         
         if pcode:
             self.r2p.cmd("pdga")
-
-        start_cmds = [
-            "e io.cache=false",
-            "e emu.write=false",
-            "e asm.emu=false"
-        ]
-
-        self.r2p.cmd("; ".join(start_cmds))
             
         self.instruction_cache = {}
         self.permission_cache  = {}
@@ -189,7 +181,9 @@ class R2API:
     def disass_function(self, addr=None):
         cmd = "pdfj"
         if addr != None:
-            cmd += " @ %d" % addr
+            cmd += " @ %s" % str(addr)
+
+        self.analyze_function(addr)
 
         result = self.r2p.cmdj(cmd)
         for instr in result["ops"]:
@@ -276,7 +270,10 @@ class R2API:
         self.r2p.cmd("aes")
 
     def analyze_function(self, func):
-        self.r2p.cmd("af @  %s" % str(func))
+        if func != None:
+            self.r2p.cmd("af @  %s" % str(func))
+        else:
+            self.r2p.cmd("af")
 
     def function_info(self, func):
         self.analyze_function(func)
@@ -303,12 +300,15 @@ class R2API:
 
         try:
             if not self.frida and self.is_symbol(func):
-                return self.r2p.cmdj("pdj 1 @ %s" % str(func))[0]["offset"]
-            else:
+                return int(self.r2p.cmdj("?j %s" % str(func))["hex"], 16)
+            elif self.frida:
                 func = str(func).split(".")[-1] # oof
                 return int(self.r2p.cmd("\isa %s" % func), 16)
         except:
             return None
+
+    def get_entry(self):
+        return self.r2p.cmdj("iej")[0]["vaddr"]
 
     def analyze(self, level=3): # level 7 solves ctfs automatically
         self.r2p.cmd("a"*level)

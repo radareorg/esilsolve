@@ -136,6 +136,7 @@ class ESILSolver:
                 self.ips = self.steps/self.runtime
                 return
             elif state.exit != None:
+                self.state_manager.exit(state)
                 continue
 
             pc = state.registers["PC"].as_long() 
@@ -145,12 +146,8 @@ class ESILSolver:
 
             if self.debug:
                 esil = instr.get("esil", "<no esil>")
-                if type(esil) == list:
-                    esil = ",".join([str(x) for x in esil])
-
                 print("%016x: %s ( %s )" % (instr["offset"],
-                    instr.get("disasm", "<invalid>").ljust(32),
-                    esil))
+                    instr.get("disasm", "<invalid>").ljust(32), esil))
 
             found = pc == target
             if found:
@@ -185,7 +182,9 @@ class ESILSolver:
                 if has_sim:
                     self.call_sim(state, instr)
 
-                state.registers["PC"] = pc + instr["size"]
+                if state.registers["PC"].as_long() == pc:
+                    state.registers["PC"] = pc + instr["size"]
+
                 self.state_manager.add(state)
                 continue
 
@@ -378,9 +377,7 @@ class ESILSolver:
             addr = self.r2api.get_address(addr)
 
         self.r2api.frida_init(addr)
-        state = self.init_state()
-
-        return state
+        return self.init_state()
 
     def debug_state(self, addr: Address) -> ESILState:
         """
@@ -395,9 +392,7 @@ class ESILSolver:
             addr = self.r2api.get_address(addr)
 
         self.r2api.debug_init(addr)
-        state = self.init_state()
-
-        return state
+        return self.init_state()
 
     def reset(self, state: ESILState = None):
         """ 
@@ -419,6 +414,32 @@ class ESILSolver:
         self.state_manager = ESILStateManager([], lazy=self.lazy)
         state = self.state_manager.entry_state(self.r2api, **self.kwargs)
         return state
+
+    # this is confusing since I call a method entry_state in ESILSM
+    def entry_state(self, argv=[], env=[]) -> ESILState:
+        """ Create an ESILState at the entrypoint of the binary"""
+
+        self.r2api.seek("entry0")
+        instrs = self.r2api.disass_function("entry0")
+        start_main = self.r2api.get_address("reloc.__libc_start_main")
+
+        def __libc_start_main(state):
+            main_addr = state.r2api.get_address("main")
+            self.set_args(state, main_addr, [len(argv), argv, env])
+            state.registers["PC"] = main_addr
+            return False
+
+        def halt(state):
+            cc = state.r2api.calling_convention("main")
+            state.exit = state.registers[cc.get("ret", "A0")]
+            return False
+
+        if start_main not in (0, None):
+            self.register_hook(start_main, __libc_start_main)
+            if instrs[-1]["type"] != "call":
+                self.register_hook(instrs[-1]["offset"], halt)
+
+        return self.init_state()
 
     def blank_state(self, addr: Address = 0) -> ESILState:
         """

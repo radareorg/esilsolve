@@ -440,15 +440,21 @@ class ESILMemory:
         pass
 
     def __getitem__(self, addr) -> z3.BitVecRef:
-        if type(addr) == int:
-            length = self.chunklen
+        length = self.chunklen
+        if type(addr) == int or z3.is_bv(addr):
+            return self.read_bv(addr, length)
+        elif type(addr) == str:
+            addr = self.r2api.get_address(addr)
             return self.read_bv(addr, length)
         elif type(addr) == slice:
             length = int(addr.stop-addr.start)
             return self.read_bv(addr.start, length)
 
     def __setitem__(self, addr, value):
-        if type(addr) == int:
+        if type(addr) == int or z3.is_bv(addr):
+            return self.write(addr, value)
+        elif type(addr) == str:
+            addr = self.r2api.get_address(addr)
             return self.write(addr, value)
         elif type(addr) == slice:
             length = int(addr.stop-addr.start)
