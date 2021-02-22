@@ -432,10 +432,10 @@ def do_POKE(op, stack, state):
     addr, data = pop_values(stack, state, 2)
 
     if state.condition != None:
-        tmp = state.memory.read_bv(addr, length)
+        tmp = state.mem_read_bv(addr, length)
         data = z3.If(state.condition, data, tmp)
 
-    state.memory.write_bv(addr, data, length)
+    state.mem_write_bv(addr, data, length)
     state.esil["old"] = addr
     state.esil["lastsz"] = length*8
 
@@ -443,7 +443,7 @@ def do_PEEK(op, stack, state):
     length = getlen(op, state)
     addr, = pop_values(stack, state)
 
-    data = state.memory.read_bv(addr, length)
+    data = state.mem_read_bv(addr, length)
     stack.append(data)
     state.esil["old"] = addr
     state.esil["cur"] = prepare(stack[-1])
@@ -460,10 +460,10 @@ def do_OPPOKE(op, stack, state):
     data, = pop_values(stack, state)
 
     if state.condition != None:
-        tmp = state.memory.read_bv(addr, length)
+        tmp = state.mem_read_bv(addr, length)
         data = z3.If(state.condition, data, tmp)
 
-    state.memory.write_bv(addr, data, length)
+    state.mem_write_bv(addr, data, length)
     state.esil["old"] = addr
 
 def do_OPSIZED(op, stack, state):

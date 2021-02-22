@@ -24,6 +24,9 @@ class R2API:
             
         self.instruction_cache = {}
         self.permission_cache  = {}
+        self.symbol_cache = {}
+        self.imports = None
+        self.relocs = None
         # default stack size
         self.stack_size = 0x20000
         self.cache_num = 64
@@ -292,7 +295,16 @@ class R2API:
             return self.ccs[func]
 
     def is_symbol(self, sym):
+        if sym in self.symbol_cache:
+            return True 
+
         return self.r2p.cmd("f?%s;??" % sym)[:1] == "1"
+
+    def get_imports(self): 
+        if self.imports == None:
+            self.imports = self.r2p.cmdj("iij")
+
+        return self.imports
 
     def get_address(self, func):
         if type(func) == int:
@@ -300,7 +312,13 @@ class R2API:
 
         try:
             if not self.frida and self.is_symbol(func):
-                return int(self.r2p.cmdj("?j %s" % str(func))["hex"], 16)
+                if func in self.symbol_cache:
+                    return self.symbol_cache[func]
+
+                result = int(self.r2p.cmdj("?j %s" % str(func))["hex"], 16)
+                self.symbol_cache[func] = result
+
+                return result
             elif self.frida:
                 func = str(func).split(".")[-1] # oof
                 return int(self.r2p.cmd("\isa %s" % func), 16)

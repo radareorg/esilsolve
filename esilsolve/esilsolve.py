@@ -21,23 +21,26 @@ class ESILSolver:
     >>> esilsolver = ESILSolver("/bin/ls", lazy=True)
     """
 
-    def __init__(self, filename:str = None, **kwargs):
-        self.kwargs = kwargs
-        self.debug = kwargs.get("debug", False)
-        self.trace = kwargs.get("trace", False)
-        self.lazy  = kwargs.get("lazy", False)
-        self.pcode = kwargs.get("pcode", False)
-        self.check_perms = kwargs.get("check", False)
+    def __init__(self, filename:str = None, **options):
+        self.options = options
+        self.debug = options.get("debug", False)
+        self.trace = options.get("trace", False)
+        self.lazy  = options.get("lazy",  False)
+        self.pcode = options.get("pcode", False)
+        self.check_perms = options.get("check", False)
 
         self.hooks = {}
         self.cond_hooks = []
         self.sims = {}
+        self.event_hooks = dict([(e,[]) for e in ESILSolveEvent])
+
+        self.options["events"] = self.event_hooks
 
         self.state_manager = None
-        self.pure_symbolic = kwargs.get("sym", False)
-        self.optimize = kwargs.get("optimize", False)
+        self.pure_symbolic = options.get("sym", False)
+        self.optimize = options.get("optimize", False)
 
-        flags = kwargs.get("flags", ["-2"])
+        flags = options.get("flags", ["-2"])
 
         self.filename = filename
         # use r2api which caches some data
@@ -63,10 +66,10 @@ class ESILSolver:
         self.steps = 0
         self.ips = 0
 
-        self.sim_all  = kwargs.get("sim_all", False)
-        self.sim_unk  = kwargs.get("sim_unk", False)
+        self.sim_all  = options.get("sim_all", False)
+        self.sim_unk  = options.get("sim_unk", False)
         # sims really raise init time for r2frida
-        self.sim  = kwargs.get("sim", not self.r2api.frida)
+        self.sim  = options.get("sim", not self.r2api.frida)
         self.reps = {}
         if self.sim:
             from .esilsim import replacements
@@ -79,7 +82,7 @@ class ESILSolver:
         # but we must look to the future
         self.context = {}
 
-        if kwargs.get("init", False):
+        if options.get("init", False):
             self.init_state()
 
     # initialize the ESIL VM
@@ -230,6 +233,9 @@ class ESILSolver:
 
         if type(addr) == str:
             addr = self.r2api.get_address(addr)
+        elif addr in ESILSolveEvent:
+            self.event_hooks[addr].append(hook)
+            return
         elif type(addr) != int:
             self.cond_hooks.append(addr)
 
@@ -404,7 +410,7 @@ class ESILSolver:
         self.state_manager = ESILStateManager([], lazy=self.lazy)
         
         if state == None:
-            state = self.state_manager.entry_state(self.r2api, **self.kwargs)
+            state = self.state_manager.entry_state(self.r2api, **self.options)
         else:
             self.state_manager.add(state)
 
@@ -412,7 +418,7 @@ class ESILSolver:
         """ Create an ESILState without using the existing ESIL VM """
 
         self.state_manager = ESILStateManager([], lazy=self.lazy)
-        state = self.state_manager.entry_state(self.r2api, **self.kwargs)
+        state = self.state_manager.entry_state(self.r2api, **self.options)
         return state
 
     # this is confusing since I call a method entry_state in ESILSM
@@ -451,9 +457,9 @@ class ESILSolver:
         addr = self.r2api.get_address(addr)
 
         self.state_manager = ESILStateManager([], lazy=self.lazy)
-        kwargs = self.kwargs.copy()
-        kwargs["sym"] = True
-        state = self.state_manager.entry_state(self.r2api, **kwargs)
+        options = self.options.copy()
+        options["sym"] = True
+        state = self.state_manager.entry_state(self.r2api, **options)
         pc_size = state.registers["PC"].size()
         state.registers["PC"] = z3.BitVecVal(addr, pc_size)
         return state

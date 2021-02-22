@@ -1,3 +1,4 @@
+from z3.z3 import Distinct
 from .esilclasses import *
 import z3
 import sys
@@ -7,17 +8,17 @@ import socket
 import os
 from struct import pack, unpack
 
-def puts(state, s):
-    addr = state.evaluate(s).as_long()
-    length, last = state.memory.search(addr, [BZERO])
-    data = state.memory.cond_read(addr, length)
+def puts(state, addr):
+    addr = state.evaluate(addr).as_long()
+    length, last = state.mem_search(addr, [BZERO])
+    data = state.mem_cond_read(addr, length)
     state.fs.write(STDOUT, data)
     return length
 
-def printf(state, s, a1, a2, a3, a4, a5, a6, a7):
-    addr = state.evaluate(s).as_long()
+def printf(state, addr, a1, a2, a3, a4, a5, a6, a7):
+    addr = state.evaluate(addr).as_long()
     vargs = (a1,a2,a3,a4,a5,a6,a7)
-    ##length, last = state.memory.search(addr, [BZERO])
+    ##length, last = state.mem_search(addr, [BZERO])
     string, length = state.symbolic_string(addr)
     fmt = state.evaluate_string(string)
     data = list(format_writer(state, fmt, vargs).encode())
@@ -27,15 +28,11 @@ def printf(state, s, a1, a2, a3, a4, a5, a6, a7):
 def memmove(state, dst, src, num):
     # evaluate and constrain
     # unconstrained memcpys will never be good
-    dst = state.evalcon(dst).as_long()
-    src = state.evalcon(src).as_long()
-    state.memory.move(dst, src, num)
+    state.mem_move(dst, src, num)
     return dst
 
 def memcpy(state, dst, src, num):
-    dst = state.evalcon(dst).as_long()
-    src = state.evalcon(src).as_long()
-    return state.memory.memcopy(dst, src, num)
+    return state.mem_memcopy(dst, src, num)
 
 def bcopy(state, src, dst, num):
     memcpy(state, dst, src, num)
@@ -50,35 +47,31 @@ def mempcpy(state, dst, src, num):
 
 def memccpy(state, dst, src, ch, num):
     c = z3.Extract(7, 0, ch)
-    s = state.evalcon(src).as_long()
-    length, last = state.memory.search(s, [c], num)
+    length, last = state.mem_search(src, [c], num)
     newlen = z3.If(length < num, length, num)
     result = mempcpy(state, dst, src, newlen)
     return z3.If(length == state.memory.error, ZERO, result)
 
-def memfrob(state, dst, num):
-    addr = state.evalcon(dst).as_long()
+def memfrob(state, addr, num):
     #state.proc.parse_expression( # this is the fun way to do it
-    #    "0,A1,-,DUP,DUP,?{,A1,-,A0,+,DUP,[1],0x2a,^,SWAP,=[1],1,+,1,GOTO,}", state)
+    #"0,A1,-,DUP,DUP,?{,A1,-,A0,+,DUP,[1],0x2a,^,SWAP,=[1],1,+,1,GOTO,}", state)
 
     x = BV(0x2A, 8)
-    data = [y^x for y in state.memory.cond_read(addr, num)]
-    state.memory.copy(addr, data, num)
+    data = [y^x for y in state.mem_cond_read(addr, num)]
+    state.mem_copy(addr, data, num)
 
-def strlen(state, s):
-    addr = state.evalcon(s).as_long()
-    length, last = state.memory.search(addr, [BZERO])
+def strlen(state, addr):
+    length, last = state.mem_search(addr, [BZERO])
     return length
         
-def strnlen(state, s, n):
-    length = strlen(state, s)
+def strnlen(state, addr, n):
+    length = strlen(state, addr)
     return z3.If(n < length, n, length)
 
-def gets(state, s): # just a maybe useful default
-    addr = state.evalcon(s).as_long()
+def gets(state, addr): # just a maybe useful default
     length = state.fs.stdin_chunk
     read(state, STDIN, addr, length)
-    return s
+    return addr
 
 def fgets(state, addr, length, f):
     fd = fileno(state, f)
@@ -86,93 +79,78 @@ def fgets(state, addr, length, f):
     return addr
 
 def strcpy(state, dst, src):
-    dst = state.evalcon(dst).as_long()
-    src = state.evalcon(src).as_long()
-    length, last = state.memory.search(src, [BZERO])
-    state.memory.memcopy(dst, src, length+ONE)
+    length, last = state.mem_search(src, [BZERO])
+    state.mem_memcopy(dst, src, length+ONE)
     return dst
 
 def stpcpy(state, dst, src):
-    addr = state.evalcon(src).as_long()
-    length, last = state.memory.search(addr, [BZERO])
+    length, last = state.mem_search(src, [BZERO])
     return strcpy(state, dst, src) + length
 
-def strdup(state, s):
-    addr = state.evalcon(s).as_long()
-    length, last = state.memory.search(addr, [BZERO])
+def strdup(state, addr):
+    length, last = state.mem_search(addr, [BZERO])
     new_addr = malloc(state, length)
-    state.memory.move(new_addr, addr, length)
+    state.mem_move(new_addr, addr, length)
     return new_addr
  
-def strdupa(state, s):
-    addr = state.evalcon(s).as_long()
-    length, last = state.memory.search(addr, [BZERO])
+def strdupa(state, addr):
+    length, last = state.mem_search(addr, [BZERO])
     new_addr = malloc(state, length)
-    state.memory.move(new_addr, addr, length)
+    state.mem_move(new_addr, addr, length)
     return new_addr+length
 
-def strndup(state, s, num):
-    addr = state.evalcon(s).as_long()
-    length, last = state.memory.search(addr, [BZERO])
+def strndup(state, addr, num):
+    length, last = state.mem_search(addr, [BZERO])
     length = z3.If(num < length, num, length)
     new_addr = malloc(state, length)
-    state.memory.move(new_addr, addr, length)
+    state.mem_move(new_addr, addr, length)
     return new_addr
  
-def strndupa(state, s, num):
-    addr = state.evalcon(s).as_long()
-    length, last = state.memory.search(addr, [BZERO])
+def strndupa(state, addr, num):
+    length, last = state.mem_search(addr, [BZERO])
     length = z3.If(num < length, num, length)
     new_addr = malloc(state, length)
-    state.memory.move(new_addr, addr, length)
+    state.mem_move(new_addr, addr, length)
     return new_addr+length
 
-def strfry(state, s):
-    addr = state.evalcon(s).as_long()
-    length, last = state.memory.search(addr, [BZERO])
-    data = state.memory.cond_read(addr, length)
+def strfry(state, addr):
+    length, last = state.mem_search(addr, [BZERO])
+    data = state.mem_cond_read(addr, length)
     # random.shuffle(data) # i dont actually want to do this?
-    state.memory.copy(addr, data, length)
-    return s
+    state.mem_copy(addr, data, length)
+    return addr
 
 def strncpy(state, dst, src, num):
-    dst = state.evalcon(dst).as_long()
-    src = state.evalcon(src).as_long()
-    length, last = state.memory.search(src, [BZERO])
+    length, last = state.mem_search(src, [BZERO])
     # TODO this is not exactly right
     length = z3.If(num < length, num, length)
-    state.memory.move(dst, src, length)
+    state.mem_move(dst, src, length)
     return dst
 
 def strcat(state, dst, src):
-    dst = state.evalcon(dst).as_long()
-    dlength, last = state.memory.search(dst, [BZERO])
+    dlength, last = state.mem_search(dst, [BZERO])
     dlength = state.evalcon(dlength).as_long()
-    src = state.evalcon(src).as_long()
-    length, last = state.memory.search(src, [BZERO])
-    state.memory.move(dst+dlength, src, length+ONE)
+    length, last = state.mem_search(src, [BZERO])
+    state.mem_move(dst+dlength, src, length+ONE)
     return dst
 
 def strncat(state, dst, src, num):
-    dst = state.evalcon(dst).as_long()
-    dlength, last = state.memory.search(src, [BZERO])
+    dlength, last = state.mem_search(src, [BZERO])
     dlength = state.evalcon(dlength).as_long()
-    src = state.evalcon(src).as_long()
-    length, last = state.memory.search(src, [BZERO])
+    length, last = state.mem_search(src, [BZERO])
     # TODO this is not exactly right
     length = z3.If(num < length, num, length)
-    state.memory.move(dst+dlength, src, length+ONE)
+    state.mem_move(dst+dlength, src, length+ONE)
     return dst
 
 # I should really refactor this into
 # a method in state.memory  
 def memset(state, dst, ch, num): 
-    dst = state.evalcon(dst).as_long()
     c = z3.Extract(7, 0, ch) # TODO big endian
 
     length = z3.simplify(num)
     if z3.is_bv_value(length):
-        state.memory.write(dst, [c]*length.as_long())
+        state.mem_write(dst, [c]*length.as_long())
     else:
         data = []
         for i in range(state.max_len):
@@ -185,15 +163,14 @@ def memset(state, dst, ch, num):
             else:
                 break
 
-        state.memory.write(dst, data)
+        state.mem_write(dst, data)
 
     return dst
 
 def memchr_help(state, dst, ch, num, reverse=False):
-    addr = state.evalcon(dst).as_long()
     c = z3.Extract(7, 0, ch) # TODO big endian
     #length = state.evalcon(num).as_long()
-    index, last = state.memory.search(addr, [c], num, reverse)
+    index, last = state.mem_search(dst, [c], num, reverse)
     con = z3.And(index != state.memory.error, index < num)
     return z3.If(con, dst+index, ZERO)
 
@@ -204,10 +181,9 @@ def memrchr(state, dst, ch, num):
     return memchr_help(state, dst, ch, num, True)
 
 def strchr_help(state, dst, ch, reverse=False):
-    addr = state.evalcon(dst).as_long()
     c = z3.Extract(7, 0, ch) # TODO big endian
-    length, zlast = state.memory.search(addr, [BZERO])
-    index, last = state.memory.search(addr, [c], length, reverse)
+    length, zlast = state.mem_search(dst, [BZERO])
+    index, last = state.mem_search(dst, [c], length, reverse)
     con = z3.And(index != state.memory.error, index < length)
     return z3.If(con, dst+index, ZERO)
 
@@ -218,54 +194,42 @@ def strrchr(state, dst, ch):
     return strchr_help(state, dst, ch, reverse=True)
 
 def memcmp(state, dst, src, num):
-    s1 = state.evalcon(dst).as_long()
-    s2 = state.evalcon(src).as_long()
-    return state.memory.compare(s1, s2, num)
+    return state.mem_compare(dst, src, num)
 
 def strcmp(state, dst, src):
-    s1 = state.evalcon(dst).as_long()
-    s2 = state.evalcon(src).as_long()
-    return state.memory.compare(s1, s2)
+    return state.mem_compare(dst, src)
 
 def strncmp(state, dst, src, num):
-    s1 = state.evalcon(dst).as_long()
-    s2 = state.evalcon(src).as_long()
-    slen, slast = state.memory.search(s2, [BZERO])
-    dlen, dlast = state.memory.search(s1, [BZERO])
+    slen, slast = state.mem_search(src, [BZERO])
+    dlen, dlast = state.mem_search(dst, [BZERO])
     shorter = z3.If(dlen < slen, dlen, slen)
     num = z3.If(num < shorter, num+ONE, shorter+ONE)
-    return state.memory.compare(s1, s2, num)
+    return state.mem_compare(dst, src, num)
 
-def memmem(state, dst, dlen, src, slen): 
-    addr = state.evalcon(dst).as_long()
-    needle = state.evalcon(src).as_long()
+def memmem(state, addr, dlen, needle, slen): 
     slen = state.evalcon(slen).as_long()
-    data = state.memory.read(needle, slen)
-    return state.memory.search(addr, data, dlen)
+    data = state.mem_read(needle, slen)
+    return state.mem_search(addr, data, dlen)
 
-def strstr(state, dst, src): # this is getting complicated and wrong
-    addr = state.evalcon(dst).as_long()
-    needle = state.evalcon(src).as_long()
-    slen, slast = state.memory.search(needle, [BZERO])
-    data = state.memory.read(needle, slast)
-    dlen, dlast = state.memory.search(addr, [BZERO])
-    index, last = state.memory.search(addr, data, dlen)
+def strstr(state, addr, needle): # this is getting complicated and wrong
+    slen, slast = state.mem_search(needle, [BZERO])
+    data = state.mem_read(needle, slast)
+    dlen, dlast = state.mem_search(addr, [BZERO])
+    index, last = state.mem_search(addr, data, dlen)
     con = z3.And(index != state.memory.error, index+slen <= dlen)
-    return z3.If(con, dst+index, ZERO)
+    return z3.If(con, addr+index, ZERO)
 
 def malloc(state, length):
-    return state.memory.alloc(length)
+    return state.mem_alloc(length)
 
 def calloc(state, n, sz):
-    return state.memory.alloc(n*sz)
+    return state.mem_alloc(n*sz)
 
 def free(state, addr):
-    addr = state.evalcon(addr).as_long()
-    state.memory.free(addr)
+    state.mem_free(addr)
     return 0
 
-def atoi_helper(state, s, size=SIZE): # still sucks
-    addr = state.evalcon(s).as_long()
+def atoi_helper(state, addr, size=SIZE): # still sucks
     string, length = state.symbolic_string(addr)
 
     if z3.is_bv_value(string):
@@ -278,7 +242,7 @@ def atoi_helper(state, s, size=SIZE): # still sucks
         is_neg = z3.BoolVal(False)
         m = BV(ord("-"), 8)
         for i in range(length):
-            d = state.memory.read_bv(addr+i, 1)
+            d = state.mem_read_bv(addr+i, 1)
             is_neg = z3.If(d == m, z3.BoolVal(True), is_neg)
             c = z3.If(d == m, BV(0, size), z3.ZeroExt(size-8, d-BV_0))
             result = result+(c*BV(10**(length-(i+1)), size))
@@ -286,14 +250,14 @@ def atoi_helper(state, s, size=SIZE): # still sucks
         result = z3.If(is_neg, -result, result)
         return result
 
-def atoi(state, s):
-    return atoi_helper(state, s, 32)
+def atoi(state, addr):
+    return atoi_helper(state, addr, 32)
 
-def atol(state, s):
-    return atoi_helper(state, s, state.bits)
+def atol(state, addr):
+    return atoi_helper(state, addr, state.bits)
 
-def atoll(state, s):
-    return atoi_helper(state, s, 64)
+def atoll(state, addr):
+    return atoi_helper(state, addr, 64)
 
 def digit_to_char(digit):
     if digit < 10:
@@ -319,8 +283,6 @@ def bvpow(bv, ex):
     return z3.simplify(nbv)
 
 def itoa_helper(state, value, string, base, sign=True):
-    addr = state.evalcon(string).as_long()
-
     # ok so whats going on here is... uhh it works
     data = [BZERO]
     nvalue = z3.SignExt(96, z3.Extract(31, 0, value))
@@ -340,7 +302,7 @@ def itoa_helper(state, value, string, base, sign=True):
     pbv = pbv >> z3.ZeroExt(szdiff, shift)
     nbv = z3.simplify(z3.Concat(pbv, BV(ord("-"),8)))
     pbv = z3.simplify(z3.Concat(BV(0,8), pbv)) # oof
-    state.memory[addr] = z3.If(do_neg, nbv, pbv)
+    state.mem_write(string, z3.If(do_neg, nbv, pbv))
         
     return string
 
@@ -432,14 +394,12 @@ def getpagesize(state):
     return 0x1000 #idk
 
 def gethostname(state, addr, size):
-    addr = state.evalcon(addr).as_long()
     size = state.evalcon(size).as_long()
     hostname = socket.gethostname()
-    state.memory[addr] = hostname[:size]
+    state.mem_write(addr, hostname[:size])
     return 0
 
-def getenv(state, name):
-    addr = state.evalcon(name).as_long()
+def getenv(state, addr):
     name, length = state.symbolic_string(addr)
     con_name = state.evaluate_string(name)
     data = state.os.getenv(con_name)
@@ -447,7 +407,7 @@ def getenv(state, name):
     if data == None:
         return 0
     else:
-        val_addr = state.memory.alloc(len(data)+1)
+        val_addr = state.mem_alloc(len(data)+1)
         state.memory[val_addr] = data
         return val_addr
 
@@ -459,13 +419,14 @@ def sleep(state, secs):
     return 0
 
 def fileno(state, f):
+    # this isn't how its really done so ima leave this
     addr = state.evalcon(f).as_long()
     bv = state.memory[addr]
     return state.evalcon(bv).as_long()
 
 def open(state, path, flags, mode):
-    path = state.evalcon(path).as_long()
-    path_str = state.evaluate_string(state.symbolic_string(path)[0])
+    path = state.symbolic_string(path)[0]
+    path_str = state.evaluate_string(path)
     flags = state.evalcon(flags).as_long()
     mode = state.evalcon(mode).as_long()
     return state.fs.open(path_str, flags, mode)
@@ -488,7 +449,7 @@ def mode_to_int(mode):
     return m
 
 def fopen(state, path, mode):
-    f = state.memory.alloc(8)
+    f = state.mem_alloc(8)
     mode = state.evaluate_string(state.symbolic_string(path)[0])
     flags = mode_to_int(mode)
     fd = open(state, path, BV(flags), BV(0o777))
@@ -505,18 +466,17 @@ def fclose(state, f):
 
 def read(state, fd, addr, length):
     fd = state.evalcon(fd).as_long()
-    addr = state.evalcon(addr).as_long()
     #length = state.evalcon(length).as_long()
     length = z3.simplify(length)
 
     if z3.is_bv_value(length):
         rlen = length.as_long()
     else:
-        rlen = len(state.memory.cond_read(addr, length)) # hax
+        rlen = len(state.mem_cond_read(addr, length)) # hax
 
     data = state.fs.read(fd, rlen)
     dlen = BV(len(data))
-    state.memory.copy(addr, data, length)
+    state.mem_copy(addr, data, length)
     return z3.If(dlen < length, dlen, length)
 
 def fread(state, addr, sz, length, f):
@@ -525,9 +485,8 @@ def fread(state, addr, sz, length, f):
 
 def write(state, fd, addr, length):
     fd = state.evalcon(fd).as_long()
-    addr = state.evalcon(addr).as_long()
     length = state.evalcon(length).as_long()
-    data = state.memory.read(addr, length)
+    data = state.mem_read(addr, length)
     return state.fs.write(fd, data)
 
 def fwrite(state, addr, sz, length, f):
@@ -545,17 +504,17 @@ def fseek(state, f, offset, whence):
     return lseek(state, BV(fd), offset, whence)
 
 def access(state, path, flag): # TODO: complete this
-    path = state.evalcon(path).as_long()
-    path = state.evaluate_string(state.symbolic_string(path)[0])
+    path = state.symbolic_string(path)[0]
+    path = state.evaluate_string(path)
     return state.fs.exists(path)
 
 def stat(state, path, data): # TODO: complete this
-    path = state.evaluate_string(state.symbolic_string(path)[0])
+    path = state.symbolic_string(path)[0]
+    path = state.evaluate_string(path)
     return state.fs.exists(path)
 
 def system(state, cmd):
-    addr = state.evalcon(cmd).as_long()
-    string, length = state.symbolic_string(addr)
+    string, length = state.symbolic_string(cmd)
     print("system(%s)" % state.evaluate_string(string)) # idk
     return 0
 
@@ -616,16 +575,16 @@ def ieee_to_float(endian, v, size=64):
     return unpack(o, pack(i, v))[0]
 
 def convert_arg(state, arg, typ, size, base):
-    if arg.size() > size:
-        szdiff = size-arg.size()
 
-        if szdiff > 0:
-            if typ == SINT:
-                arg = z3.SignExt(szdiff, arg)
-            else:
-                arg = z3.ZeroExt(szdiff, arg)
-        elif szdiff < 0:
-            arg = z3.Extract(size-1, 0, arg)
+    szdiff = size-arg.size()
+
+    if szdiff > 0:
+        if typ == SINT:
+            arg = z3.SignExt(szdiff, arg)
+        else:
+            arg = z3.ZeroExt(szdiff, arg)
+    elif szdiff < 0:
+        arg = z3.Extract(size-1, 0, arg)
 
     arg = state.evalcon(arg)
     if typ == UINT:
@@ -731,7 +690,7 @@ def format_writer(state, fmt, vargs):
                 elif next1fmt == "n":
                     lastind = len(new_fmt)-new_fmt[::-1].index("%")-1
                     n = len(new_fmt[:lastind]%tuple(new_args))
-                    state.memory[state.evalcon(arg).as_long()] = n
+                    state.mem_write(arg, n)
 
     return new_fmt % tuple(new_args)
 

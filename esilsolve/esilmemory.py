@@ -37,7 +37,7 @@ class ESILMemory:
         self.solver = None
 
         self.heap = {} # this is it
-        self.heap_start = 0x1000000 #2 << (self.bits-8)
+        self.heap_start = 2 << (self.bits-8)
         self.heap_size = self.heap_start #idk
         self.heap_bin = 0x100
         self.heap_init = False
@@ -109,7 +109,7 @@ class ESILMemory:
     def free(self, addr):
 
         if z3.is_bv(addr):
-            addr = self.bv_to_int(addr)
+            addr = self.addr_to_int(addr, mode="f")
 
         if addr == 0:
             return
@@ -133,7 +133,7 @@ class ESILMemory:
     def mask(self, addr: int):
         return int(addr - (addr % self.chunklen))
 
-    def bv_to_int(self, bv):
+    def addr_to_int(self, bv, mode="r"):
 
         bv = z3.simplify(bv)
         if z3.is_bv_value(bv):
@@ -141,7 +141,7 @@ class ESILMemory:
 
         # this is terrible and temporary
         elif z3.is_bv(bv):
-            #print("symbolic addr: %s" % bv)
+
             self.hit_symbolic_addr = True
             if self.solver.check() == z3.sat:
                 model = self.solver.model()
@@ -151,12 +151,13 @@ class ESILMemory:
                 return val.as_long()
 
             else:
-                raise ESILUnsatException("no sat symbolic address found")
+                raise ESILUnsatException(
+                    f"no sat symbolic address found for: {bv}")
 
     def read(self, addr: int, length: int):
 
         if type(addr) != int:
-            addr = self.bv_to_int(addr)
+            addr = self.addr_to_int(addr, "")
 
         if self.check_perms:
             self.check(addr, "r")
@@ -198,7 +199,7 @@ class ESILMemory:
             self.finish_clone()
 
         if type(addr) != int:
-            addr = self.bv_to_int(addr)
+            addr = self.addr_to_int(addr, mode="w")
 
         if self.check_perms:
             self.check(addr, "w")
@@ -378,14 +379,14 @@ class ESILMemory:
 
     def read_bv(self, addr, length):
         if type(addr) != int:
-            addr = self.bv_to_int(addr)
+            addr = self.addr_to_int(addr, mode="r")
 
         data = self.read(addr, length)
         return self.pack_bv(data)
 
     def write_bv(self, addr, val, length: int):
         if type(addr) != int:
-            addr = self.bv_to_int(addr)
+            addr = self.addr_to_int(addr, mode="w")
 
         data = self.unpack_bv(val, length)
         self.write(addr, data)

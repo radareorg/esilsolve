@@ -4,12 +4,12 @@ from . import esilops
 from .esilclasses import * 
 from .esilstate import *
 
-# some constants for exec type idk
-UNCON   = 0
-IF      = 1 
-ELSE    = 2
-EXEC    = 3
-NO_EXEC = 4
+class ExecType(Enum):
+    UNCON   = 0
+    IF      = 1 
+    ELSE    = 2
+    EXEC    = 3
+    NO_EXEC = 4
 
 class ESILProcess:
     """ 
@@ -22,8 +22,8 @@ class ESILProcess:
         self.kwargs = kwargs
         self.debug = kwargs.get("debug", False)
         self.trace = kwargs.get("trace", False)
-        self.bail = kwargs.get("bail", False)
-        self.sim = kwargs.get("sim", True)
+        self.bail  = kwargs.get("bail", False)
+        self.sim   = kwargs.get("sim", True)
         self.check_perms = kwargs.get("check", False)
 
         self.tactics = self.get_boolref_tactics()
@@ -47,6 +47,8 @@ class ESILProcess:
         if self.sim:
             from .simsys import syscalls
             self.syscalls = syscalls
+
+        self.events = kwargs.get("events", {})
 
         # try to init vexit, an optional module that uses vex
         # if an esil expression is not available
@@ -103,6 +105,10 @@ class ESILProcess:
             if self.debug:
                 print("symbolic pc: %s" % str(pc))
 
+            if ESILSolveEvent.SymExec in self.events:
+                for hook in self.events[ESILSolveEvent.SymExec]:
+                    hook(state, pc)
+
             possible_pcs = []
 
             # if lazy don't eval, just try both If addresses
@@ -145,7 +151,7 @@ class ESILProcess:
 
         temp_stack1 = []
         temp_stack2 = []
-        exec_type = UNCON
+        exec_type = ExecType.UNCON
 
         if type(expression) == str:
             words = expression.split(",")
@@ -171,34 +177,34 @@ class ESILProcess:
                 state.condition = self.do_if(state)
                 if type(state.condition) == bool:
                     if state.condition == True:
-                        exec_type = EXEC
+                        exec_type = ExecType.EXEC
                     else:
-                        exec_type = NO_EXEC
+                        exec_type = ExecType.NO_EXEC
 
                     state.condition = None
                 else:
-                    exec_type = IF
+                    exec_type = ExecType.IF
                     temp_stack1 = state.stack
                     state.stack = temp_stack1[:]
 
             elif word == "}{":
 
-                if exec_type == NO_EXEC:
-                    exec_type = EXEC
-                elif exec_type == EXEC:
-                    exec_type = NO_EXEC
+                if exec_type == ExecType.NO_EXEC:
+                    exec_type = ExecType.EXEC
+                elif exec_type == ExecType.EXEC:
+                    exec_type = ExecType.NO_EXEC
                 else:
                     state.condition = z3.Not(state.condition)
-                    exec_type = ELSE
+                    exec_type = ExecType.ELSE
                     temp_stack2 = state.stack
                     state.stack = temp_stack1[:]
 
             elif word == "}":
 
-                if NO_EXEC != exec_type != EXEC:
+                if ExecType.NO_EXEC != exec_type != ExecType.EXEC:
                     new_stack = []
                     new_temp = temp_stack1
-                    if exec_type == ELSE:
+                    if exec_type == ExecType.ELSE:
                         new_temp = temp_stack2
 
                     while state.stack != [] and new_temp != []:
@@ -217,14 +223,14 @@ class ESILProcess:
                     new_stack.reverse()
                     state.stack = new_stack
 
-                exec_type = UNCON
+                exec_type = ExecType.UNCON
 
-                if goto != None and exec_type != NO_EXEC:
+                if goto != None and exec_type != ExecType.NO_EXEC:
                     word_ind = goto-1
                     state.condition = goto_condition
                     goto = None
 
-            elif exec_type != NO_EXEC and word == "GOTO":
+            elif exec_type != ExecType.NO_EXEC and word == "GOTO":
 
                 # goto makes things a bit wild
                 goto, = esilops.pop_values(state.stack, state)
@@ -245,14 +251,14 @@ class ESILProcess:
                 elif self.check_condition(state.condition, state):
                     goto_condition = state.condition
 
-                    if exec_type == UNCON:
+                    if exec_type == ExecType.UNCON:
                         word_ind = goto-1
                         goto = None
                     
                 else:
                     goto = None
 
-            elif exec_type != NO_EXEC and word == "REPEAT":
+            elif exec_type != ExecType.NO_EXEC and word == "REPEAT":
                 # REPEAT is barely used and the code looks wrong
                 # but this is here for completeness sake
 
@@ -269,16 +275,16 @@ class ESILProcess:
                 else:
                     repeat = None
 
-            elif exec_type != NO_EXEC and word == "BREAK":
+            elif exec_type != ExecType.NO_EXEC and word == "BREAK":
 
                 # if its unconstrained just break
-                if exec_type in (UNCON, EXEC):
+                if exec_type in (ExecType.UNCON, ExecType.EXEC):
                     break
                 elif self.check_condition(state.condition, state):
                     # otherwise uhhh idk for now
                     break_condition = state.condition
 
-            elif exec_type != NO_EXEC:
+            elif exec_type != ExecType.NO_EXEC:
 
                 if type(word) == int or word in state.registers:
                     state.stack.append(word)

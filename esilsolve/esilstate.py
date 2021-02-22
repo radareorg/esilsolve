@@ -67,6 +67,8 @@ class ESILState:
         self.debug = kwargs.get("debug", False)
         self.trace = kwargs.get("trace", False)
 
+        self.events = kwargs.get("events", {})
+
         self.memory: ESILMemory = None
         self.registers: ESILRegisters = None
         self.proc: ESILProcess = None
@@ -115,7 +117,8 @@ class ESILState:
 
     def init_memory(self):
         self.memory = ESILMemory(
-            self.r2api, self.info, self.pure_symbolic, self.check_perms)
+            self.r2api, self.info,
+            self.pure_symbolic, self.check_perms)
 
         self.memory.solver = self.solver
         self.memory.max_len = self.max_len
@@ -175,6 +178,88 @@ class ESILState:
 
         size = self.registers[name].size()
         self.registers[name] = z3.BitVec(var, size)
+
+    def addr_to_int(self, bv, mode="r", length=None, data=None):
+
+        if type(bv) == int:
+            return bv
+
+        bv = z3.simplify(bv)
+        if z3.is_bv_value(bv):
+            return bv.as_long()
+
+        elif z3.is_bv(bv):
+
+            mode_to_event = {
+                "r": ESILSolveEvent.SymRead,
+                "w": ESILSolveEvent.SymWrite,
+                "x": ESILSolveEvent.SymExec,
+                "f": ESILSolveEvent.SymFree
+            }
+            event = mode_to_event[mode]
+            if event in self.events:
+                # normalize everything to be bvs
+                if type(length == int):
+                    length = BV(length, self.bits)
+
+                if type(data) == list:
+                    data = self.memory.pack_bv(data)
+
+                ctx = EventContext(bv, length, data)
+                for hook in self.events[event]:
+                    hook(self, ctx)
+
+            return self.evalcon(bv).as_long()
+
+    def mem_read(self, addr, length):
+        addr = self.addr_to_int(addr, "r", length)
+        return self.memory.read(addr, length)
+
+    def mem_write(self, addr, data):
+        addr = self.addr_to_int(addr, "w", data=data)
+        return self.memory.write(addr, data)
+
+    def mem_read_bv(self, addr, length):
+        addr = self.addr_to_int(addr, "r", length)
+        return self.memory.read_bv(addr, length)
+
+    def mem_cond_read(self, addr, length):
+        addr = self.addr_to_int(addr, "r", length)
+        return self.memory.cond_read(addr, length)
+
+    def mem_write_bv(self, addr, val, length):
+        addr = self.addr_to_int(addr, "w", length, val)
+        return self.memory.write_bv(addr, val, length)
+
+    def mem_copy(self, dst, data, length):
+        dst = self.addr_to_int(dst, "w", length, data)
+        return self.memory.copy(dst, data, length)
+
+    def mem_memcopy(self, src, dst, length):
+        src = self.addr_to_int(src, "r", length)
+        dst = self.addr_to_int(dst, "w", length)
+        return self.memory.memcopy(src, dst, length)
+
+    def mem_compare(self, src, dst, length=None):
+        src = self.addr_to_int(src, "r", length)
+        dst = self.addr_to_int(dst, "w", length)
+        return self.memory.compare(src, dst, length)
+
+    def mem_move(self, src, dst, length):
+        src = self.addr_to_int(src, "r", length)
+        dst = self.addr_to_int(dst, "w", length)
+        return self.memory.move(src, dst, length)
+
+    def mem_alloc(self, length=128):
+        return self.memory.alloc(length)
+
+    def mem_free(self, addr):
+        addr = self.addr_to_int(addr, "f")
+        return self.memory.free(addr)
+
+    def mem_search(self, addr, needle, length=None, reverse=None):
+        addr = self.addr_to_int(addr, "r")
+        return self.memory.search(addr, needle, length, reverse)
 
     def constrain(self, *constraints):
         """ Add constraint to the state """
@@ -318,8 +403,8 @@ class ESILState:
         return b.decode()
 
     def symbolic_string(self, addr, length=None):
-        ret_len, last = self.memory.search(addr, [BZERO], length)
-        data = self.memory.read_bv(addr, last)
+        ret_len, last = self.mem_search(addr, [BZERO], length)
+        data = self.mem_read_bv(addr, last)
         return data, ret_len
         
     def concrete_string(self, addr, length=None):

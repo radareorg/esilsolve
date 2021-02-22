@@ -1,4 +1,5 @@
 import z3
+from enum import Enum
 
 class ESILTrapException(Exception):
     pass
@@ -21,7 +22,25 @@ class ESILUnsatException(Exception):
 class ESILSegmentFault(Exception):
     pass
 
+class ESILSolveEvent(Enum):
+    SymExec  = 1
+    SymRead  = 2
+    SymWrite = 3
+    SymFree  = 4
+    # free gets its own event because idk
+    # it will be useful for heap vulns
+
 from typing import Union, List, Dict, Callable
+
+class EventContext:
+    address: z3.BitVecRef = None
+    length: Union[z3.BitVecRef, int] = None
+    data: Union[z3.BitVecRef, List] = None
+
+    def __init__(self, addr, length=None, data=None):
+        self.address = addr
+        self.length = length
+        self.data = data
 
 # addresses can by flag names or ints
 Address = Union[str, int]
