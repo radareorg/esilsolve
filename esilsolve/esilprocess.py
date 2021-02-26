@@ -2,14 +2,6 @@ import z3
 from .r2api import R2API
 from . import esilops
 from .esilclasses import * 
-from .esilstate import *
-
-class ExecType(Enum):
-    UNCON   = 0
-    IF      = 1 
-    ELSE    = 2
-    EXEC    = 3
-    NO_EXEC = 4
 
 class ESILProcess:
     """ 
@@ -24,6 +16,7 @@ class ESILProcess:
         self.trace = kwargs.get("trace", False)
         self.bail  = kwargs.get("bail", False)
         self.sim   = kwargs.get("sim", True)
+        self.max_eval    = kwargs.get("max_eval", 32)
         self.check_perms = kwargs.get("check", False)
 
         self.tactics = self.get_boolref_tactics()
@@ -80,7 +73,10 @@ class ESILProcess:
         else:
             esil = instr.get("esil", ",")
 
-        if type(esil) == str:
+        if isinstance(esil, str):
+            if esil.count(",tmp,") == 1: # gross
+                esil = esil.replace(",DUP,tmp,=", "")
+
             esil = esil.split(",")
             instr["dsil"] = esil
 
@@ -88,7 +84,7 @@ class ESILProcess:
             if esil in ("", "TODO") and instr["type"] != "nop":
                 esil = self.vexit.convert(instr)
 
-        self.parse_expression(esil, state) 
+        self.parse_expression(esil, state)
 
         state.steps += 1
         states = []
@@ -116,7 +112,7 @@ class ESILProcess:
                 possible_pcs = self.get_lazy_pcs(pc)
             
             if possible_pcs == []:
-                possible_pcs = state.eval_max(pc)
+                possible_pcs = state.eval_max(pc, self.max_eval)
 
                 if possible_pcs == [] and pc.decl().name() == "if":
                     # if its still [] we prolly timed out
@@ -149,14 +145,14 @@ class ESILProcess:
 
     def parse_expression(self, expression, state):
 
-        temp_stack1 = []
-        temp_stack2 = []
-        exec_type = ExecType.UNCON
-
-        if type(expression) == str:
+        if isinstance(expression, str):
             words = expression.split(",")
         else:
             words = expression
+
+        temp_stack1 = []
+        temp_stack2 = []
+        exec_type = ExecType.UNCON
 
         word_ind = 0
         words_len = len(words)
@@ -165,17 +161,16 @@ class ESILProcess:
         goto_condition = None
         break_condition = None
         goto_depth = 0
-        repeat = None
         
         while word_ind < words_len:
-            #print(words[word_ind], temp_stack1, state.stack)
+            #print(words[word_ind], temp_stack1, stack)
             #print(state.condition)
             word = words[word_ind]
 
             if word == "?{":
 
                 state.condition = self.do_if(state)
-                if type(state.condition) == bool:
+                if isinstance(state.condition, bool):
                     if state.condition == True:
                         exec_type = ExecType.EXEC
                     else:
@@ -237,48 +232,49 @@ class ESILProcess:
 
                 if z3.is_bv_value(goto):
                     goto = goto.as_long()
-                else: # hopefully this doesn't happen
+                elif z3.is_bv(goto):
                     goto = state.evalcon(goto).as_long()
 
-                goto_depth += 1
-
-                if state.condition != None and goto_depth > self.goto_depth_limit:
-                    # constrain the current condition to not be true
-                    # effectively cutting off the nested gotos
-                    state.constrain(z3.Not(state.condition))
+                if state.condition == None:
+                    word_ind = goto-1
                     goto = None
-            
-                elif self.check_condition(state.condition, state):
-                    goto_condition = state.condition
+                    goto_condition = None
 
-                    if exec_type == ExecType.UNCON:
-                        word_ind = goto-1
-                        goto = None
-                    
                 else:
-                    goto = None
+                    goto_depth += 1
+
+                    if goto_depth > self.goto_depth_limit:
+                        # constrain the current condition to not be true
+                        # effectively cutting off the nested gotos
+                        state.constrain(z3.Not(state.condition))
+                        goto = None
+                
+                    elif self.check_condition(state.condition, state):
+                        goto_condition = state.condition
+                        
+                    else:
+                        goto = None
 
             elif exec_type != ExecType.NO_EXEC and word == "REPEAT":
                 # REPEAT is barely used and the code looks wrong
                 # but this is here for completeness sake
 
-                if repeat == None or repeat > 1:
-                    go, rep = esilops.pop_values(state.stack, state)
+                go, rep = esilops.pop_values(state.stack, state)
 
-                    if repeat == None:
-                        repeat = rep
+                if z3.is_bv(go):
+                    go = state.evalcon(go).as_long()
 
-                    repeat -= 1
-                    state.stack.append(repeat)
+                if z3.is_bv(rep):
+                    rep = state.evalcon(rep).as_long()
+
+                if rep > 1:
+                    state.stack.append(rep-1)
                     word_ind = go-1
-
-                else:
-                    repeat = None
 
             elif exec_type != ExecType.NO_EXEC and word == "BREAK":
 
                 # if its unconstrained just break
-                if exec_type in (ExecType.UNCON, ExecType.EXEC):
+                if state.condition == None:
                     break
                 elif self.check_condition(state.condition, state):
                     # otherwise uhhh idk for now
@@ -286,7 +282,7 @@ class ESILProcess:
 
             elif exec_type != ExecType.NO_EXEC:
 
-                if type(word) == int or word in state.registers:
+                if isinstance(word, int) or word in state.registers:
                     state.stack.append(word)
 
                 elif word in esilops.opcodes:
@@ -309,8 +305,6 @@ class ESILProcess:
             return int(word)
         elif word[:2] == "0x" or word[:3] == "-0x":
             return int(word, 16)
-        #elif "." in word:
-        #    return float(word)
         else:
             return word
 
@@ -319,31 +313,31 @@ class ESILProcess:
         val = z3.simplify(val)
 
         zero = 0
+        is_int = False
         if z3.is_bv_value(val):
             val = val.as_long()
+            is_int = True
                 
         elif z3.is_bv(val):
             zero = z3.BitVecVal(0, val.size())
 
         if state.condition == None:
-            if type(val) == int:
+            if is_int:
                 return val != zero
             else:
                 #return val != zero
                 return self.eq(val != zero)
         else:
-            return z3.And(self.eq(val != zero), state.condition)
+            if is_int:
+                return z3.And(z3.BoolVal(val != zero), state.condition)
+            else:
+                return z3.And(self.eq(val != zero), state.condition)
 
     def check_condition(self, condition, state):
         if condition == None:
             return True
 
-        state.solver.push()
-        state.solver.add(condition)
-        is_sat = state.is_sat()
-        state.solver.pop()
-
-        return is_sat
+        return state.solver.check(condition) == z3.sat
 
     def eq(self, expr):
         return self.tactics(expr).as_expr()

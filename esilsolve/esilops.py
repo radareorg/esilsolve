@@ -15,6 +15,8 @@ FLOAT = 2
 
 FPM = z3.RTZ()
 
+masks = [(2**n)-1 for n in range(65)]
+
 def pop_values(stack, state, num: int=1, signext=False) -> List[z3.BitVecRef]:
     size = state.esil["size"]
     val_type = state.esil["type"]
@@ -24,28 +26,30 @@ def pop_values(stack, state, num: int=1, signext=False) -> List[z3.BitVecRef]:
 def get_value(val, state, signext=False, size=SIZE, val_type=INT) \
     -> z3.BitVecRef:
 
-    if type(val) == str:
+    if isinstance(val, str):
         val = state.registers[val]
     
-    if val_type == FLOAT:
-        return prepare_float(val, signext, size)
-    else:
+    if val_type == INT:
         return prepare(val, signext, size)
+    else:
+        return prepare_float(val, signext, size)
 
 def prepare(val, signext=False, size=SIZE) -> z3.BitVecRef:
     if z3.is_bv(val):
         szdiff = size-val.size()
 
-        if szdiff > 0:
+        if szdiff == 0:
+            result = val
+        elif szdiff > 0:
             if signext:
                 result = z3.SignExt(szdiff, val)
             else:
                 result = z3.ZeroExt(szdiff, val)
         elif szdiff < 0:
             result = z3.Extract(size-1, 0, val)
-        else:
-            result = val
-    elif type(val) == int:
+
+    elif isinstance(val, int):
+        #return val & masks[size]
         result = z3.BitVecVal(val, size)
     elif z3.is_int(val):
         result = z3.Int2BV(val, size)
@@ -111,7 +115,6 @@ def do_REPEAT(op, stack, state):
 def do_TODO(op, stack, state):
     if state.proc.bail:
         raise ESILTodoException("encountered a TODO operator")
-
 
 def do_SYS(op, stack, state):
     syscall, = pop_values(stack, state)
@@ -205,7 +208,7 @@ def do_LR(op, stack, state):
     if z3.is_bv(arg1_val):
         arg1 = arg1_val
         size = arg1.size()
-    elif type(arg1_val) == str:
+    elif isinstance(arg1_val, str):
         arg1 =  state.registers[arg1_val]
         size = arg1.size()
     else:
@@ -226,7 +229,7 @@ def do_RR(op, stack, state):
     if z3.is_bv(arg1_val):
         arg1 = arg1_val
         size = arg1.size()
-    elif type(arg1_val) == str:
+    elif isinstance(arg1_val, str):
         arg1 =  state.registers[arg1_val]
         size = arg1.size()
     else:
@@ -619,7 +622,7 @@ def do_NOP(op, stack, state):
 
 def genmask(bits):
     
-    if type(bits) != int:
+    if not isinstance(bits, int):
         bits = z3.simplify(bits)
         if z3.is_bv(bits):
             bits = bits.as_long()

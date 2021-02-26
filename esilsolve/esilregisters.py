@@ -168,7 +168,7 @@ class ESILRegisters:
     def val_to_register_bv(self, reg: Dict, val):
         new_val = val
 
-        if type(val) == int:
+        if isinstance(val, int):
             new_val = z3.BitVecVal(val, reg["size"])
 
         elif z3.is_int(val):

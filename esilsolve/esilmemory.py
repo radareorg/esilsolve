@@ -13,17 +13,16 @@ class ESILMemory:
     31337
     """
 
-    def __init__(self, r2api: R2API, info: Dict, sym=False, check=False):
+    def __init__(self, r2api: R2API, info: Dict, 
+            max_eval=32, sym=False, check=False):
+
         self._memory = {}
         self._read_cache = {}
         self.r2api = r2api
         self.info = info
         self.pure_symbolic = sym
-        self.default_addr = 0x100000
         self.check_perms = check
-
-        self.hit_symbolic_addr = False
-        self.concrete_addrs = []
+        self.max_eval = max_eval
 
         self._refs = {"count": 1}
 
@@ -81,7 +80,7 @@ class ESILMemory:
             self.init_heap()
         
         needs = 0
-        if type(length) == int:
+        if isinstance(length, int):
             needs = int(length/self.heap_bin) + 1
         elif z3.is_bv_value(length):
             needs = int(length.as_long()/self.heap_bin) + 1
@@ -109,7 +108,7 @@ class ESILMemory:
     def free(self, addr):
 
         if z3.is_bv(addr):
-            addr = self.addr_to_int(addr, mode="f")
+            addr = self.addr_to_int(addr)
 
         if addr == 0:
             return
@@ -133,19 +132,17 @@ class ESILMemory:
     def mask(self, addr: int):
         return int(addr - (addr % self.chunklen))
 
-    def addr_to_int(self, bv, mode="r"):
+    def addr_to_int(self, bv):
 
+        if z3.is_bv_value(bv):
+            return bv.as_long()
+        
         bv = z3.simplify(bv)
         if z3.is_bv_value(bv):
             return bv.as_long()
-
-        # this is terrible and temporary
-        elif z3.is_bv(bv):
-
-            self.hit_symbolic_addr = True
+        else: # should be only for free() now
             if self.solver.check() == z3.sat:
                 model = self.solver.model()
-
                 val = model.eval(bv, model_completion=True)
                 self.solver.add(bv == val)
                 return val.as_long()
@@ -154,10 +151,7 @@ class ESILMemory:
                 raise ESILUnsatException(
                     f"no sat symbolic address found for: {bv}")
 
-    def read(self, addr: int, length: int):
-
-        if type(addr) != int:
-            addr = self.addr_to_int(addr, "")
+    def read_con(self, addr: int, length: int):
 
         if self.check_perms:
             self.check(addr, "r")
@@ -193,13 +187,116 @@ class ESILMemory:
 
         return data[offset:offset+length]
 
+    def eval_max(self, sym, n: int = 32):
+        solutions = []
+
+        self.solver.push()
+        while len(solutions) < n:
+            if self.solver.check() == z3.sat:
+                m = self.solver.model()
+                sol = m.eval(sym, True)
+                solutions.append(sol)
+                self.solver.add(sym != sol)
+            else:
+                break
+
+        self.solver.pop()
+        return solutions
+
+    def read_bv(self, addr, length):
+        if isinstance(addr, int):
+            return self.pack_bv(self.cond_read(addr, length))
+        elif z3.is_bv_value(addr):
+            return self.pack_bv(self.cond_read(addr.as_long(), length))
+
+        addr = z3.simplify(addr)
+        if z3.is_bv_value(addr):
+            return self.pack_bv(self.cond_read(addr.as_long(), length))
+
+        addrs = self.eval_max(addr, self.max_eval)
+
+        if addrs == []:
+            raise ESILUnsatException("Unsat symbolic address")
+        elif len(addrs) == 1:
+            # should I add this constraint? no?
+            return self.pack_bv(self.cond_read(addrs[0].as_long(), length))
+
+        # constrain it to be one of these
+        self.solver.add(z3.Or(*[addr == a for a in addrs]))
+
+        result = None
+        for address in addrs:
+            val = self.pack_bv(self.cond_read(address.as_long(), length))
+
+            if result == None:
+                result = val
+            else:
+                result = z3.If(addr == address, val, result)
+
+        return z3.simplify(result)
+
+    def read(self, addr, length):
+        if isinstance(addr, int):
+            return self.cond_read(addr, length)
+        elif z3.is_bv_value(addr):
+            return self.cond_read(addr.as_long(), length)
+
+        addr = z3.simplify(addr)
+        if z3.is_bv_value(addr):
+            return self.cond_read(addr.as_long(), length)
+
+        data = self.read_bv(addr, length)
+        return self.unpack_bv(data, int(data.size()/8))
+
     def write(self, addr, data):
+        if isinstance(addr, int):
+            return self.write_con(addr, data)
+        elif z3.is_bv_value(addr):
+            return self.write_con(addr.as_long(), data)
+        
+        addr = z3.simplify(addr)
+        if z3.is_bv_value(addr):
+            return self.write_con(addr.as_long(), data)
+
+        addrs = self.eval_max(addr, self.max_eval)
+
+        if addrs == []:
+            raise ESILUnsatException("Unsat symbolic address")
+        elif len(addrs) == 1:
+            # should I add this constraint? no?
+            return self.write_con(addrs[0].as_long(), data)
+
+        # constrain it to be one of these
+        self.solver.add(z3.Or(*[addr == a for a in addrs]))
+
+        data = self.data_to_bv(data)
+        length = int(data.size()/8)
+
+        for address in addrs:
+            addrint = address.as_long()
+            val = self.pack_bv(self.cond_read(addrint, length))
+            self.write_con(addrint, z3.If(addr == address, data, val))
+        
+    def write_bv(self, addr, data, length):
+        data = self.unpack_bv(data, length)
+        self.write(addr, data)
+
+    def data_to_bv(self, data): 
+        if z3.is_bv(data):
+            return data
+        elif isinstance(data, bytes):
+            data = self.pack_bv(list(data))
+        elif isinstance(data, str):
+            data = self.pack_bv(list(data.encode())+[0]) # add null byte
+        elif isinstance(data, int):
+            data = BV(data, self.bits)
+
+        return data
+        
+    def write_con(self, addr, data):
 
         if self._refs["count"] > 1:
             self.finish_clone()
-
-        if type(addr) != int:
-            addr = self.addr_to_int(addr, mode="w")
 
         if self.check_perms:
             self.check(addr, "w")
@@ -207,11 +304,11 @@ class ESILMemory:
         if z3.is_bv(data):
             length = int(data.size()/BYTE)
             data = self.unpack_bv(data, length)
-        elif type(data) == bytes:
+        elif isinstance(data, bytes):
             data = list(data)
-        elif type(data) == str:
+        elif isinstance(data, str):
             data = list(data.encode())+[0] # add null byte
-        elif type(data) == int:
+        elif isinstance(data, int):
             data = self.unpack_bv(data, int(self.bits/8))
 
         data = self.prepare_data(data)
@@ -252,7 +349,7 @@ class ESILMemory:
             self.write(dst, data)
 
     def move(self, dst, src, length):
-        data = self.cond_read(src, length)
+        data = self.read(src, length)
         self.copy(dst, data, length)
 
     def copy(self, dst, data, length):
@@ -330,13 +427,18 @@ class ESILMemory:
         return z3.simplify(ret_ind), max_len
 
     def cond_read(self, addr, length):
+        if isinstance(length, int):
+            return self.read_con(addr, length)
+        elif z3.is_bv_value(length):
+            return self.read_con(addr, length.as_long())
+
         length = z3.simplify(length)
         if z3.is_bv_value(length):
-            return self.read(addr, length.as_long())
+            return self.read_con(addr, length.as_long())
         else:
             data = []
             for i in range(self.max_len):
-                sc = self.read_bv(addr+i, 1)
+                sc = self.read_con_bv(addr+i, 1)
                 new_len = z3.BitVecVal(i, SIZE)
                 over_len = self.solver.check(length > new_len) == z3.unsat
 
@@ -377,24 +479,18 @@ class ESILMemory:
 
         return z3.simplify(ret_val)
 
-    def read_bv(self, addr, length):
-        if type(addr) != int:
-            addr = self.addr_to_int(addr, mode="r")
-
-        data = self.read(addr, length)
+    def read_con_bv(self, addr, length):
+        data = self.read_con(addr, length)
         return self.pack_bv(data)
 
-    def write_bv(self, addr, val, length: int):
-        if type(addr) != int:
-            addr = self.addr_to_int(addr, mode="w")
-
+    def write_con_bv(self, addr, val, length: int):
         data = self.unpack_bv(val, length)
-        self.write(addr, data)
+        self.write_con(addr, data)
 
     def pack_bv(self, data):
         bve = []
         for d in data:
-            if type(d) == int:
+            if isinstance(d, int):
                 bve.append(z3.BitVecVal(d, BYTE))
             else:
                 bve.append(d)
@@ -410,7 +506,7 @@ class ESILMemory:
         return bv
 
     def unpack_bv(self, val, length: int):
-        if type(val) == int:
+        if isinstance(val, int):
             data = [(val >> i*BYTE) & 0xff for i in range(length)]
 
         else:
@@ -442,25 +538,25 @@ class ESILMemory:
 
     def __getitem__(self, addr) -> z3.BitVecRef:
         length = self.chunklen
-        if type(addr) == int or z3.is_bv(addr):
+        if isinstance(addr, int) or z3.is_bv(addr):
             return self.read_bv(addr, length)
-        elif type(addr) == str:
+        elif isinstance(addr, str):
             addr = self.r2api.get_address(addr)
             return self.read_bv(addr, length)
-        elif type(addr) == slice:
+        elif isinstance(addr, slice):
             length = int(addr.stop-addr.start)
             return self.read_bv(addr.start, length)
 
     def __setitem__(self, addr, value):
-        if type(addr) == int or z3.is_bv(addr):
+        if isinstance(addr, int) or z3.is_bv(addr):
             return self.write(addr, value)
-        elif type(addr) == str:
+        elif isinstance(addr, str):
             addr = self.r2api.get_address(addr)
             return self.write(addr, value)
-        elif type(addr) == slice:
+        elif isinstance(addr, slice):
             length = int(addr.stop-addr.start)
 
-            if type(value) == list:
+            if isinstance(value, list):
                 self.write(addr.start, value[:length])
             elif z3.is_bv(value):
                 new_val = z3.Extract(length*8 - 1, 0, value)
@@ -473,7 +569,9 @@ class ESILMemory:
         return iter(self._memory.keys())
 
     def clone(self):
-        clone = self.__class__(self.r2api, self.info, self.pure_symbolic)
+        clone = self.__class__(self.r2api, self.info, 
+            self.max_eval, self.pure_symbolic)
+
         self._refs["count"] += 1
         clone._refs = self._refs
         clone._memory = self._memory

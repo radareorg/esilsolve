@@ -54,6 +54,7 @@ class ESILState:
             "cur":0, "old":0, "stack":[],
             "size": 64, "type": 1
         }
+        self.stack = self.esil["stack"]
         self.max_len = kwargs.get("max_len", 4096)
 
         self.pid = kwargs.get("pid", 1337)
@@ -61,8 +62,6 @@ class ESILState:
 
         # esilsolve aint sleepin
         self.sleep = kwargs.get("sleep", False)
-
-        self.stack = self.esil["stack"]
         self.info = self.r2api.get_info()
         self.debug = kwargs.get("debug", False)
         self.trace = kwargs.get("trace", False)
@@ -116,8 +115,9 @@ class ESILState:
                 self.memory[addr] = new_addr
 
     def init_memory(self):
+        max_eval = self.kwargs.get("max_eval", 32)
         self.memory = ESILMemory(
-            self.r2api, self.info,
+            self.r2api, self.info, max_eval,
             self.pure_symbolic, self.check_perms)
 
         self.memory.solver = self.solver
@@ -179,14 +179,16 @@ class ESILState:
         size = self.registers[name].size()
         self.registers[name] = z3.BitVec(var, size)
 
-    def addr_to_int(self, bv, mode="r", length=None, data=None):
+    def check_addr(self, bv, mode="r", length=None, data=None, multi=False):
 
-        if type(bv) == int:
-            return bv
+        if isinstance(bv, int):
+            return
+        elif z3.is_bv_value(bv):
+            return
 
         bv = z3.simplify(bv)
         if z3.is_bv_value(bv):
-            return bv.as_long()
+            return 
 
         elif z3.is_bv(bv):
 
@@ -199,40 +201,38 @@ class ESILState:
             event = mode_to_event[mode]
             if event in self.events:
                 # normalize everything to be bvs
-                if type(length == int):
+                if isinstance(length, int):
                     length = BV(length, self.bits)
 
-                if type(data) == list:
+                if isinstance(data, list):
                     data = self.memory.pack_bv(data)
 
                 ctx = EventContext(bv, length, data)
                 for hook in self.events[event]:
                     hook(self, ctx)
 
-            return self.evalcon(bv).as_long()
-
     def mem_read(self, addr, length):
-        addr = self.addr_to_int(addr, "r", length)
+        self.check_addr(addr, "r", length)
         return self.memory.read(addr, length)
 
     def mem_write(self, addr, data):
-        addr = self.addr_to_int(addr, "w", data=data)
+        self.check_addr(addr, "w", data=data)
         return self.memory.write(addr, data)
 
     def mem_read_bv(self, addr, length):
-        addr = self.addr_to_int(addr, "r", length)
+        self.check_addr(addr, "r", length)
         return self.memory.read_bv(addr, length)
 
     def mem_cond_read(self, addr, length):
-        addr = self.addr_to_int(addr, "r", length)
+        self.check_addr(addr, "r", length)
         return self.memory.cond_read(addr, length)
 
     def mem_write_bv(self, addr, val, length):
-        addr = self.addr_to_int(addr, "w", length, val)
+        self.check_addr(addr, "w", length, val)
         return self.memory.write_bv(addr, val, length)
 
     def mem_copy(self, dst, data, length):
-        dst = self.addr_to_int(dst, "w", length, data)
+        self.check_addr(dst, "w", length, data)
         return self.memory.copy(dst, data, length)
 
     def mem_memcopy(self, src, dst, length):
@@ -241,24 +241,24 @@ class ESILState:
         return self.memory.memcopy(src, dst, length)
 
     def mem_compare(self, src, dst, length=None):
-        src = self.addr_to_int(src, "r", length)
-        dst = self.addr_to_int(dst, "w", length)
+        self.check_addr(src, "r", length)
+        self.check_addr(dst, "w", length)
         return self.memory.compare(src, dst, length)
 
     def mem_move(self, src, dst, length):
-        src = self.addr_to_int(src, "r", length)
-        dst = self.addr_to_int(dst, "w", length)
+        self.check_addr(src, "r", length)
+        self.check_addr(dst, "w", length)
         return self.memory.move(src, dst, length)
 
     def mem_alloc(self, length=128):
         return self.memory.alloc(length)
 
     def mem_free(self, addr):
-        addr = self.addr_to_int(addr, "f")
+        self.check_addr(addr, "f")
         return self.memory.free(addr)
 
     def mem_search(self, addr, needle, length=None, reverse=None):
-        addr = self.addr_to_int(addr, "r")
+        self.check_addr(addr, "r")
         return self.memory.search(addr, needle, length, reverse)
 
     def constrain(self, *constraints):
@@ -362,23 +362,17 @@ class ESILState:
     def eval_max(self, sym, n: int = 64):
         solutions = []
 
+        self.solver.push()
         while len(solutions) < n:
-
-            self.solver.push()
-            for sol in solutions:
-                self.solver.add(sym != sol)
-
-            satisfiable = self.solver.check()
-
-            if satisfiable == z3.sat:
+            if self.solver.check() == z3.sat:
                 m = self.solver.model()
-                solutions.append(m.eval(sym, True))
+                sol = m.eval(sym, True)
+                solutions.append(sol)
+                self.solver.add(sym != sol)
             else:
-                self.solver.pop()
                 break
 
-            self.solver.pop()
-
+        self.solver.pop()
         return solutions
 
     def symbol(self, name: str, length: int, cons=None) -> z3.BitVecRef:
@@ -459,7 +453,6 @@ class ESILState:
             **self.kwargs
         )
 
-        clone.stack = self.stack[:]
         clone.constrain(*self.solver.assertions())
 
         clone.proc = self.proc #.clone() no need to clone this 
@@ -467,6 +460,7 @@ class ESILState:
         clone.fork_mode = self.fork_mode
         clone.steps = self.steps
         clone.distance = self.distance
+        clone.esil = self.esil.copy()
         clone.registers = self.registers.clone()
         clone.memory = self.memory.clone()
         clone.fs = self.fs.clone()

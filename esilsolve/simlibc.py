@@ -11,7 +11,7 @@ from struct import pack, unpack
 def puts(state, addr):
     addr = state.evaluate(addr).as_long()
     length, last = state.mem_search(addr, [BZERO])
-    data = state.mem_cond_read(addr, length)
+    data = state.mem_read(addr, length)
     state.fs.write(STDOUT, data)
     return length
 
@@ -57,7 +57,7 @@ def memfrob(state, addr, num):
     #"0,A1,-,DUP,DUP,?{,A1,-,A0,+,DUP,[1],0x2a,^,SWAP,=[1],1,+,1,GOTO,}", state)
 
     x = BV(0x2A, 8)
-    data = [y^x for y in state.mem_cond_read(addr, num)]
+    data = [y^x for y in state.mem_read(addr, num)]
     state.mem_copy(addr, data, num)
 
 def strlen(state, addr):
@@ -115,7 +115,7 @@ def strndupa(state, addr, num):
 
 def strfry(state, addr):
     length, last = state.mem_search(addr, [BZERO])
-    data = state.mem_cond_read(addr, length)
+    data = state.mem_read(addr, length)
     # random.shuffle(data) # i dont actually want to do this?
     state.mem_copy(addr, data, length)
     return addr
@@ -472,7 +472,7 @@ def read(state, fd, addr, length):
     if z3.is_bv_value(length):
         rlen = length.as_long()
     else:
-        rlen = len(state.mem_cond_read(addr, length)) # hax
+        rlen = len(state.mem_read(addr, length)) # hax
 
     data = state.fs.read(fd, rlen)
     dlen = BV(len(data))

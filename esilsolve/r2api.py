@@ -164,6 +164,14 @@ class R2API:
     def step(self, sz):
         self.r2p.cmd("s+ %d" % sz)
 
+    def search(self, needle: str, search_type="esil"):
+        if search_type == "esil":
+            return self.r2p.cmdj(f"\"/aej {needle}\"")
+        elif search_type == "asm":
+            return self.r2p.cmdj(f"\"/adj {needle}\"")
+        else:
+            return self.r2p.cmdj(f"\"/x {needle}\"")
+
     def disass(self, addr=None, instrs=1):
         if addr in self.instruction_cache and instrs == 1:
             return self.instruction_cache[addr]
@@ -199,13 +207,13 @@ class R2API:
 
     def write(self, addr, value, length=None, fill="0"):
         val = value
-        if type(value) == int:
+        if isinstance(value, int):
             if length == None:
                 length = int(self.info["info"]["bits"]/8)
 
             return self.r2p.cmd("wv%d %d @ %d" % (length, value, addr))
 
-        elif type(value) == bytes:
+        elif isinstance(value, bytes):
             val = binascii.hexlify(value).decode()
 
         if length != None:
@@ -272,6 +280,9 @@ class R2API:
     def emustep(self):
         self.r2p.cmd("aes")
 
+    def emu_until(self, addr):
+        self.r2p.cmd("aesu %s" % str(addr))
+
     def analyze_function(self, func):
         if func != None:
             self.r2p.cmd("af @  %s" % str(func))
@@ -300,14 +311,20 @@ class R2API:
 
         return self.r2p.cmd("f?%s;??" % sym)[:1] == "1"
 
+    def get_relocs(self): 
+        if self.relocs == None:
+            self.relocs = dict([(i["name"],i) for i in self.r2p.cmdj("irj")])
+
+        return self.relocs
+
     def get_imports(self): 
         if self.imports == None:
-            self.imports = self.r2p.cmdj("iij")
+            self.imports = dict([(i["name"],i) for i in self.r2p.cmdj("iij")])
 
         return self.imports
 
     def get_address(self, func):
-        if type(func) == int:
+        if isinstance(func, int):
             return func
 
         try:

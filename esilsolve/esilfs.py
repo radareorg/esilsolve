@@ -146,7 +146,7 @@ class ESILFilesystem:
             return len(data)
 
     def content(self, f):
-        if type(f) == int:
+        if isinstance(f, int):
             return self.fd_dict[f][4]
         else:
             return self.file_dict[f]
@@ -165,16 +165,16 @@ class ESILFilesystem:
 
     # make data into nice lists
     def convert_data(self, val):
-        if type(val) == int:
+        if isinstance(val, int):
             data = [(val >> i*8) & 0xff for i in range(8)]
 
-        elif type(val) == list:
+        elif isinstance(val, list):
             return val
 
-        elif type(val) == bytes:
+        elif isinstance(val, bytes):
             return list(val)
 
-        elif type(val) == str:
+        elif isinstance(val, str):
             return list(val.encode())
 
         else:

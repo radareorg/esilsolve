@@ -21,6 +21,12 @@ class ESILUnsatException(Exception):
 
 class ESILSegmentFault(Exception):
     pass
+class ExecType(Enum):
+    UNCON   = 0
+    IF      = 1 
+    ELSE    = 2
+    EXEC    = 3
+    NO_EXEC = 4
 
 class ESILSolveEvent(Enum):
     SymExec  = 1
@@ -49,7 +55,7 @@ HookTarget = Union[str, int, Callable]
 SIZE = 64
 
 def BV(val: Union[str, int], size: int=SIZE):
-    if type(val) == int:
+    if isinstance(val, int):
         return z3.BitVecVal(val, size)
     else:
         return z3.BitVec(val, size)
