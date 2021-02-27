@@ -283,6 +283,13 @@ class R2API:
     def emu_until(self, addr):
         self.r2p.cmd("aesu %s" % str(addr))
 
+    def setting(self, setting, value=None):
+        cmd = f"e {setting}"
+        if value != None:
+            cmd += f"={value}"
+        
+        return self.r2p.cmd(cmd)
+
     def analyze_function(self, func):
         if func != None:
             self.r2p.cmd("af @  %s" % str(func))
