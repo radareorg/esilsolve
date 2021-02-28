@@ -3,6 +3,9 @@ import z3
 from .esilclasses import *
 from .r2api import R2API
 
+import logging 
+logger = logging.getLogger("esilsolve")
+
 BYTE = 8
 
 class ESILMemory:
@@ -115,7 +118,7 @@ class ESILMemory:
 
         slot = int((addr-self.heap_start)/self.heap)
         if slot not in self.heap:
-            print("%016x: double free?" % addr)
+            logger.warning("%016x: double free?" % addr)
             return 
 
         cur = slot
@@ -158,7 +161,6 @@ class ESILMemory:
 
         maddr = self.mask(addr)
         offset = addr-maddr
-        #print(maddr, length)
 
         data = []
         chunks = math.ceil(float(length+offset)/self.chunklen)

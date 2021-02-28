@@ -503,7 +503,6 @@ class ESILStateManager:
 
     def next(self) -> ESILState:
         """ Get the next state to be stepped """
-        #print(self.active, self.merged)
 
         if len(self.active) == 0:
             if len(self.merged) == 0:
@@ -520,7 +519,6 @@ class ESILStateManager:
             state = min(self.active, key=lambda s: s.steps)
             #state = min(self.active, key=lambda s: s.distance) 
 
-        #print(state.distance)
         self.active.discard(state)
         return state
 
@@ -571,7 +569,6 @@ class ESILStateManager:
             self.merged.add(state)
             return
 
-        #print("merging %08x %d..." % (pc, self.merge_counts[pc]))
         merged = self.merge_states[pc]
         self.merge_counts[pc] += 1
         assertion = z3.And(*state.solver.assertions())

@@ -8,6 +8,9 @@ import socket
 import os
 from struct import pack, unpack
 
+import logging 
+logger = logging.getLogger("esilsolve")
+
 def puts(state, addr):
     addr = state.evaluate(addr).as_long()
     length, last = state.mem_search(addr, [BZERO])
@@ -515,16 +518,16 @@ def stat(state, path, data): # TODO: complete this
 
 def system(state, cmd):
     string, length = state.symbolic_string(cmd)
-    print("system(%s)" % state.evaluate_string(string)) # idk
+    logger.warning("system(%s)" % state.evaluate_string(string)) # idk
     return 0
 
 def abort(state):
-    print("process aborted")
+    logger.info("process aborted")
     state.exit = 0
     return 0
 
 def simexit(state, status):
-    print("process exited")
+    logger.info("process exited")
     state.exit = status
     return 0
 

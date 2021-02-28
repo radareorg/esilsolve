@@ -5,6 +5,9 @@ from .esilstate import ESILState, ESILStateManager
 from .esilops import prepare
 from time import time
 
+import logging 
+logger = logging.getLogger("esilsolve")
+
 class ESILSolver:
     """
     Manage and run symbolic execution of a binary using ESIL
@@ -28,6 +31,14 @@ class ESILSolver:
         self.lazy  = options.get("lazy",  False)
         self.pcode = options.get("pcode", False)
         self.check_perms = options.get("check", False)
+
+        level = options.get("log", "WARNING")
+        log_level = getattr(logging, level.upper())
+        logger.setLevel(log_level)
+        ch = logging.StreamHandler()
+        ch.setLevel(log_level)
+        logger.addHandler(ch)
+
 
         self.hooks = {}
         self.cond_hooks = []
@@ -147,10 +158,10 @@ class ESILSolver:
             state.target = target
             instr = self.r2api.disass(pc)
 
-            if self.debug:
+            if logger.isEnabledFor(logging.DEBUG):
                 esil = instr.get("esil", "<no esil>")
-                print("%016x: %s ( %s )" % (instr["offset"],
-                    instr.get("disasm", "<invalid>").ljust(32), esil))
+                logger.debug("%016x: %s |    %s " % (instr["offset"],
+                    instr.get("disasm", "<invalid>").ljust(36), esil))
 
             found = pc == target
             if found:

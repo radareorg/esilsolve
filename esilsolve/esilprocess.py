@@ -3,6 +3,9 @@ from .r2api import R2API
 from . import esilops
 from .esilclasses import * 
 
+import logging 
+logger = logging.getLogger("esilsolve")
+
 class ESILProcess:
     """ 
     Executes ESIL expressions and handles results
@@ -98,8 +101,8 @@ class ESILProcess:
             states.append(state)
         else:
             # symbolic pc value
-            if self.debug:
-                print("symbolic pc: %s" % str(pc))
+            if logger.isEnabledFor(logging.DEBUG):
+                logger.debug("symbolic pc: %s" % str(pc))
 
             if ESILSolveEvent.SymExec in self.events:
                 for hook in self.events[ESILSolveEvent.SymExec]:
@@ -360,14 +363,12 @@ class ESILProcess:
     def trace_registers(self, state):
         for regname in state.registers._registers:
             register = state.registers._registers[regname]
-            #print(regname, reg_value)
             if register["type_str"] in ("gpr", "flg"):
                 emureg = self.r2api.get_reg_value(register["name"])
                 try:
                     reg_value = z3.simplify(state.registers[regname])
-                    #print(reg_value)
                     if reg_value.as_long() != emureg:
-                        print("%s: %s , %s" % (register["name"], reg_value, emureg))
+                        logger.debug("%s: %s , %s" % (register["name"], reg_value, emureg))
                 except Exception as e:
                     #print(e)
                     pass

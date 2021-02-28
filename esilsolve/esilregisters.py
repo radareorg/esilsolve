@@ -2,6 +2,9 @@
 from .esilclasses import *
 import z3
 
+import logging 
+logger = logging.getLogger("esilsolve")
+
 class ESILRegisters:
     """ 
     Provides access to methods to read and write register values
@@ -116,7 +119,7 @@ class ESILRegisters:
             return self.zero_regs[key]
 
         if key not in self._registers:
-            print("register %s not found" % key)
+            logger.warning("register %s not found" % key)
             return self.zero_regs["zero"]
 
         register = self._registers[key]
@@ -141,7 +144,7 @@ class ESILRegisters:
             key = self.aliases[key]["reg"]
 
         if key not in self._registers:
-            print("register %s not found" % key)
+            logger.warning("register %s not found" % key)
             return 
 
         register = self._registers[key]

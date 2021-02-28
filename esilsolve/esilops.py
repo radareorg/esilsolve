@@ -15,7 +15,8 @@ FLOAT = 2
 
 FPM = z3.RTZ()
 
-masks = [(2**n)-1 for n in range(65)]
+import logging 
+logger = logging.getLogger("esilsolve")
 
 def pop_values(stack, state, num: int=1, signext=False) -> List[z3.BitVecRef]:
     size = state.esil["size"]
@@ -37,7 +38,6 @@ def get_value(val, state, signext=False, size=SIZE, val_type=INT) \
 def prepare(val, signext=False, size=SIZE) -> z3.BitVecRef:
     if z3.is_bv(val):
         szdiff = size-val.size()
-
         if szdiff == 0:
             result = val
         elif szdiff > 0:
@@ -49,14 +49,11 @@ def prepare(val, signext=False, size=SIZE) -> z3.BitVecRef:
             result = z3.Extract(size-1, 0, val)
 
     elif isinstance(val, int):
-        #return val & masks[size]
         result = z3.BitVecVal(val, size)
     elif z3.is_int(val):
         result = z3.Int2BV(val, size)
     elif z3.is_fp(val):
-        # changing up this logic to align with r2ghidra impl  
         result = z3.fpToIEEEBV(val)
-        #result = val
     else:
         result = z3.BitVecVal(val, size)
 
@@ -104,7 +101,7 @@ def do_TRAP(op, stack, state):
     if code in state.proc.traps:
         state.proc.traps[code](state)
     else:
-        print("unhandled TRAP %s" % code)
+       logger.warning("unhandled TRAP %s" % code)
 
 def do_BREAK(op, stack, state):
     pass # handle in parse_expression
@@ -121,7 +118,7 @@ def do_SYS(op, stack, state):
     if syscall in state.proc.syscalls:
         state.proc.syscalls[syscall](state)
     else:
-        print("unhandled SYSCALL %s" % syscall)
+        logger.warning("unhandled SYSCALL %s" % syscall)
 
 def do_PCADDR(op, stack, state):
     stack.append(state.registers["PC"])
@@ -372,8 +369,6 @@ def do_SWAP(op, stack, state):
 # i hope those dont occur
 def do_PICK(op, stack, state):
     n, = pop_values(stack, state)
-    #print(stack, n)
-
     if z3.is_bv_value(n):
         n = n.as_long()
     
@@ -657,8 +652,6 @@ def do_B(op, stack, state):
     old = prepare(state.esil["old"])
     cur = prepare(state.esil["cur"])
     bf = z3.ULT((old & mask), (cur & mask))
-
-    #print(bits, mask, z3.simplify(bf))
     stack.append(z3.If(bf, ONE, ZERO))
 
 '''

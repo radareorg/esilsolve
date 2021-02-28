@@ -1,8 +1,8 @@
-#  ESILSolve - A python symbolic execution framework using radare2 <p align="center"><img src="https://raw.githubusercontent.com/aemmitt-ns/esilsolve/master/raphi.svg" alt="logo" width="200"/></p>
+##  ESILSolve - A python symbolic execution framework using radare2 <p align="center"><img src="https://raw.githubusercontent.com/aemmitt-ns/esilsolve/master/raphi.svg" alt="logo" width="200"/></p>
 
 ESILSolve uses the z3 theorem prover and r2's ESIL intermediate representation to symbolically execute code. 
 
-ESILSolve supports the same architectures as ESIL, including x86, amd64, arm, aarch64 and more (6502, 8051, GameBoy...). This project is a work in progress, though it works well way more often than I honestly thought it would.
+ESILSolve supports the same architectures as ESIL, including x86, amd64, arm, aarch64, mips and more (6502, 8051, GameBoy...). This project is a work in progress, though it works well way more often than I honestly thought it would.
 
 ### Installation 
 
