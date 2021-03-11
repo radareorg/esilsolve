@@ -31,6 +31,8 @@ class ESILSolver:
         self.lazy  = options.get("lazy",  False)
         self.pcode = options.get("pcode", False)
         self.check_perms = options.get("check", False)
+        load_libs = options.get("load", False)
+        lib_dir = options.get("lib_dir", "./")
 
         level = options.get("log", "WARNING")
         log_level = getattr(logging, level.upper())
@@ -59,12 +61,10 @@ class ESILSolver:
         if filename == None:
             r2api = R2API(flags=flags)
         else:
-            if type(filename) == str:
-                r2api = R2API(filename=filename,
-                    flags=flags, pcode=self.pcode)
-            else:
-                r2api = R2API(filename,
-                    flags=flags, pcode=self.pcode)
+            r2api = R2API(filename=filename,
+                flags=flags, pcode=self.pcode, 
+                load_libs=load_libs, lib_dir=lib_dir)
+
 
         self.r2api = r2api
         self.r2pipe = r2api.r2p
@@ -242,12 +242,12 @@ class ESILSolver:
         :param hook:     Function to call when the above address is hit
         """
 
-        if type(addr) == str:
+        if isinstance(addr, str):
             addr = self.r2api.get_address(addr)
-        elif addr in ESILSolveEvent:
+        elif isinstance(addr, ESILSolveEvent):
             self.event_hooks[addr].append(hook)
             return
-        elif type(addr) != int:
+        elif not isinstance(addr, int):
             self.cond_hooks.append(addr)
 
         if addr in self.hooks:

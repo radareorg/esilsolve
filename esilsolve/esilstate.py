@@ -236,8 +236,8 @@ class ESILState:
         return self.memory.copy(dst, data, length)
 
     def mem_memcopy(self, src, dst, length):
-        src = self.addr_to_int(src, "r", length)
-        dst = self.addr_to_int(dst, "w", length)
+        src = self.check_addr(src, "r", length)
+        dst = self.check_addr(dst, "w", length)
         return self.memory.memcopy(src, dst, length)
 
     def mem_compare(self, src, dst, length=None):
@@ -446,7 +446,7 @@ class ESILState:
 
             self.r2api.write(addr, value, length)
 
-    def clone(self):
+    def clone(self) -> "ESILState":
         self.kwargs["init"] = False
         clone = self.__class__(
             self.r2api, 
@@ -558,6 +558,11 @@ class ESILStateManager:
         return state
 
     def merge_state(self, state: ESILState):
+        """
+        Merge the states at the provided points
+        TODO: use backtraces to prevent undesired merges
+        """
+
         pc = state.registers["PC"].as_long()
 
         if pc not in self.merge_states:

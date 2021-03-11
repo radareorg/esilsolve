@@ -286,6 +286,8 @@ class ESILMemory:
     def data_to_bv(self, data): 
         if z3.is_bv(data):
             return data
+        elif isinstance(data, list):
+            data = self.pack_bv(data)
         elif isinstance(data, bytes):
             data = self.pack_bv(list(data))
         elif isinstance(data, str):
@@ -570,7 +572,7 @@ class ESILMemory:
     def __iter__(self): 
         return iter(self._memory.keys())
 
-    def clone(self):
+    def clone(self) -> "ESILMemory":
         clone = self.__class__(self.r2api, self.info, 
             self.max_eval, self.pure_symbolic)
 

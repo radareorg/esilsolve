@@ -7,7 +7,7 @@ with open("README.md", "r") as fh:
 
 setuptools.setup(
     name="esilsolve", 
-    version="0.0.1",
+    version="0.0.2",
     author="Austin Emmitt",
     author_email="aemmitt@nowsecure.com",
     description="A symbolic execution tool using r2 and ESIL",
@@ -29,5 +29,5 @@ setuptools.setup(
     ]
 )
 
-plugin_dir = subprocess.check_output(["r2", "-H", "R2_USER_PLUGINS"]).decode()
-shutil.copy(shutil.os.path.join("tools", "esplugin.py"), plugin_dir.strip())
+#plugin_dir = subprocess.check_output(["r2", "-H", "R2_USER_PLUGINS"]).decode()
+#shutil.copy(shutil.os.path.join("tools", "esplugin.py"), plugin_dir.strip())

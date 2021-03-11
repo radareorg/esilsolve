@@ -31,7 +31,7 @@ replacements = {
     "sym.imp.strncat": simlibc.strncat,  
     "sym.imp.gets":    simlibc.gets,
     "sym.imp.fgets":   simlibc.fgets,
-    "sym.imp.getenv":  simlibc.nothin,  
+    "sym.imp.getenv":  simlibc.getenv,  
     "sym.imp.malloc":  simlibc.malloc, 
     "sym.imp.calloc":  simlibc.calloc, 
     "sym.imp.free":    simlibc.free, 

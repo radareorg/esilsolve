@@ -1,6 +1,7 @@
 import r2pipe
 import binascii
 import threading
+from .adhoc import fix_instruction
 
 try:
     import frida
@@ -10,7 +11,9 @@ except ImportError:
 class R2API:
     """ API for interacting with r2 through r2pipe """
 
-    def __init__(self, r2p=None, filename=None, flags=["-2"], pcode=False):
+    def __init__(self, r2p=None, filename=None, flags=["-2"], 
+        pcode=False, load_libs=False, lib_dir=None):
+
         self.r2p = r2p
         if r2p == None:
             #self.r2p = r2pipe.open(filename, flags=flags)
@@ -182,6 +185,7 @@ class R2API:
 
         result = self.r2p.cmdj(cmd)
         for instr in result:
+            fix_instruction(self.info, instr)
             self.instruction_cache[instr["offset"]] = instr
 
         if instrs == 1:
@@ -198,6 +202,7 @@ class R2API:
 
         result = self.r2p.cmdj(cmd)
         for instr in result["ops"]:
+            fix_instruction(self.info, instr)
             self.instruction_cache[instr["offset"]] = instr
 
         return result["ops"]

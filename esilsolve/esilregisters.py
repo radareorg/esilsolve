@@ -221,7 +221,7 @@ class ESILRegisters:
     def __iter__(self):
         return iter(self._registers.keys())
 
-    def clone(self):
+    def clone(self) -> "ESILRegisters":
         clone = self.__class__(self.reg_info, self.aliases, self.pure_symbolic)
         self._refs["count"] += 1
         clone._refs = self._refs
