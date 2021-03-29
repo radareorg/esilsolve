@@ -31,7 +31,7 @@ class ESILMemory:
 
         self.endian = info["info"]["endian"]
         self.bits = info["info"]["bits"]
-        self.chunklen = int(self.bits/8)
+        self.chunklen = self.bits//8
         self.max_len = 4096
         self.error = z3.BitVecVal(self.max_len, 64) 
         # z3.BitVecVal((1<<(SIZE-1))-1, SIZE)
@@ -45,6 +45,12 @@ class ESILMemory:
         self.heap_init = False
 
     def init_heap(self):
+        """ 
+        initialize the heap, finding an available space in memory
+        this needs to change to be more like an actual heap 
+        but there are problems with that as well
+        """
+
         segs = self.r2api.segments
 
         start = self.heap_start
@@ -84,9 +90,9 @@ class ESILMemory:
         
         needs = 0
         if isinstance(length, int):
-            needs = int(length/self.heap_bin) + 1
+            needs = (length//self.heap_bin) + 1
         elif z3.is_bv_value(length):
-            needs = int(length.as_long()/self.heap_bin) + 1
+            needs = (length.as_long()//self.heap_bin) + 1
         else:
             more = True
             while more:
@@ -109,6 +115,7 @@ class ESILMemory:
         return addr
 
     def free(self, addr):
+        """ free allocated heap chunk """
 
         if z3.is_bv(addr):
             addr = self.addr_to_int(addr)
@@ -116,7 +123,7 @@ class ESILMemory:
         if addr == 0:
             return
 
-        slot = int((addr-self.heap_start)/self.heap)
+        slot = (addr-self.heap_start)//self.heap
         if slot not in self.heap:
             logger.warning("%016x: double free?" % addr)
             return 
@@ -133,7 +140,7 @@ class ESILMemory:
         return self.heap_start+self.heap_size > addr > self.heap_start
     
     def mask(self, addr: int):
-        return int(addr - (addr % self.chunklen))
+        return addr - (addr % self.chunklen)
 
     def addr_to_int(self, bv):
 
@@ -155,6 +162,7 @@ class ESILMemory:
                     f"no sat symbolic address found for: {bv}")
 
     def read_con(self, addr: int, length: int):
+        """ read a concrete value with a possibly symbolic length """
 
         if self.check_perms:
             self.check(addr, "r")
@@ -171,10 +179,15 @@ class ESILMemory:
                 data += self._memory[caddr]
 
             else:
+                read_only = False
                 if self.pure_symbolic:
-                    coffset = caddr+chunk*self.chunklen
-                    bv = z3.BitVec("mem_%016x" % (coffset), self.chunklen*BYTE)
-                    self.write_bv(addr, bv, self.chunklen)
+                    perm = self.r2api.get_permissions(caddr)
+                    read_only = ("w" not in perm and perm != "----")
+
+                if self.pure_symbolic and not read_only:
+                    #coffset = caddr+chunk*self.chunklen
+                    bv = z3.BitVec("mem_%016x"  % caddr, self.chunklen*8)
+                    self.write_bv(caddr, bv, self.chunklen)
                     d = self.unpack_bv(bv, self.chunklen)
                 else:
                     if caddr in self._read_cache:
@@ -272,7 +285,7 @@ class ESILMemory:
         self.solver.add(z3.Or(*[addr == a for a in addrs]))
 
         data = self.data_to_bv(data)
-        length = int(data.size()/8)
+        length = data.size()//8
 
         for address in addrs:
             addrint = address.as_long()
@@ -306,14 +319,14 @@ class ESILMemory:
             self.check(addr, "w")
 
         if z3.is_bv(data):
-            length = int(data.size()/BYTE)
+            length = data.size()//8
             data = self.unpack_bv(data, length)
         elif isinstance(data, bytes):
             data = list(data)
         elif isinstance(data, str):
             data = list(data.encode())+[0] # add null byte
         elif isinstance(data, int):
-            data = self.unpack_bv(data, int(self.bits/8))
+            data = self.unpack_bv(data, self.bits//8)
 
         data = self.prepare_data(data)
         maddr = self.mask(addr)
@@ -325,7 +338,7 @@ class ESILMemory:
             prev = self.read(maddr, prev_len)
             data = prev[:offset] + data + prev[offset+length:]
 
-        chunks = int(length/self.chunklen) + min(1, length%self.chunklen)
+        chunks = length//self.chunklen + min(1, length%self.chunklen)
         for chunk in range(chunks):
             o = chunk*self.chunklen
             caddr = maddr + o

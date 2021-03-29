@@ -13,7 +13,7 @@ FNEGONE = z3.FPVal(-1.0, FSIZE)
 INT = 1
 FLOAT = 2
 
-FPM = z3.RTZ()
+FPM = z3.RTN()
 
 import logging 
 logger = logging.getLogger("esilsolve")
@@ -421,9 +421,9 @@ def getlen(op, state):
     if op[b1+1:b2].isdigit():
         return int(op[b1+1:b2])
     elif state != None:
-        return int(state.bits/8)
+        return state.bits//8
     else:
-        return int(SIZE/8)
+        return SIZE//8
 
 def do_POKE(op, stack, state):
     length = getlen(op, state)

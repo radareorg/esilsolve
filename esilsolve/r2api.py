@@ -48,7 +48,7 @@ class R2API:
         except:
             self.frida = False
 
-        self.debug = self.r2p.cmd("di") not in (None, "")
+        self.debug = "pid" in self.r2p.cmdj("dij")
 
         self.frida_sess = None
         self.script = None
@@ -141,7 +141,7 @@ class R2API:
             "addr": addr
         })
         
-    def get_permissions(self, addr):
+    def get_permissions(self, addr: int) -> str:
         if addr in self.permission_cache:
             return self.permission_cache[addr]
 

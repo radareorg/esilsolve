@@ -83,9 +83,9 @@ class ESILRegisters:
             reg["sub"] = False
             
     def get_register_from_bounds(self, reg: Dict):
-
-        if "bounds" in reg and reg["bounds"] in self.offset_dictionary:
-            return self.offset_dictionary[reg["bounds"]]
+        bounds = reg.get("bounds", None)
+        if bounds != None and bounds in self.offset_dictionary:
+            return self.offset_dictionary[bounds]
 
         start = reg["offset"]
         end = reg["offset"] + reg["size"]
@@ -112,15 +112,15 @@ class ESILRegisters:
     def __getitem__(self, key: str) -> z3.BitVecRef:
         """ Get register value """
 
-        if key in self.aliases:
-            key = self.aliases[key]["reg"]
+        if key not in self._registers:
+            if key in self.aliases:
+                key = self.aliases[key]["reg"]
+            else:
+                logger.warning("register %s not found" % key)
+                return self.zero_regs["zero"]
 
         if key in self.zero_regs:
             return self.zero_regs[key]
-
-        if key not in self._registers:
-            logger.warning("register %s not found" % key)
-            return self.zero_regs["zero"]
 
         register = self._registers[key]
         reg_value = self.get_register_from_bounds(register)

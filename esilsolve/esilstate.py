@@ -179,7 +179,7 @@ class ESILState:
         size = self.registers[name].size()
         self.registers[name] = z3.BitVec(var, size)
 
-    def check_addr(self, bv, mode="r", length=None, data=None, multi=False):
+    def check_addr(self, bv, mode="r", length=None, data=None):
 
         if isinstance(bv, int):
             return
@@ -386,7 +386,7 @@ class ESILState:
     def evaluate_buffer(self, bv: z3.BitVecRef) -> bytes:
         buf = self.evaluate(bv)
         val = buf.as_long()
-        length = int(bv.size()/8)
+        length = bv.size()//8
         return bytes([(val >> (8*i)) & 0xff for i in range(length)])
 
     def evaluate_string(self, bv: z3.BitVecRef) -> str:
@@ -442,7 +442,7 @@ class ESILState:
             self.constrain(self.memory[addr] == value_bv)
 
             value = self.evaluate_buffer(self.memory[addr])
-            length = int(self.memory[addr].size()/8)
+            length = self.memory[addr].size()//8
 
             self.r2api.write(addr, value, length)
 

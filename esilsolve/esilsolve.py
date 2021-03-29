@@ -301,7 +301,7 @@ class ESILSolver:
             # read from stack
             sp = state.registers["SP"].as_long()
             for i in range(arg_count):
-                addr = sp + int(i*bits/8)
+                addr = sp + i*(bits//8)
                 args.append(prepare(state.memory[addr]))
 
         state.registers[cc["ret"]] = sim(*args)
@@ -326,7 +326,7 @@ class ESILSolver:
             # read from stack
             sp = state.registers["SP"].as_long()
             for i in range(arg_count):
-                addr = sp + int(i*state.bits/8)
+                addr = sp + i*(state.bits//8)
                 argv = self.prep_arg(state, args[i])
                 state.memory[addr] = argv
 
@@ -340,14 +340,14 @@ class ESILSolver:
             return z3.BitVecVal(addr, state.bits)
 
         elif type(arg) == list:
-            b = int(state.bits/8)
+            b = state.bits//8
             size = (len(arg)+1)*b
             addr = state.memory.alloc(size)
             new_addr = addr
             for i in range(len(arg)):
                 argv = self.prep_arg(state, arg[i])
                 state.memory[new_addr] = argv
-                new_addr += int(argv.size()/8)
+                new_addr += argv.size()//8
 
             state.memory[new_addr] = 0
 
