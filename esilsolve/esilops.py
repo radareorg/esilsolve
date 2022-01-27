@@ -140,9 +140,6 @@ def do_CMP(op, stack, state):
     state.esil["old"] = arg1
     state.esil["cur"] = arg1-arg2
 
-    if state.pcode: # pcode hax
-        stack.append(z3.If(state.esil["cur"] == ZERO, ONE, ZERO))
-
 def do_FCMP(op, stack, state):
     prev_type = state.esil["type"]
     state.esil["type"] = FLOAT
@@ -724,7 +721,7 @@ def do_R(op, stack, state):
 
 opcodes = {
     "TRAP": do_TRAP,
-    "$": do_SYS,
+    "()": do_SYS,
     "$$": do_PCADDR,
     "==": do_CMP,
     "<": do_LT,
@@ -763,8 +760,8 @@ opcodes = {
     "I2D": do_S2D,
     "S2D": do_S2D,
     "U2D": do_U2D,
-    "D2F": do_F2D,
-    "F2D": do_D2F,
+    "F2D": do_F2D,
+    "D2F": do_D2F,
     "F==": do_FCMP,
     "NAN": do_NAN,
     "-F": do_FNEG,
