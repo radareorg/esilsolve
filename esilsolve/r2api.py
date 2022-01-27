@@ -3,6 +3,9 @@ import binascii
 import threading
 from .adhoc import fix_instruction
 
+# frida prefix character
+FC = ":"
+
 try:
     import frida
 except ImportError:
@@ -48,7 +51,7 @@ class R2API:
         except:
             self.frida = False
 
-        self.debug = "pid" in self.r2p.cmdj("dij")
+        self.debug = self.r2p.cmd("di") not in (None, "")
 
         self.frida_sess = None
         self.script = None
@@ -60,7 +63,7 @@ class R2API:
     def frida_sess_init(self):
         if self.frida:
             info = self.r2p.cmdj("ij")
-            self.pid = int(self.r2p.cmd("\\dp"))
+            self.pid = int(self.r2p.cmd(FC+"dp"))
 
             if "/usb/" in info["core"]["file"]:
                 self.device = frida.get_usb_device()
@@ -100,7 +103,7 @@ class R2API:
             self.segments = []
 
             if self.frida:
-                segments = self.r2p.cmdj("\dmj")
+                segments = self.r2p.cmdj(FC+"dmj")
 
                 for seg in segments:
                     self.add_segment(
@@ -141,7 +144,7 @@ class R2API:
             "addr": addr
         })
         
-    def get_permissions(self, addr: int) -> str:
+    def get_permissions(self, addr):
         if addr in self.permission_cache:
             return self.permission_cache[addr]
 
@@ -253,7 +256,7 @@ class R2API:
             )
         else:
             reg_dict = {}
-            reg_dicts = self.r2p.cmdj("\drj")
+            reg_dicts = self.r2p.cmdj(FC+"drj")
 
             for rd in reg_dicts:
                 if thread == None or thread == rd["id"]:
@@ -350,7 +353,7 @@ class R2API:
                 return result
             elif self.frida:
                 func = str(func).split(".")[-1] # oof
-                return int(self.r2p.cmd("\isa %s" % func), 16)
+                return int(self.r2p.cmd(FC+"isa %s" % func), 16)
         except:
             return None
 
@@ -364,7 +367,7 @@ class R2API:
         if not self.frida:
             return 
             
-        self.r2p.cmd("\\dc")
+        self.r2p.cmd(FC+"dc")
 
         if self.script != None:
             self.script.post({"type": "continue"})

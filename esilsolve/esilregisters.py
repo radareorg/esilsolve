@@ -83,9 +83,10 @@ class ESILRegisters:
             reg["sub"] = False
             
     def get_register_from_bounds(self, reg: Dict):
-        bounds = reg.get("bounds", None)
-        if bounds != None and bounds in self.offset_dictionary:
-            return self.offset_dictionary[bounds]
+        bounds = reg.get("bounds")
+        val = self.offset_dictionary.get(bounds)
+        if val != None:
+            return val
 
         start = reg["offset"]
         end = reg["offset"] + reg["size"]
