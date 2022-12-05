@@ -265,7 +265,7 @@ class R2API:
 
             # .\dr* should do this but doesn't always work
             for reg in reg_dict:
-                self.set_reg_value(reg, int(reg_dict[reg], 16))
+                self.fetch_registers(reg_dict)
 
         self.r2p.cmd("aei; aeip") # set PC
 
@@ -280,7 +280,7 @@ class R2API:
 
         # .\dr* should do this but doesn't always work
         for reg in reg_dict:
-            self.set_reg_value(reg, int(reg_dict[reg], 16))
+            self.fetch_registers(reg_dict)
 
     def emu(self, instr):
         self.r2p.cmd("ae %s" % instr["esil"])
@@ -394,3 +394,13 @@ class R2API:
 
         event.wait()
         return context
+    
+    def fetch_registers(self, reg_dict):
+        # handle float in future, maybe?
+        for reg in reg_dict:
+             val = reg_dict[reg]
+             if isinstance(val, int):
+                 self.set_reg_value(reg, val)
+             else:
+                 self.set_reg_value(reg, int(val, 16))
+                 
